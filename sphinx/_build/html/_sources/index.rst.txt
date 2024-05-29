@@ -3,10 +3,10 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-DCRL-Green
+Sustain-DC
 ==========
 
-DCRL-green is a framework for testing Multi-Agent Reinforcement Learning (MARL) algorithms that optimizes data centers for multiple objectives of carbon footprint reduction, energy consumption, and energy
+Sustain-DC is a framework for testing Multi-Agent Reinforcement Learning (MARL) algorithms that optimizes data centers for multiple objectives of carbon footprint reduction, energy consumption, and energy
 cost.
 
 It uses OpenAI Gym standard and supports modeling and control of three different types of problems:
@@ -22,7 +22,7 @@ It uses OpenAI Gym standard and supports modeling and control of three different
 
 
 
-Main contributions of DCRL-Green:
+Main contributions of Sustain-DC:
 
 - The first OpenAI framework, to our knowledge, focused on carbon footprint reduction for data centers
 - Modular design, i.e users can utilize pre-defined modules for load shifting, energy and battery or build their own
@@ -38,8 +38,8 @@ Main contributions of DCRL-Green:
    
    installation/index
    gettingstarted
-   usage/index
    overview/index
+   usage/index
    code/index
    train_evaluate/index
    contribution_guidelines
