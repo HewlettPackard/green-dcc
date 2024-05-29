@@ -37,10 +37,6 @@ Main contributions of Green-DCC:
 - custom reward shaping through custom reward functions 
 - build-in MARL algorithms, with ability to incorporate user-specified custom agents 
 
-Currently, we provide two versions for the data center dynamics. 
-
-`DCRL (dcrl_env.py)`: This default version is implemented in Python and can be used with the prerequisites listed below. 
-
 
 ## Works Utilizing Green-DCC
 
