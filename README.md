@@ -1,4 +1,4 @@
-# DCRL-Green
+# Green-DCC
 
 ## Dashboard
 
@@ -9,11 +9,11 @@ To watch the video, click on the screenshot below (right-click and select "Open 
 If you wish to download the video directly, [click here](https://www.dropbox.com/scl/fi/85gumlvjgbbk5kwjhee3i/Data-Center-Green-Dashboard-ver2.mp4?rlkey=w3mu21qqdk9asi826cjyyutzl&dl=1).
 
 
-Demo of DCRL functionality
+Demo of Green-DCC functionality
 [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1XF92aR6nVYxENrviHeFyuRu0exKBb-nh?usp=sharing)
 ---
 
-This repository contains the datasets and code for the paper DCRL-Green: Sustainable Data Center Environment and Benchmark for Multi-Agent Reinforcement Learning.
+This repository contains the datasets and code for the paper "Green-DCC: Benchmarking Dynamic Workload Distribution Techniques for Sustainable Data Center Cluster".
 ---
 [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1ldxlcG_prPw9U26alK9oRN2XvxrxNSDP?usp=sharing)
 
@@ -23,11 +23,12 @@ This repository contains the datasets and code for the paper DCRL-Green: Sustain
 </p>
 
 ## Introduction
-DCRL-green is a framework for testing multi-agent Reinforcement Learning (MARL) algorithm that optimizes data centers for multiple objectives of carbon footprint reduction, energy consumption, and energy cost. It uses OpenAI Gym standard and supports modeling and control of three different types of problems: Carbon aware flexible load shifting, Data center HVAC cooling energy optimization and carbon aware battery auxiliary supply.
+Green-DCC is a framework for testing multi-agent Reinforcement Learning (MARL) algorithms that optimizes data center clusters in a hierarchical manner for multiple objectives of carbon footprint reduction, energy consumption, and energy cost. It uses OpenAI Gym standard and supports modeling and control of three different types of problems: Carbon aware flexible load shifting, Data center HVAC cooling energy optimization and carbon aware battery auxiliary supply.
 
-Main contributions of DCRL-Green:
+Main contributions of Green-DCC:
 
-- the first OpenAI framework, to the best of our knowledge, focused on carbon footprint reduction for data centers
+- the first OpenAI framework, to the best of our knowledge, focused on carbon footprint reduction for data center clusters
+- support for hierarchical data center clusters modeling where users have flexibility in specifying the cluster architecture
 - modular design meaning users can utilize pre-defined modules for load shifting, energy and battery or build their own 
 - scalable architecture that allows multiple different types of modules and connections between them
 - robust data center model that provides in-depth customization to fit users' needs 
@@ -40,69 +41,56 @@ Currently, we provide two versions for the data center dynamics.
 
 `DCRL (dcrl_env.py)`: This default version is implemented in Python and can be used with the prerequisites listed below. 
 
-`DCRLeplus (dcrl_eplus_env.py)`: This uses the [EnergyPlus](https://energyplus.net/) model of a data center from the [Sinergym](https://github.com/ugr-sail/sinergym) repository. We provide a docker image for this environment as well as instructions for manual installation.
 
-## Works Utilizing DCRL-Green
+## Works Utilizing Green-DCC
 
-**[Real-time Carbon Footprint Minimization in Sustainable Data Centers wth Reinforcement Learning](https://www.climatechange.ai/papers/neurips2023/28).** Best Paper - Best ML Innovation award at NeurIPS Climate Change AI Workshop.
+#TODO
 
 ## Documentation and Installation
-Refer to the [docs](https://hewlettpackard.github.io/dc-rl/) for documentation of the DCRL-Green.
+Refer to the [docs](https://hewlettpackard.github.io/green-dcc/) for documentation of Green-DCC.
 
 # Quick Start Guide
 
 ## Prerequisites
 - Linux OS (Ubuntu 20.04)
 - Conda
-- [Optional] Docker (see [docs](https://docs.docker.com/get-docker/)) (Only required for the Sinergym-EnergyPlus Environment)
 
 
 ## Installation
 First, download the repository. If using HTML, execute:
 ```bash
-$ git clone https://github.com/HewlettPackard/dc-rl.git
+$ git clone https://github.com/HewlettPackard/green-dcc.git
 ```
 If using SSH, execute:
 ```bash
-$ git clone git@github.com:HewlettPackard/dc-rl.git
+$ git clone git@github.com:HewlettPackard/green-dcc.git
 ```
-### Installing the DCRL environment 
+### Installing the Green-DCC environment 
 Make sure you have conda installed. For more instructions on installing conda please check the [documentation](https://conda.io/projects/conda/en/latest/user-guide/install/linux.html#install-linux-silent).
 
-Change the current working directory to the dc-rl folder:
+Change the current working directory to the green-dcc folder:
 
 ```bash
-$ cd dc-rl
+$ cd green-dcc
 ```
 
 Create a conda environment and install dependencies:
 ```bash
-$ conda create -n dcrl python=3.10
-$ conda activate dcrl
-$ pip install -r requirements.txt
+$ conda create -n green-dcc python=3.10
+$ conda activate green-dcc
+$ pip install -r requirements.txt #TODO go through reqs 
 ```
-
-### Installing the DCRLeplus environment
-Make sure you are inside the ```dc-rl``` directory first. 
-
-To install the DCRLeplus environment using a docker image (**recommended**) run the following command to pull the image:
-
-```bash
-$ docker pull agnprz/carbon_sustain:v3
-```
-
-To install DCRLeplus manually (**not recommended**), you need to follow the [instructions](https://ugr-sail.github.io/sinergym/compilation/main/pages/installation.html#manual-installation) to manually install Sinergym. Make sure all the required components (custom Python environment, EnergyPlus, and BCVTB) are correctly installed.   
 
 ## Usage
-Before running the DCRL environment, make sure you are in the ```dc-rl``` folder. If you are in your home directory, run ```cd dc-rl``` or ```cd PATH_TO_PROJECT``` depending on where you downloaded the GitHub repository. 
+Before running the Green-DCC environment, make sure you are in the ```green-dcc``` folder. If you are in your home directory, run ```cd green-dcc``` or ```cd PATH_TO_PROJECT``` depending on where you downloaded the GitHub repository. 
 
-### Running the DCRL environment with a random agent
+### Running the Green-DCC environment with a random agent
 To run an episode of the environment with a random agent execute:
 ```bash
 $ python dcrl_env.py
 ```
 
-### Training an RL agent on the DCRL environment
+### Training an RL agent on the Green-DCC environment
 To start training, run the following command:
 
 (Note: The `episode_reward_mean` will be `nan` for the first few iterations until 1 episode is completed)
@@ -122,22 +110,8 @@ For A2C:
 $ python train_a2c.py
 ```
 
-### Training on the DCRLeplus environment
-First, run the docker image that you previosuly downloaded:
-
-```bash
-$ docker run -t -i -v $PWD:/sinergym/dc-rl --shm-size=10.24gb agnprz/carbon_sustain:v3
-```
-
-Finally to run DCRLeplus use:
-```bash
-$ cd dc-rl
-$ EPLUS=1 python train_ppo.py
-```
-Note that this will use ```PPO``` agents; for ```MADDPG``` use the ```train_maddpg.py``` Python script and for ```A2C``` use the ```train_a2c.py``` script. Other algorithms can be used, it is only necessary to utilize the RLLib [algorithms](https://docs.ray.io/en/latest/rllib/rllib-algorithms.html).
-
 ### Running in Background Mode
-If you want to run the DCRL-Green framework in background mode use the following command:
+If you want to run the Green-DCC framework in background mode use the following command:
 
 ```bash
 $ nohup python PYTHON_SCRIPT > OUTPUT_FILE.txt  &
