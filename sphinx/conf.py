@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.abspath('../'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'Sustain-DC'
+project = 'Green-DCC'
 copyright = '2024, HPE'
 author = 'HPE'
 
@@ -40,7 +40,13 @@ extensions = [
     #'sphinx_panels', # for backgrounds
     'sphinx.ext.autosectionlabel', #for reference sections using its title
     'sphinx_multitoc_numbering', #numbering sections
+    'sphinxcontrib.globalsubs', #global substitutions
 ]
+
+#define global substitutions
+global_substitutions = {
+    'F': 'Green-DCC' #define framework name 
+}
 
 # source for bib references
 bibtex_bibfiles = ['references.bib']

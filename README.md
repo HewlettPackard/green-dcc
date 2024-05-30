@@ -2,7 +2,7 @@
 
 ## Dashboard
 
-To watch the video, click on the screenshot below (right-click and select "Open link in new tab" to view in a new tab):
+To watch the video, click on the screenshot below (right-click and select "Open link in new tab" to view in a new tab): #TODO go through/update links/content in links
 
 [![Dashboard, click it to visualize it](media/DCRL_screenshot2.png)](https://www.dropbox.com/scl/fi/85gumlvjgbbk5kwjhee3i/Data-Center-Green-Dashboard-ver2.mp4?rlkey=w3mu21qqdk9asi826cjyyutzl&dl=0)
 
@@ -23,7 +23,7 @@ This repository contains the datasets and code for the paper "Green-DCC: Benchma
 </p>
 
 ## Introduction
-Green-DCC is a framework for testing multi-agent Reinforcement Learning (MARL) algorithms that optimizes data center clusters in a hierarchical manner for multiple objectives of carbon footprint reduction, energy consumption, and energy cost. It uses OpenAI Gym standard and supports modeling and control of three different types of problems: Carbon aware flexible load shifting, Data center HVAC cooling energy optimization and carbon aware battery auxiliary supply.
+Green-DCC is a framework for testing multi-agent Reinforcement Learning (MARL) algorithms that optimizes data center clusters in a hierarchical manner for multiple objectives of carbon footprint reduction, energy consumption, and energy cost. It uses OpenAI Gym standard and supports modeling and control of three different types of problems: carbon aware flexible load shifting, data center HVAC cooling energy optimization and carbon aware battery auxiliary supply.
 
 Main contributions of Green-DCC:
 
@@ -43,7 +43,7 @@ Main contributions of Green-DCC:
 #TODO
 
 ## Documentation and Installation
-Refer to the [docs](https://hewlettpackard.github.io/green-dcc/) for documentation of Green-DCC.
+Refer to the [docs](https://hewlettpackard.github.io/green-dcc/) for documentation of Green-DCC. #TODO publish docs on GH Pages 
 
 # Quick Start Guide
 
