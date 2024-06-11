@@ -26,6 +26,27 @@ Key features of Green-DCC include:
 
 Green-DCC provides a complex, interdependent, and realistic benchmarking environment that is well-suited for evaluating hierarchical reinforcement learning algorithms applied to data center control. The ultimate goal is to optimize workload distribution to minimize the carbon footprint, energy usage, and energy cost, while considering various operational constraints and environmental factors.
 
+![Green DCC](Figures/hier.png)
+
+*Figure: Green-DCC Framework for Data Center Cluster Management.*
+
+The figure above illustrates the Hierarchical Green-DCC Framework for Data Center Cluster Management. In this framework:
+
+- **Top-Level Agent:** Controls the geographic distribution of workloads across the entire DCC. This agent makes strategic decisions to optimize resource usage and sustainability across multiple locations.
+- **Lower-Level Agents:** Manage the time-shifting of workloads and the cooling processes within individual data centers. These agents implement the directives from the top-level agent while addressing local operational requirements.
+- **Additional Controls:** Can include energy storage, among other capabilities. These controls further enhance the system's ability to optimize for multiple objectives, such as reducing the carbon footprint, minimizing energy usage and costs, and potentially extending to water usage.
+
+The hierarchical structure allows for coordinated, multi-objective optimization that considers both global strategies and local operational constraints.
+
+![Green DCC](Figures/GreenDCCv3.png)
+
+*Figure: Green-DCC Framework demonstrating Geographic and Temporal Load Shifting Strategies.*
+
+The figure above shows the Green-DCC framework using two main strategies to optimize data center operations and reduce carbon emissions:
+
+- **Geographic Load Shifting:** Dynamically moves workloads between different data centers (DC1, DC2, DC3) based on decisions made by the Top-Level Agent. This strategy leverages regional differences in energy costs, carbon intensity of the grid, and external temperatures.
+- **Temporal Load Shifting:** Defers non-critical/shiftable tasks to future time periods within a single data center (e.g., DC3), when conditions are more favorable for energy-efficient operation. Tasks are stored in a Deferred Task Queue (DTQ) and executed during periods of lower carbon intensity, external temperatures, or lower overall data center utilization.
+
 Detailed documentation is available [here](https://hewlettpackard.github.io/green-dcc).
 
 ## Installation
@@ -385,7 +406,7 @@ Green-DCC offers support for more locations beyond the three selected for these 
 
 ## Selected Locations
 
-Green-DCC supports a wide range of locations, each with distinct weather patterns and carbon intensity profiles. This diversity allows for extensive benchmarking and evaluation of RL controllers under various environmental conditions. The table below provides a summary of the selected locations, including typical weather conditions and carbon emissions characteristics.
+Green-DCC supports a wide range of locations, each with distinct weather patterns and carbon intensity profiles. This diversity allows for extensive benchmarking and evaluation of RL controllers under various environmental conditions. The table and the figure below provide a summary of the selected locations, including typical weather conditions and carbon intensity characteristics.
 
 ### Location Summaries
 
@@ -402,13 +423,108 @@ Green-DCC supports a wide range of locations, each with distinct weather pattern
 
 *Table: Summary of Selected Locations with Typical Weather and Carbon Intensity Characteristics*
 
+### External Temperature Distribution
+
+The figure below illustrates the external temperature profiles for the different selected locations during the month of July, highlighting the variations in weather conditions that affect cooling requirements and energy consumption.
+
+![External Temperature Distribution](Figures/GreenDCC_weather_all_locations.png)
+
+*Figure: External temperature profiles for the selected locations during July.*
+
+### Carbon Intensity Distribution
+
+The figure below shows the average daily carbon intensity for the selected locations during the month of July, providing insight into the environmental impact of energy consumption at these locations.
+
+![Carbon Intensity Distribution](Figures/GreenDCC_ci_all_locations.png)
+
+*Figure: Average daily carbon intensity for the selected locations during July.*
+
 These locations were chosen because they are typical data center locations within the United States, offering a variety of environmental conditions that reflect real-world challenges faced by data centers.
 
 
-
-
 ## Contributing
-Contributions are welcome. For major changes, please open an issue first to discuss what you would like to change. Please ensure to update tests as appropriate.
+
+We welcome contributions to Green-DCC! If you are interested in contributing to the project, please follow the guidelines below.
+
+### How to Contribute
+
+1. **Fork the Repository**
+
+    Start by forking the Green-DCC repository to your GitHub account.
+
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/green-dcc.git
+    cd green-dcc
+    ```
+
+2. **Create a Branch**
+
+    Create a new branch for your feature or bug fix.
+
+    ```bash
+    git checkout -b feature-or-bugfix-name
+    ```
+
+3. **Make Changes**
+
+    Make your changes to the codebase. Be sure to follow the existing coding style and conventions.
+
+4. **Commit Your Changes**
+
+    Commit your changes with a clear and descriptive commit message.
+
+    ```bash
+    git add .
+    git commit -m "Description of your changes"
+    ```
+
+5. **Push to Your Fork**
+
+    Push your changes to your forked repository.
+
+    ```bash
+    git push origin feature-or-bugfix-name
+    ```
+
+6. **Create a Pull Request**
+
+    Go to the original Green-DCC repository and create a pull request. Provide a clear description of your changes and any additional context that might be useful for the review.
+
+### Code of Conduct
+
+Please note that we have a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project, you agree to abide by its terms.
+
+### Development Guidelines
+
+- Follow the coding style and conventions used in the existing codebase.
+- Write clear and concise commit messages.
+- Document your code where necessary to make it easier for others to understand.
+- Ensure that your changes do not break existing functionality by running tests and validating your code.
+
+### Testing
+
+Before submitting a pull request, make sure your changes pass the existing tests and add new tests if your changes introduce new functionality.
+
+Thank you for your interest in contributing to Green-DCC! We appreciate your support and look forward to your contributions.
+
 
 ## Contact
-For any questions or concerns, please open an issue in this repository.
+
+If you have any questions, feedback, or need assistance, please feel free to reach out to us. We are here to help and would love to hear from you.
+
+For any project-specific queries or issues, you can contact to: [soumyendu.sarkar@hpe.com](soumyendu.sarkar@hpe.com)
+
+### Reporting Issues
+
+If you encounter any issues or bugs with Green-DCC, please report them on our [GitHub Issues](https://github.com/HewlettPackard/green-dcc/issues) page. Provide as much detail as possible to help us understand and resolve the issue.
+
+Thank you for your interest in Green-DCC. We look forward to your contributions and feedback!
+
+
+## License
+
+Green-DCC is licensed under the MIT License. 
+
+For more details, please refer to the [LICENSE](LICENSE) file in the repository.
+
+By contributing to Green-DCC, you agree that your contributions will be licensed under the MIT License.
