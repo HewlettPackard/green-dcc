@@ -104,13 +104,13 @@ class DCRL(MultiAgentEnv):
         self.workload_file = env_config['workload_file']
         
         self.max_bat_cap_Mw = env_config['max_bat_cap_Mw']
-        self.dc_config_file = env_config['dc_config_file']
         self.indv_reward = env_config['individual_reward_weight']
         self.collab_reward = (1 - self.indv_reward) / 2
         
         self.flexible_load = env_config['flexible_load']
 
         self.datacenter_capacity_mw = env_config['datacenter_capacity_mw']
+        self.dc_config_file = env_config['dc_config_file']
         self.timezone_shift = env_config['timezone_shift']
         self.days_per_episode = env_config['days_per_episode']
 
@@ -135,17 +135,18 @@ class DCRL(MultiAgentEnv):
         bat_reward_method = 'default_bat_reward' if not 'bat_reward' in env_config.keys() else env_config['bat_reward']
         self.bat_reward_method = reward_creator.get_reward_method(bat_reward_method)
         
-        n_vars_energy, n_vars_battery = 4,1        
+        n_vars_energy, n_vars_battery = 4,1
         n_vars_ci = 8
-        self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, queue_max_len=1000)
-        self.dc_env, _ = make_dc_pyeplus_env(month=self.month+1, location=ci_loc, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file) 
-        self.bat_env = make_bat_fwd_env(month=self.month, max_bat_cap_Mwh=self.dc_env.ranges['max_battery_energy_Mwh'], 
+
+        self.ls_env = make_ls_env(self.month, test_mode = self.evaluation_mode, n_vars_ci=n_vars_ci, queue_max_len=1000)
+        self.dc_env, _ = make_dc_pyeplus_env(self.month+1, location=self.location, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file) 
+        self.bat_env = make_bat_fwd_env(self.month, max_bat_cap_Mwh=self.dc_env.ranges['max_battery_energy_Mwh'], 
                                         max_dc_pw_MW=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][1]/1e6, 
                                         dcload_max=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][1],
-                                        dcload_min=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][0])
-        
+                                        dcload_min=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][0],
+                                        n_fwd_steps=n_vars_ci)
+
         self.bat_env.dcload_max = self.dc_env.power_ub_kW / 4 # Assuming 15 minutes timestep. Kwh
-        
         self.bat_env.dcload_min = self.dc_env.power_lb_kW / 4 # Assuming 15 minutes timestep. Kwh
 
         self._obs_space_in_preferred_format = True
@@ -399,13 +400,37 @@ class DCRL(MultiAgentEnv):
         bat_reward = self.bat_reward_method(params)
         return ls_reward, dc_reward, bat_reward
 
-    def get_hierarchical_variables(self):
-        return self.datacenter_capacity_mw, self.workload_m.get_current_workload(), self.weather_m.get_current_weather(), self.ci_m.get_current_ci()
-        
-    def set_hierarchical_workload(self, workload):
-        self.workload_m.set_current_workload(workload)
-        
-        
+
+    def get_available_capacity(self, time_steps: int) -> float:
+        """
+        Calculate the available capacity of the datacenter over the next time_steps.
+
+        Args:
+            time_steps (int): Number of 15-minute time steps to consider.
+
+        Returns:
+            float: The available capacity in MW.
+        """
+        # Initialize the available capacity
+        available_capacity = 0
+
+        # Retrieve the current workload and the datacenter's total capacity
+        current_step = self.workload_m.time_step
+        max_capacity = self.datacenter_capacity_mw
+
+        # Calculate the remaining capacity over each time step
+        for step in range(1, time_steps + 1):
+            # Make sure we're not exceeding the total steps available in workload data
+            if current_step + step < len(self.workload_m.cpu_smooth):
+                current_workload = self.workload_m.cpu_smooth[current_step + step]
+                remaining_capacity = (1 - current_workload)*max_capacity
+                available_capacity += max(0, remaining_capacity)
+                # print(f"Step: {step}, Current Workload: {current_workload}, Remaining Capacity: {remaining_capacity}, Available Capacity: {available_capacity}")
+
+        # Return the average capacity over the given time steps
+        return available_capacity
+
+
 if __name__ == '__main__':
 
     env = DCRL()
