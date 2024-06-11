@@ -1,6 +1,6 @@
 from tqdm import tqdm
 from ray.rllib.env import MultiAgentEnv
-from heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
+from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
 import pickle
 from tensorboardX import SummaryWriter
 
