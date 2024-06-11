@@ -1,5 +1,4 @@
 import os
-import random
 from typing import Optional, Tuple, Union
 
 import gymnasium
@@ -10,7 +9,6 @@ from gymnasium import spaces
 from utils import reward_creator
 from utils.base_agents import (BaseBatteryAgent, BaseHVACAgent,
                                BaseLoadShiftingAgent)
-from utils.rbc_agents import RBCBatteryAgent
 from utils.make_envs_pyenv import (make_bat_fwd_env, make_dc_pyeplus_env,
                                    make_ls_env)
 from utils.managers import (CI_Manager, Time_Manager, Weather_Manager,
@@ -88,8 +86,6 @@ class DCRL(gym.Env):
 
         # create environments and agents
         self.agents = env_config['agents']
-        self.rbc_agents = env_config.get('rbc_agents', [])
-        
         self.location = env_config['location']
         
         self.ci_file = env_config['cintensity_file']
@@ -149,9 +145,7 @@ class DCRL(gym.Env):
         self.observation_space = []
         self.action_space = []
         
-        # Do nothing controllers
         self.base_agents = {}
-        
         flexible_load = 0
         
         # Create the observation/action space if the agent is used for training.
@@ -180,7 +174,6 @@ class DCRL(gym.Env):
 
         # Create the managers: date/hour/time manager, workload manager, weather manager, and CI manager.
         self.init_day = get_init_day(self.month)
-        self.ranges_day = [max(0, self.init_day - 7), min(364, self.init_day + 7)]
         self.t_m = Time_Manager(self.init_day, timezone_shift=self.timezone_shift, days_per_episode=self.days_per_episode)
         self.workload_m = Workload_Manager(init_day=self.init_day, workload_filename=self.workload_file, timezone_shift=self.timezone_shift)
         self.weather_m = Weather_Manager(init_day=self.init_day, location=wea_loc, filename=self.weather_file, timezone_shift=self.timezone_shift)
@@ -220,13 +213,10 @@ class DCRL(gym.Env):
         self.bat_reward = 0
 
         # Reset the managers
-        random_init_day = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1]))
-        random_init_hour = random.randint(0, 23)
-        
-        t_i = self.t_m.reset(init_day=random_init_day, init_hour=random_init_hour)
-        workload = self.workload_m.reset(init_day=random_init_day, init_hour=random_init_hour) # Workload manager
-        temp, norm_temp, wet_bulb, norm_wet_bulb = self.weather_m.reset(init_day=random_init_day, init_hour=random_init_hour) # Weather manager
-        ci_i, ci_i_future = self.ci_m.reset(init_day=random_init_day, init_hour=random_init_hour) # CI manager. ci_i -> CI in the current timestep.
+        t_i = self.t_m.reset() # Time manager
+        workload = self.workload_m.reset() # Workload manager
+        temp, norm_temp, wet_bulb, norm_wet_bulb = self.weather_m.reset() # Weather manager
+        ci_i, ci_i_future = self.ci_m.reset() # CI manager. ci_i -> CI in the current timestep.
         
         # Set the external ambient temperature to data center environment
         self.dc_env.set_ambient_temp(temp, wet_bulb)
@@ -277,8 +267,8 @@ class DCRL(gym.Env):
         self.infos['__common__']['states']['agent_bat'] = self.bat_state
         
         available_actions = None
-        
-        return states
+                
+        return states, self.infos, available_actions 
 
             
 
@@ -398,7 +388,7 @@ class DCRL(gym.Env):
             truncateds["__all__"] = True
             for agent in self.agents:
                 truncateds[agent] = True
-        
+            
         # Common information
         self.infos['__common__'] = {}
         self.infos['__common__']['time'] = t_i
@@ -406,13 +396,13 @@ class DCRL(gym.Env):
         self.infos['__common__']['weather'] = temp
         self.infos['__common__']['ci'] = ci_i
         self.infos['__common__']['ci_future'] = ci_i_future
-        
+    
         # Store the states
         self.infos['__common__']['states'] = {}
         self.infos['__common__']['states']['agent_ls'] = self.ls_state
         self.infos['__common__']['states']['agent_dc'] = self.dc_state
         self.infos['__common__']['states']['agent_bat'] = self.bat_state
-        
+
         return obs, rew, terminateds, truncateds, info
 
     def calculate_reward(self, params):
@@ -432,7 +422,7 @@ class DCRL(gym.Env):
         dc_reward = self.dc_reward_method(params)
         bat_reward = self.bat_reward_method(params)
         return ls_reward, dc_reward, bat_reward
-
+    
     def render(self):
         pass
 
@@ -467,3 +457,32 @@ class DCRL(gym.Env):
         
     def set_hierarchical_workload(self, workload):
         self.workload_m.set_current_workload(workload)
+        
+    def get_available_capacity(self, time_steps: int) -> float:
+        """
+        Calculate the available capacity of the datacenter over the next time_steps.
+
+        Args:
+            time_steps (int): Number of 15-minute time steps to consider.
+
+        Returns:
+            float: The available capacity in MW.
+        """
+        # Initialize the available capacity
+        available_capacity = 0
+
+        # Retrieve the current workload and the datacenter's total capacity
+        current_step = self.workload_m.time_step
+        max_capacity = self.datacenter_capacity_mw
+
+        # Calculate the remaining capacity over each time step
+        for step in range(1, time_steps + 1):
+            # Make sure we're not exceeding the total steps available in workload data
+            if current_step + step < len(self.workload_m.cpu_smooth):
+                current_workload = self.workload_m.cpu_smooth[current_step + step]
+                remaining_capacity = (1 - current_workload)*max_capacity
+                available_capacity += max(0, remaining_capacity)
+                # print(f"Step: {step}, Current Workload: {current_workload}, Remaining Capacity: {remaining_capacity}, Available Capacity: {available_capacity}")
+
+        # Return the average capacity over the given time steps
+        return available_capacity

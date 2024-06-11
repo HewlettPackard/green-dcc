@@ -1,24 +1,25 @@
 {
     "data_center_configuration" : 
     {
-        "NUM_ROWS" : 5,
+        "NUM_ROWS" : 6,
         "NUM_RACKS_PER_ROW" : 5,
         "RACK_SUPPLY_APPROACH_TEMP_LIST" : [
                                             5.3, 5.3, 5.3, 5.3, 5.3,
                                             5.0, 5.0, 5.0, 5.0, 5.0, 
                                             5.0, 5.0, 5.0, 5.0, 5.0, 
                                             5.0, 5.0, 5.0, 5.0, 5.0, 
+                                            5.0, 5.0, 5.0, 5.0, 5.0, 
                                             5.3, 5.3, 5.3, 5.3, 5.3
-
                                             ],
         "RACK_RETURN_APPROACH_TEMP_LIST" :  [
                                             -3.7, -3.7, -3.7, -3.7, -3.7,
                                             -2.5, -2.5, -2.5, -2.5, -2.5,
                                             -2.5, -2.5, -2.5, -2.5, -2.5,
                                             -2.5, -2.5, -2.5, -2.5, -2.5,
+                                            -2.5, -2.5, -2.5, -2.5, -2.5,
                                             -3.7, -3.7, -3.7, -3.7, -3.7
                                             ],
-        "CPUS_PER_RACK" : 1e6                                                                                                                                                  
+        "CPUS_PER_RACK" : 400                                                                                                                                                  
     },
     "hvac_configuration" : 
     {
@@ -27,7 +28,9 @@
         "CRAC_SUPPLY_AIR_FLOW_RATE_pu" : 0.00005663,
         "CRAC_REFRENCE_AIR_FLOW_RATE_pu" : 0.00009438,
         "CRAC_FAN_REF_P" : 150,
-        "CHILLER_COP" : 6.0,
+        "CHILLER_COP_BASE" : 5.0,
+        "CHILLER_COP_K" : 0.1,
+        "CHILLER_COP_T_NOMINAL" : 25.0,
         "CT_FAN_REF_P" : 1000,
         "CT_REFRENCE_AIR_FLOW_RATE" : 2.8315,
         "CW_PRESSURE_DROP" : 300000,
@@ -54,6 +57,16 @@
                                                 [130, 10],
                                                 [130, 10],
                                                 [130, 10],
+                                                [170, 10],
+                                                [170, 10],
+                                                [130, 10],
+                                                [130, 10],
+                                                [130, 10],
+                                                [130, 10],
+                                                [130, 10],
+                                                [170, 10],
+                                                [170, 10],
+                                                [170, 10],
                                                 [130, 10],
                                                 [130, 10],
                                                 [130, 10],

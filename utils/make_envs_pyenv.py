@@ -244,6 +244,3 @@ def make_dc_pyeplus_env(month : int = 1,
         ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1]
     
     return dc_env, max_dc_pw
-    
-    
-    

@@ -2,6 +2,13 @@ from typing import Dict
 
 import numpy as np
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.env.base_env import BaseEnv
+from ray.rllib.env.env_context import EnvContext
+from ray.rllib.evaluation import RolloutWorker
+from ray.rllib.evaluation.episode import Episode
+from ray.rllib.evaluation.episode_v2 import EpisodeV2
+from ray.rllib.policy import Policy
+from ray.rllib.utils.typing import EnvType, PolicyID
 
 
 class CustomCallbacks(DefaultCallbacks):
@@ -46,9 +53,6 @@ class CustomCallbacks(DefaultCallbacks):
             env_index (int): The index of the environment within the worker task.
             **kwargs: additional arguments that can be passed.
         """
-        # print(f'Logging env base with month: {base_env.envs[0].month}')
-        # print(f'Logging env worker with month: {worker.env.month}')
-
         net_energy = base_env.envs[0].bat_info["bat_total_energy_with_battery_KWh"]
         CO2_footprint = base_env.envs[0].bat_info["bat_CO2_footprint"]
         load_left = base_env.envs[0].ls_info["ls_unasigned_day_load_left"]
@@ -110,3 +114,37 @@ class CustomCallbacks(DefaultCallbacks):
         episode.custom_metrics["total_tasks_dropped"] = total_tasks_dropped
 
         episode.custom_metrics["total_water_usage"] = total_water_usage
+        
+class HierarchicalDCRL_Callback(DefaultCallbacks):
+    """
+    Callback to log Hierarchical DCRL specific values
+    """
+
+    def on_episode_step(self, *, worker: RolloutWorker, base_env: BaseEnv, policies: Dict[str, Policy] | None = None, episode: Episode | EpisodeV2, env_index: int | None = None, **kwargs) -> None:
+
+        episode.custom_metrics["runningstats/mu1"] = base_env.vector_env.envs[0].stats1.mu
+        episode.custom_metrics["runningstats/sigma_1"] = base_env.vector_env.envs[0].stats1.stddev
+        episode.custom_metrics["runningstats/mu2"] = base_env.vector_env.envs[0].stats2.mu
+        episode.custom_metrics["runningstats/sigma_2"] = base_env.vector_env.envs[0].stats2.stddev
+        episode.custom_metrics["runningstats/cfp_reward"] = base_env.vector_env.envs[0].cfp_reward
+        episode.custom_metrics["runningstats/workload_violation_rwd"] = base_env.vector_env.envs[0].workload_violation_rwd
+        episode.custom_metrics["runningstats/combined_reward"] = base_env.vector_env.envs[0].combined_reward
+        episode.custom_metrics["runningstats/hysterisis_cost"] = base_env.vector_env.envs[0].cost_of_moving_mw
+        ax1,ax2,ax3 = base_env.vector_env.envs[0].action_choice
+        episode.custom_metrics["runningstats/ax1"] = ax1
+        episode.custom_metrics["runningstats/ax2"] = ax2
+        episode.custom_metrics["runningstats/ax3"] = ax3
+
+class CustomMetricsCallback(DefaultCallbacks):
+
+    def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
+        if hasattr(base_env, 'vector_env'):
+            metrics = base_env.vector_env.envs[0].metrics            
+        else:
+            metrics = base_env.envs[0].metrics
+            
+        cfp = 0
+        for dc in metrics:
+            cfp += sum(metrics[dc]['bat_CO2_footprint']) / 1e6
+
+        episode.custom_metrics['custom_metrics/CFP']=  cfp

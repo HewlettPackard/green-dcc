@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Union
-
+import math
 import numpy as np
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.env.base_env import BaseEnv
@@ -93,3 +93,81 @@ class pyeplus_callback(DefaultCallbacks):
         episode.custom_metrics["avg_power_per_episode_kW"] = average_net_energy
         episode.custom_metrics["avg_crac_stpt_delta_per_episode"] = average_dc_actions
             
+def idx_to_source_sink_mapper(nodes):
+    """
+    Given the number of ordered nodes, it creates a dense graph and populates a
+    dictionary where the key is an index that maps to a tuple of the source and sink node ids with source value always being less than sink value
+    Note: The source and sink nodes are the 0 indexed nodes in the graph 
+    eg 
+    idx :   0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+    source: 0, 0, 0, 0, 1, 1, 1, 2, 2, 3 : start iteration with this until i = 0 to N-2 ie range(N-1)
+    ctr :   0, 1, 2, 3, 0, 1, 2, 0, 1, 0 : start iteration with this until ctr = 0 to [N-(i+2)] ie range(N-(i+1)) for each i from above
+    sink:   1, 2, 3, 4, 2, 3, 4, 3, 4, 4 : get this by adding ctr to source+1 ie sink = source+ctr+1
+    """
+    
+    source_sink_idx = {}
+    
+    for source_idx in range(nodes-1):
+        offset = int(nodes*source_idx - source_idx*(source_idx+1)/2)
+        for counter in range(nodes-(source_idx+1)):
+            
+            source_sink_idx[offset+counter] = (source_idx, source_idx+counter+1)
+            
+    return source_sink_idx
+
+class RunningStats:
+    def __init__(self, epsilon=1e-8):
+        self.n = 0
+        self.mu = 0
+        self.M2 = 0
+        self.epsilon = epsilon
+
+    def update(self, x):
+        self.n += 1
+        delta = x - self.mu
+        self.mu += delta / self.n
+        delta2 = x - self.mu
+        self.M2 += delta * delta2
+
+    @property
+    def mean(self):
+        return self.mu
+
+    @property
+    def variance(self):
+        return self.M2 / self.n if self.n > 1 else 0
+
+    @property
+    def stddev(self):
+        return max(self.variance ** 0.5, self.epsilon)
+
+def non_linear_combine(x1, x2, stats1, stats2):
+    stats1.update(x1)
+    stats2.update(x2)
+    
+    if (stats1.n < 2) or (stats2.n < 2):
+        return x1 + x2  # or some initial handling
+    
+    # Z-score normalization
+    z1 = (x1 - stats1.mean) / stats1.stddev
+    z2 = (x2 - stats2.mean) / stats2.stddev
+
+    # Non-linear transformation
+    f1 = 1 / (1 + math.exp(-z1))
+    f2 = 1 / (1 + math.exp(-z2))
+
+    # Combine
+    return f1 + f2
+
+if __file__ == "__main__":
+
+    # Initialize running stats for two reward components
+    stats1 = RunningStats()
+    stats2 = RunningStats()
+
+    # Example usage
+    x1 = 10  # new observation for reward component 1
+    x2 = 5   # new observation for reward component 2
+
+    combined_reward = non_linear_combine(x1, x2, stats1, stats2)
+    print(combined_reward)
