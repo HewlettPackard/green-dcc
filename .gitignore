@@ -17,3 +17,6 @@ obtain_weather_files.py
 EBA.zip
 average carbon intensity vs average CV.pdf
 workload_evaluation.png
+logs_hdcrl/
+logs_single/
+actions.pkl

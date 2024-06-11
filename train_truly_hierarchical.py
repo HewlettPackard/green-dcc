@@ -6,8 +6,8 @@ from ray.rllib.algorithms.ppo import PPO, PPOConfig
 from gymnasium.spaces import Discrete, Box
 from ray.rllib.algorithms.ppo import PPOConfig
 
-from truly_heirarchical_env import TrulyHeirarchicalDCRL
-from heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
+from envs.truly_heirarchical_env import TrulyHeirarchicalDCRL
+from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
 from create_trainable import create_wrapped_trainable
 
 NUM_WORKERS = 1
@@ -69,7 +69,6 @@ CONFIG = (
         },
         policy_mapping_fn=lambda agent_id, episode, worker, **kwargs: agent_id,
         )
-        .callbacks(CustomMetricsCallback)
         .resources(num_gpus=0)
         .debugging(seed=0)
     )
