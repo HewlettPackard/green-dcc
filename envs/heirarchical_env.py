@@ -10,7 +10,7 @@ from gymnasium.spaces import Dict, Box, Discrete
 
 from envs.dcrl_env_harl_partialobs import DCRL
 from hierarchical_workload_optimizer import WorkloadOptimizer
-from low_level_wrapper import LowLevelActorRLLIB, LowLevelActorHARL
+from utils.low_level_wrapper import LowLevelActorRLLIB, LowLevelActorHARL
 
 warnings.filterwarnings(
     action="ignore",

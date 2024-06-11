@@ -60,7 +60,7 @@ class TrulyHeirarchicalMSDCRL(HeirarchicalDCRL, MultiAgentEnv):
             
             if done:
                 
-                pickle.dump(self.actions, open(f"actions.pkl", "wb"))
+                #pickle.dump(self.actions, open(f"actions.pkl", "wb"))
                 self.actions = []
                 totalfp = 0
                 for dc in self.datacenter_ids:
