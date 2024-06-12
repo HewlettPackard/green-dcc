@@ -15,6 +15,8 @@
 
 Green-DCC is a benchmark environment designed to evaluate dynamic workload distribution techniques for sustainable Data Center Clusters (DCC). It aims to reduce the environmental impact of cloud computing by distributing workloads within a DCC that spans multiple geographical locations. The benchmark environment supports the evaluation of various control algorithms, including reinforcement learning-based approaches.
 
+### ** Detailed documentation can be found [here](https://hewlettpackard.github.io/green-dcc). **
+
 ![Green DCC](Figures/hier.png)
 
 *Figure: Green-DCC Framework for Data Center Cluster Management.*
@@ -47,7 +49,6 @@ The figure above shows the Green-DCC framework using two main strategies to opti
 - **Geographic Load Shifting:** Dynamically moves workloads between different data centers (DC1, DC2, DC3) based on decisions made by the Top-Level Agent. This strategy leverages regional differences in energy costs, carbon intensity of the grid, and external temperatures.
 - **Temporal Load Shifting:** Defers non-critical/shiftable tasks to future time periods within a single data center (e.g., DC3), when conditions are more favorable for energy-efficient operation. Tasks are stored in a Deferred Task Queue (DTQ) and executed during periods of lower carbon intensity, external temperatures, or lower overall data center utilization.
 
-Detailed documentation is available [here](https://hewlettpackard.github.io/green-dcc).
 
 ## Installation
 
@@ -240,7 +241,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
 
     if __name__ == "__main__":
         os.environ["RAY_DEDUP_LOGS"] = "0"
-        # ray.init(local_mode=True, ignore_reinit_error=True)
         ray.init(ignore_reinit_error=True)
         
         tune.Tuner(
@@ -250,7 +250,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
                 stop={"timesteps_total": 100_000_000},
                 verbose=0,
                 local_dir=RESULTS_DIR,
-                # storage_path=RESULTS_DIR,
                 name=NAME,
                 checkpoint_config=ray.air.CheckpointConfig(
                     checkpoint_frequency=5,
@@ -288,7 +287,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
                 train_batch_size=4096,
                 num_sgd_iter=10,
                 model={'fcnet_hiddens': [64, 64]}, 
-                #shuffle_sequences=True
             )
             .multi_agent(
             policies={
@@ -326,7 +324,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
 
     if __name__ == "__main__":
         os.environ["RAY_DEDUP_LOGS"] = "0"
-        # ray.init(local_mode=True, ignore_reinit_error=True)
         ray.init(ignore_reinit_error=True)
         
         tune.Tuner(
@@ -336,7 +333,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
                 stop={"timesteps_total": 100_000_000},
                 verbose=0,
                 local_dir=RESULTS_DIR,
-                # storage_path=RESULTS_DIR,
                 name=NAME,
                 checkpoint_config=ray.air.CheckpointConfig(
                     checkpoint_frequency=5,
