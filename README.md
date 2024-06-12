@@ -131,6 +131,10 @@ This section provides instructions on how to run simulations, configure the envi
 
     This will start a TensorBoard server, and you can view the experiment visualizations by opening a web browser and navigating to `http://localhost:6006`.
 
+    ![TensorBoard Example](Figures/GreenDCC_tensorboard.png)
+
+    *Figure: Example of TensorBoard visualization for Green-DCC experiments.*
+
 
 ## Benchmarking
 
@@ -148,6 +152,8 @@ These algorithms have been successfully trained and evaluated within the Green-D
 
 Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/releases-2.4.0/rllib/rllib-algorithms.html) should also be compatible with Green-DCC, but additional work may be required to adapt the environment to the expected input and output shapes of each method as implemented in RLlib. For more details on these algorithms and how to adapt them for Green-DCC, refer to the [Ray RLlib documentation](https://docs.ray.io/en/releases-2.4.0/rllib/rllib-algorithms.html).
 
+   utils/dc_config.json
+   and DEFAULT_CONFIG in envs/heirarchical_env.py
 
 
 ### Running Benchmarks
@@ -164,7 +170,68 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
 
     Edit the configuration files as needed to set up your desired benchmark parameters.
 
-3. **Train and evaluate algorithms**
+    - The configuration file for each simulated data center (number of cabinets, rows, HVAC configuration, etc.) can be found in the `utils/dc_config_dcX.json` files.
+    - Update the `DEFAULT_CONFIG` in `envs/hierarchical_env.py`.
+
+    Here is an example of the `DEFAULT_CONFIG` in `hierarchical_env.py`:
+
+    ```python
+    DEFAULT_CONFIG = {
+        # DC1
+        'config1': {
+            'location': 'NY',
+            'cintensity_file': 'NY_NG_&_avgCI.csv',
+            'weather_file': 'USA_NY_New.York-LaGuardia.epw',
+            'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
+            'dc_config_file': 'dc_config_dc3.json',
+            'datacenter_capacity_mw': 1.0,
+            'timezone_shift': 0,
+            'month': 7,
+            'days_per_episode': 30,
+            'partial_obs': True,
+            'nonoverlapping_shared_obs_space': True
+        },
+
+        # DC2
+        'config2': {
+            'location': 'GA',
+            'cintensity_file': 'GA_NG_&_avgCI.csv',
+            'weather_file': 'USA_GA_Atlanta-Hartsfield-Jackson.epw',
+            'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
+            'dc_config_file': 'dc_config_dc2.json',
+            'datacenter_capacity_mw': 1.0,
+            'timezone_shift': 2,
+            'month': 7,
+            'days_per_episode': 30,
+            'partial_obs': True,
+            'nonoverlapping_shared_obs_space': True
+        },
+
+        # DC3
+        'config3': {
+            'location': 'CA',
+            'cintensity_file': 'CA_NG_&_avgCI.csv',
+            'weather_file': 'USA_CA_San.Jose-Mineta.epw',
+            'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
+            'dc_config_file': 'dc_config_dc1.json',
+            'datacenter_capacity_mw': 1.0,
+            'timezone_shift': 3,
+            'month': 7,
+            'days_per_episode': 30,
+            'partial_obs': True,
+            'nonoverlapping_shared_obs_space': True
+        },
+        
+        # Number of transfers per step
+        'num_transfers': 1,
+
+        # List of active low-level agents
+        'active_agents': ['agent_dc'],
+    }
+    ```
+
+
+4. **Train and evaluate algorithms**
 
     To train and evaluate an RL algorithm using Ray, use the appropriate training script. Here are the commands for different configurations:
 
@@ -368,7 +435,7 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
 
 
 
-4. **Compare results**
+5. **Compare results**
 
     After running the benchmarks, you can compare the results by examining the output files in the `results/` directory. These files include detailed metrics on energy consumption, carbon footprint, and workload distribution across data centers. Use these metrics to assess the relative performance of different algorithms and configurations.
 
