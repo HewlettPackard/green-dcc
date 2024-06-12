@@ -262,7 +262,7 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
     ).fit()  
     ```
 
-    This example assumes a DCC with three data centers. To use a different algorithm, such as SAC, you need to replace the `PPOConfig` with `SACConfig` (or the appropriate config class for the algorithm) and adjust the hyperparameters accordingly. For example:
+    This example assumes a DCC with three data centers. To use a different algorithm, such as A2C, you need to replace the `PPOConfig` with `A2CConfig` (or the appropriate config class for the algorithm) and adjust the hyperparameters accordingly. For example:
 
     ```python
     from ray.rllib.algorithms.a2c import A2C, A2CConfig
