@@ -393,13 +393,15 @@ Green-DCC is designed to be highly customizable, allowing you to tailor the benc
 
 Refer to the detailed documentation for more information on customizing the Green-DCC environment and running advanced benchmarks.
 
+We are continually expanding Green-DCC to integrate additional control strategies and external energy sources, including auxiliary battery integration and on-site renewable energy generators (solar, wind, etc.). This ongoing development ensures that Green-DCC remains a comprehensive and up-to-date benchmarking tool for sustainable data center management.
+
 ## Experimental Details
 
 For all experiments, we considered three different locations: New York (NY), Atlanta (GA), and San Jose (CA). These locations were chosen to present a variety of weather conditions and carbon intensity profiles, creating a comprehensive and challenging evaluation environment. The goal was to develop a policy capable of addressing the unique challenges specific to each location. We utilized weather and carbon intensity data from the month of July. Weather data was sourced from [EnergyPlus](https://energyplus.net/weather), and carbon intensity data was retrieved from the [EIA API](https://api.eia.gov/bulk/EBA.zip). The base workload for our experiments was derived from open-source workload traces provided by Alibaba ([GitHub repository](https://github.com/alibaba/clusterdata)). Users can use their own data for weather, carbon intensity, and workload.
 
 Each data center (DC) had a capacity of 1 Mega-Watt.
 
-Green-DCC offers support for more locations beyond the three selected for these experiments. Detailed information about these additional locations can be found in the [Selected Locations](#selected-locations) section. The diverse climate and carbon intensity characteristics of these locations allow for extensive benchmarking and evaluation of RL controllers.
+Green-DCC offers support for more locations beyond the three selected for these experiments. Detailed information about these additional locations can be found in the [Provided Locations](#provided-locations) section. The diverse climate and carbon intensity characteristics of these locations allow for extensive benchmarking and evaluation of RL controllers.
 
  **Weather and Carbon Intensity Data**
 
