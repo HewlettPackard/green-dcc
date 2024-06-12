@@ -111,15 +111,26 @@ This section provides instructions on how to run simulations, configure the envi
     cd green-dcc
     ```
     
-2. **Run a simulation**
+2. **Run a experiment**
 
-    To run a basic simulation, use the following command:
+    To run a basic experiment, use the following command:
 
     ```bash
     python train_truly_hierarchical.py
     ```
 
     This will start a simulation with the default configuration. The results will be saved in `results/` output directory.
+
+3. **Visualize the experiments with TensorBoard**
+
+    To visualize the experiments while they are running, you can launch TensorBoard. Open a new terminal, navigate to the `results/` directory, and run the following command:
+
+    ```bash
+    tensorboard --logdir=./test
+    ```
+
+    This will start a TensorBoard server, and you can view the experiment visualizations by opening a web browser and navigating to `http://localhost:6006`.
+
 
 ## Benchmarking
 
@@ -155,13 +166,24 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
 
 3. **Train and evaluate algorithms**
 
-    To train and evaluate an RL algorithm using Ray, use the appropriate training script. For example, to train the PPO algorithm, run:
+    To train and evaluate an RL algorithm using Ray, use the appropriate training script. Here are the commands for different configurations:
 
-    ```bash
-    python train_truly_hierarchical.py
-    ```
+    - **HRL (Hierarchical Reinforcement Learning) Configuration**:
+      ```bash
+      python train_truly_hierarchical.py
+      ```
+    
+    - **HL+LLP (High Level + Low-Level Pretrained) Configuration**:
+      ```bash
+      python baselines/train_geo_dcrl.py
+      ```
 
-    The provided training script (`train_truly_hierarchical.py`) uses Ray for distributed training. Here's a brief overview of the script for PPO:
+    - **HLO (High Level Only) Configuration**:
+      ```bash
+      python baselines/train_hierarchical.py
+      ```
+
+    The provided training script (`train_truly_hierarchical.py`) uses Ray for distributed training. Here's a brief overview of the script for PPO of HRL configuration:
 
     ```python
     import os
