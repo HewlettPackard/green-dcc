@@ -1,5 +1,5 @@
+'''Multi step version'''
 import os
-
 import ray
 from ray import air, tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
@@ -8,7 +8,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 
 from truly_heirarchical_ms_env import TrulyHeirarchicalMSDCRL
 from heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
-from create_trainable import create_wrapped_trainable
+from utils.create_trainable import create_wrapped_trainable
 
 NUM_WORKERS = 1
 NAME = "test"

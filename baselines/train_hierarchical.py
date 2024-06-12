@@ -1,4 +1,4 @@
-'''Code used to the the High Level Only Baseline for the NeuirsIPS 2024 submission'''
+'''Code used to train the High Level Only Baseline for the NeuirsIPS 2024 submission'''
 import os
 import ray
 from ray import air, tune
@@ -10,7 +10,7 @@ from envs.heirarchical_env import (
     DEFAULT_CONFIG
 )
 
-from create_trainable import create_wrapped_trainable
+from utils.create_trainable import create_wrapped_trainable
 
 NUM_WORKERS = 4
 NAME = "test"

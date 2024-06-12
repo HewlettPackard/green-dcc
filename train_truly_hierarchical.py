@@ -8,7 +8,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 
 from envs.truly_heirarchical_env import TrulyHeirarchicalDCRL
 from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
-from create_trainable import create_wrapped_trainable
+from utils.create_trainable import create_wrapped_trainable
 
 NUM_WORKERS = 1
 NAME = "test"

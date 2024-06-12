@@ -1,11 +1,11 @@
+'''Code used to evaluate the High Level Only Baseline for the NeuirsIPS 2024 submission'''
 #%%
-import sys
 from tqdm import tqdm
 
 import numpy as np
 from ray.rllib.algorithms.algorithm import Algorithm
 from heirarchical_env import HeirarchicalDCRL, HeirarchicalDCRLWithHysterisis, HeirarchicalDCRLWithHysterisisMultistep, DEFAULT_CONFIG
-from hierarchical_workload_optimizer import WorkloadOptimizer
+from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 
 #%
 trainer_single = Algorithm.from_checkpoint('./results/SingleStep/PPO_HeirarchicalDCRLWithHysterisis_59fd7_00000_0_2024-05-14_18-39-53/checkpoint_000350')

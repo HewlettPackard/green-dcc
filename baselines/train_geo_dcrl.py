@@ -1,4 +1,4 @@
-'''Code used to the the HL+LLP Baseline for the NeuirsIPS 2024 submission'''
+'''Code used to train the HL+LLP Baseline for the NeuirsIPS 2024 submission'''
 import os
 import ray
 from ray import air, tune
@@ -8,7 +8,7 @@ from envs.geo_dcrl import (
     HierarchicalDCRLCombinatorial,
     DEFAULT_CONFIG
 )
-from create_trainable import create_wrapped_trainable
+from utils.create_trainable import create_wrapped_trainable
 
 NUM_WORKERS = 4
 NAME = "train_geo_dcrl_v2"

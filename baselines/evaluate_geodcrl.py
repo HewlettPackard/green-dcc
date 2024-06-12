@@ -1,10 +1,10 @@
-import sys
+'''Code used to evaluate the HL+LLP Baseline for the NeuirsIPS 2024 submission'''
 from tqdm import tqdm
 import glob
 import numpy as np
 from ray.rllib.algorithms.algorithm import Algorithm
 from envs.geo_dcrl import HARL_HierarchicalDCRL, DEFAULT_CONFIG
-from hierarchical_workload_optimizer import WorkloadOptimizer
+from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 
 FOLDER = 'results/simulexchange/PPO_HARL_HierarchicalDCRL_a503b_00000_0_2024-05-13_23-08-01/'
 CHECKPOINT_PATH = sorted(glob.glob(FOLDER + 'checkpoint_*'))[-1]

@@ -1,7 +1,7 @@
 
 #%%
 from dcrl_env import DCRL
-from hierarchical_workload_optimizer import WorkloadOptimizer
+from envs.hierarchical_workload_optimizer import WorkloadOptimizer
 import gymnasium as gym
 from ray.rllib.algorithms.algorithm import Algorithm
 from tqdm import tqdm
