@@ -9,7 +9,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from envs.truly_heirarchical_env import TrulyHeirarchicalDCRL
 from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
 from utils.create_trainable import create_wrapped_trainable
-
+from utils.rllib_callbacks import CustomMetricsCallback
 NUM_WORKERS = 1
 NAME = "test"
 RESULTS_DIR = './results/'
@@ -69,6 +69,7 @@ CONFIG = (
         },
         policy_mapping_fn=lambda agent_id, episode, worker, **kwargs: agent_id,
         )
+        .callbacks(CustomMetricsCallback)
         .resources(num_gpus=0)
         .debugging(seed=0)
     )
