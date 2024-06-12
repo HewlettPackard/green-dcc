@@ -131,6 +131,10 @@ This section provides instructions on how to run simulations, configure the envi
 
     This will start a TensorBoard server, and you can view the experiment visualizations by opening a web browser and navigating to `http://localhost:6006`.
 
+    ![TensorBoard Example](Figures/GreenDCC_tensorboard.png)
+
+    *Figure: Example of TensorBoard visualization for Green-DCC experiments.*
+
 
 ## Benchmarking
 
