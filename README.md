@@ -6,7 +6,7 @@
 3. [Usage](#usage)
 4. [Benchmarking](#benchmarking)
 5. [Experimental Details](#experimental-details)
-6. [Selected Locations](#selected-locations)
+6. [Provided Locations](#provided-locations)
 7. [Contributing](#contributing)
 8. [Contact](#contact)
 9. [License](#license)
@@ -404,11 +404,11 @@ Green-DCC offers support for more locations beyond the three selected for these 
 *Figure Comparison of workload distribution across the three data centers under the HLO RL Controller.*
 
 
-## Selected Locations
+## Provided Locations
 
-Green-DCC supports a wide range of locations, each with distinct weather patterns and carbon intensity profiles. This diversity allows for extensive benchmarking and evaluation of RL controllers under various environmental conditions. The table and the figure below provide a summary of the selected locations, including typical weather conditions and carbon intensity characteristics.
+Green-DCC supports a wide range of locations, each with distinct weather patterns and carbon intensity profiles. This diversity allows for extensive benchmarking and evaluation of RL controllers under various environmental conditions. The table and the figure below provide a summary of the provided locations, including typical weather conditions and carbon intensity characteristics.
 
-### Location Summaries
+### Provided Location Summaries
 
 | Location   | Typical Weather                         | Carbon Intensity (CI)   |
 |------------|-----------------------------------------|-------------------------|
@@ -421,7 +421,7 @@ Green-DCC supports a wide range of locations, each with distinct weather pattern
 | Virginia   | Mild climate, seasonal variations       | Medium avg CI           |
 | Washington | Mild, temperate climate; wet winters    | Low avg CI              |
 
-*Table: Summary of Selected Locations with Typical Weather and Carbon Intensity Characteristics*
+*Table: Summary of Provided Locations with Typical Weather and Carbon Intensity Characteristics*
 
 ### External Temperature Distribution
 
