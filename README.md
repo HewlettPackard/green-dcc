@@ -15,6 +15,10 @@
 
 Green-DCC is a benchmark environment designed to evaluate dynamic workload distribution techniques for sustainable Data Center Clusters (DCC). It aims to reduce the environmental impact of cloud computing by distributing workloads within a DCC that spans multiple geographical locations. The benchmark environment supports the evaluation of various control algorithms, including reinforcement learning-based approaches.
 
+![Green DCC](Figures/hier.png)
+
+*Figure: Green-DCC Framework for Data Center Cluster Management.*
+
 Key features of Green-DCC include:
 
 - Dynamic time-shifting of workloads within data centers and geographic shifting between data centers in a cluster.
@@ -25,10 +29,6 @@ Key features of Green-DCC include:
 - Customizability to address specific needs of cloud providers or enterprise data center clusters.
 
 Green-DCC provides a complex, interdependent, and realistic benchmarking environment that is well-suited for evaluating hierarchical reinforcement learning algorithms applied to data center control. The ultimate goal is to optimize workload distribution to minimize the carbon footprint, energy usage, and energy cost, while considering various operational constraints and environmental factors.
-
-![Green DCC](Figures/hier.png)
-
-*Figure: Green-DCC Framework for Data Center Cluster Management.*
 
 The figure above illustrates the Hierarchical Green-DCC Framework for Data Center Cluster Management. In this framework:
 
