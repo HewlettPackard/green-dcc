@@ -5,7 +5,7 @@ from ray import air, tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
 from ray.rllib.utils.filter import MeanStdFilter
 
-from heirarchical_env import (
+from envs.heirarchical_env import (
     HeirarchicalDCRL, 
     DEFAULT_CONFIG
 )
@@ -40,7 +40,6 @@ CONFIG = (
             model={'fcnet_hiddens': [64, 64]}, 
             shuffle_sequences=True
         )
-        .callbacks(CustomMetricsCallback)
         .resources(num_gpus=0)
         .debugging(seed=0)
     )

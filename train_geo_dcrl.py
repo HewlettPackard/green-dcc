@@ -4,7 +4,7 @@ import ray
 from ray import air, tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
 from utils.rllib_callbacks import HierarchicalDCRL_Callback
-from geo_dcrl import (
+from envs.geo_dcrl import (
     HierarchicalDCRLCombinatorial,
     DEFAULT_CONFIG
 )

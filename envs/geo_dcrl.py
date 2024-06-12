@@ -2,7 +2,7 @@ import numpy as np
 from tqdm import tqdm
 from gymnasium.spaces import Box
 from utils.helper_methods import non_linear_combine, RunningStats
-from heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
+from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
 
 class HierarchicalDCRLCombinatorial(HeirarchicalDCRL):
     

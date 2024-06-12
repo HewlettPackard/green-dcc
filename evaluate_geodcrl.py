@@ -3,7 +3,7 @@ from tqdm import tqdm
 import glob
 import numpy as np
 from ray.rllib.algorithms.algorithm import Algorithm
-from geo_dcrl import HARL_HierarchicalDCRL, DEFAULT_CONFIG
+from envs.geo_dcrl import HARL_HierarchicalDCRL, DEFAULT_CONFIG
 from hierarchical_workload_optimizer import WorkloadOptimizer
 
 FOLDER = 'results/simulexchange/PPO_HARL_HierarchicalDCRL_a503b_00000_0_2024-05-13_23-08-01/'
