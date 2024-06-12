@@ -56,7 +56,7 @@ To get started with Green-DCC, follow the steps below to set up your environment
 ### Prerequisites
 
 - Python 3.10+
-- ray 2.4.0 (installed when installing the `requirements.txt` file)
+- Ray **2.4.0** (installed when installing the `requirements.txt` file)
 - Git
 - Conda (for creating virtual environments)
 
