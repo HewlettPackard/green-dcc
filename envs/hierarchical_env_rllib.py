@@ -8,10 +8,10 @@ from tqdm import tqdm
 import gymnasium as gym
 from gymnasium.spaces import Dict, Box, Discrete
 
-from dcrl_env_harl_partialobs import DCRL
-from hierarchical_workload_optimizer import WorkloadOptimizer
-from low_level_wrapper import LowLevelActorRLLIB, LowLevelActorHARL
-from heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
+from envs.dcrl_env_harl_partialobs import DCRL
+from utils.ierarchical_workload_optimizer import WorkloadOptimizer
+from utils.low_level_wrapper import LowLevelActorRLLIB, LowLevelActorHARL
+from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
 
 warnings.filterwarnings(
     action="ignore",

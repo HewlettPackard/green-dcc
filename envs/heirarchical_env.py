@@ -9,7 +9,7 @@ import gymnasium as gym
 from gymnasium.spaces import Dict, Box, Discrete
 
 from envs.dcrl_env_harl_partialobs import DCRL
-from hierarchical_workload_optimizer import WorkloadOptimizer
+from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 from utils.low_level_wrapper import LowLevelActorRLLIB, LowLevelActorHARL
 
 warnings.filterwarnings(

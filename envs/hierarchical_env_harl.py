@@ -13,8 +13,8 @@ import gymnasium as gym
 from gymnasium.spaces import Dict, Box, Discrete
 from ray.rllib.algorithms.algorithm import Algorithm
 
-from dcrl_env import DCRL
-from hierarchical_workload_optimizer import WorkloadOptimizer
+from envs.dcrl_env import DCRL
+from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 import matplotlib.pyplot as plt
 
 DEFAULT_CONFIG = {
