@@ -15,6 +15,8 @@
 
 Green-DCC is a benchmark environment designed to evaluate dynamic workload distribution techniques for sustainable Data Center Clusters (DCC). It aims to reduce the environmental impact of cloud computing by distributing workloads within a DCC that spans multiple geographical locations. The benchmark environment supports the evaluation of various control algorithms, including reinforcement learning-based approaches.
 
+### ** Detailed documentation can be found [here](https://hewlettpackard.github.io/green-dcc). **
+
 ![Green DCC](Figures/hier.png)
 
 *Figure: Green-DCC Framework for Data Center Cluster Management.*
@@ -47,7 +49,6 @@ The figure above shows the Green-DCC framework using two main strategies to opti
 - **Geographic Load Shifting:** Dynamically moves workloads between different data centers (DC1, DC2, DC3) based on decisions made by the Top-Level Agent. This strategy leverages regional differences in energy costs, carbon intensity of the grid, and external temperatures.
 - **Temporal Load Shifting:** Defers non-critical/shiftable tasks to future time periods within a single data center (e.g., DC3), when conditions are more favorable for energy-efficient operation. Tasks are stored in a Deferred Task Queue (DTQ) and executed during periods of lower carbon intensity, external temperatures, or lower overall data center utilization.
 
-Detailed documentation is available [here](https://hewlettpackard.github.io/green-dcc).
 
 ## Installation
 
@@ -110,15 +111,26 @@ This section provides instructions on how to run simulations, configure the envi
     cd green-dcc
     ```
     
-2. **Run a simulation**
+2. **Run a experiment**
 
-    To run a basic simulation, use the following command:
+    To run a basic experiment, use the following command:
 
     ```bash
     python train_truly_hierarchical.py
     ```
 
     This will start a simulation with the default configuration. The results will be saved in `results/` output directory.
+
+3. **Visualize the experiments with TensorBoard**
+
+    To visualize the experiments while they are running, you can launch TensorBoard. Open a new terminal, navigate to the `results/` directory, and run the following command:
+
+    ```bash
+    tensorboard --logdir=./test
+    ```
+
+    This will start a TensorBoard server, and you can view the experiment visualizations by opening a web browser and navigating to `http://localhost:6006`.
+
 
 ## Benchmarking
 
@@ -154,13 +166,24 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
 
 3. **Train and evaluate algorithms**
 
-    To train and evaluate an RL algorithm using Ray, use the appropriate training script. For example, to train the PPO algorithm, run:
+    To train and evaluate an RL algorithm using Ray, use the appropriate training script. Here are the commands for different configurations:
 
-    ```bash
-    python train_truly_hierarchical.py
-    ```
+    - **HRL (Hierarchical Reinforcement Learning) Configuration**:
+      ```bash
+      python train_truly_hierarchical.py
+      ```
+    
+    - **HL+LLP (High Level + Low-Level Pretrained) Configuration**:
+      ```bash
+      python baselines/train_geo_dcrl.py
+      ```
 
-    The provided training script (`train_truly_hierarchical.py`) uses Ray for distributed training. Here's a brief overview of the script for PPO:
+    - **HLO (High Level Only) Configuration**:
+      ```bash
+      python baselines/train_hierarchical.py
+      ```
+
+    The provided training script (`train_truly_hierarchical.py`) uses Ray for distributed training. Here's a brief overview of the script for PPO of HRL configuration:
 
     ```python
     import os
@@ -240,7 +263,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
 
     if __name__ == "__main__":
         os.environ["RAY_DEDUP_LOGS"] = "0"
-        # ray.init(local_mode=True, ignore_reinit_error=True)
         ray.init(ignore_reinit_error=True)
         
         tune.Tuner(
@@ -250,7 +272,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
                 stop={"timesteps_total": 100_000_000},
                 verbose=0,
                 local_dir=RESULTS_DIR,
-                # storage_path=RESULTS_DIR,
                 name=NAME,
                 checkpoint_config=ray.air.CheckpointConfig(
                     checkpoint_frequency=5,
@@ -288,7 +309,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
                 train_batch_size=4096,
                 num_sgd_iter=10,
                 model={'fcnet_hiddens': [64, 64]}, 
-                #shuffle_sequences=True
             )
             .multi_agent(
             policies={
@@ -326,7 +346,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
 
     if __name__ == "__main__":
         os.environ["RAY_DEDUP_LOGS"] = "0"
-        # ray.init(local_mode=True, ignore_reinit_error=True)
         ray.init(ignore_reinit_error=True)
         
         tune.Tuner(
@@ -336,7 +355,6 @@ Other algorithms listed on the [Ray RLlib documentation](https://docs.ray.io/en/
                 stop={"timesteps_total": 100_000_000},
                 verbose=0,
                 local_dir=RESULTS_DIR,
-                # storage_path=RESULTS_DIR,
                 name=NAME,
                 checkpoint_config=ray.air.CheckpointConfig(
                     checkpoint_frequency=5,
@@ -375,13 +393,15 @@ Green-DCC is designed to be highly customizable, allowing you to tailor the benc
 
 Refer to the detailed documentation for more information on customizing the Green-DCC environment and running advanced benchmarks.
 
+We are continually expanding Green-DCC to integrate additional control strategies and external energy sources, including auxiliary battery integration and on-site renewable energy generators (solar, wind, etc.). This ongoing development ensures that Green-DCC remains a comprehensive and up-to-date benchmarking tool for sustainable data center management.
+
 ## Experimental Details
 
 For all experiments, we considered three different locations: New York (NY), Atlanta (GA), and San Jose (CA). These locations were chosen to present a variety of weather conditions and carbon intensity profiles, creating a comprehensive and challenging evaluation environment. The goal was to develop a policy capable of addressing the unique challenges specific to each location. We utilized weather and carbon intensity data from the month of July. Weather data was sourced from [EnergyPlus](https://energyplus.net/weather), and carbon intensity data was retrieved from the [EIA API](https://api.eia.gov/bulk/EBA.zip). The base workload for our experiments was derived from open-source workload traces provided by Alibaba ([GitHub repository](https://github.com/alibaba/clusterdata)). Users can use their own data for weather, carbon intensity, and workload.
 
 Each data center (DC) had a capacity of 1 Mega-Watt.
 
-Green-DCC offers support for more locations beyond the three selected for these experiments. Detailed information about these additional locations can be found in the [Selected Locations](#selected-locations) section. The diverse climate and carbon intensity characteristics of these locations allow for extensive benchmarking and evaluation of RL controllers.
+Green-DCC offers support for more locations beyond the three selected for these experiments. Detailed information about these additional locations can be found in the [Provided Locations](#provided-locations) section. The diverse climate and carbon intensity characteristics of these locations allow for extensive benchmarking and evaluation of RL controllers.
 
  **Weather and Carbon Intensity Data**
 
