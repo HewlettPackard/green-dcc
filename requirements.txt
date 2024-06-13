@@ -80,7 +80,7 @@ tensorflow-probability==0.20.0
 termcolor==2.4.0
 text-unidecode==1.3
 tifffile==2024.2.12
-torch==2.0.0+cpu
+torch==2.0.0
 typer==0.12.3
 typing_extensions==4.11.0
 Unidecode==1.3.8
