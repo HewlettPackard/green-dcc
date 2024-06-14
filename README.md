@@ -49,6 +49,8 @@ The figure above shows the Green-DCC framework using two main strategies to opti
 - **Geographic Load Shifting:** Dynamically moves workloads between different data centers (DC1, DC2, DC3) based on decisions made by the Top-Level Agent. This strategy leverages regional differences in energy costs, carbon intensity of the grid, and external temperatures.
 - **Temporal Load Shifting:** Defers non-critical/shiftable tasks to future time periods within a single data center (e.g., DC3), when conditions are more favorable for energy-efficient operation. Tasks are stored in a Deferred Task Queue (DTQ) and executed during periods of lower carbon intensity, external temperatures, or lower overall data center utilization.
 
+Demo of **Green-DCC**:    
+[![Colab](https://colab.research.google.com/assets/colab-badge.svg)] (https://colab.research.google.com/drive/1NdU2-FMWxEXN2dPM1T9MSVww5jpnFExP?usp=sharing)
 
 ## Installation
 
