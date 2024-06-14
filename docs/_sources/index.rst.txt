@@ -11,7 +11,7 @@ This page contains the documentation for the GitHub `repository <https://github.
    :alt: Green-DCC Framework for Data Center Cluster Management 
    :align: center
 
-..Demo of |F| 
+Demo of |F| 
 ------------------
 
 
