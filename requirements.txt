@@ -139,6 +139,7 @@ psutil==5.9.8
 PsychroLib==2.5.0
 ptyprocess==0.7.0
 pure-eval==0.2.2
+pydantic==1.10.13
 pyarrow==16.0.0
 pycparser==2.22
 pygame==2.1.2
