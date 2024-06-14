@@ -22,7 +22,7 @@ copyright = '2024, HPE'
 author = 'HPE'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = '1.1.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -38,14 +38,19 @@ extensions = [
     'sphinxemoji.sphinxemoji', # for emojis
     'sphinx_copybutton', # to copy code block
     #'sphinx_panels', # for backgrounds
-    'sphinx.ext.autosectionlabel', #for reference sections using its title
+    #'sphinx.ext.autosectionlabel', #for reference sections using its title
     'sphinx_multitoc_numbering', #numbering sections
     'sphinxcontrib.globalsubs', #global substitutions
+    'myst_parser',
 ]
 
 #define global substitutions
 global_substitutions = {
     'F': 'Green-DCC' #define framework name 
+}
+
+latex_elements = {
+    'sphinxsetup': 'verbatimwithframe=false',
 }
 
 # source for bib references
@@ -71,9 +76,21 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = 'furo' #'sphinx_rtd_theme'
+
+# html_logo = "images/logo.jpg"
+
+
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = []
+html_static_path = ["images"]
+
+html_theme_options = {
+    "light_logo": "logo.png",
+    "dark_logo": "logo_darkmode.png",
+}
+
+#numbered figures
+numfig = True

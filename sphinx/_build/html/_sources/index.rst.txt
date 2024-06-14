@@ -1,46 +1,65 @@
-.. dc-rl documentation master file, created by
-   sphinx-quickstart on Thu Jun  1 22:41:38 2023.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
-Sustain-DC
+|F|
 ==========
 
-Sustain-DC is a framework for testing Multi-Agent Reinforcement Learning (MARL) algorithms that optimizes data centers for multiple objectives of carbon footprint reduction, energy consumption, and energy
-cost.
+|F| is a benchmark environment designed to evaluate dynamic workload distribution techniques for sustainable Data Center Clusters (DCC). It aims to reduce the environmental impact of cloud computing by distributing workloads within a DCC that spans multiple geographical locations. The benchmark environment supports the evaluation of various control algorithms, including reinforcement learning-based approaches.
 
-It uses OpenAI Gym standard and supports modeling and control of three different types of problems:
+This page contains the documentation for the GitHub `repository <https://github.com/HewlettPackard/green-dcc>`_ for the paper `"Green-DCC: Benchmarking Dynamic Workload Distribution Techniques for Sustainable Data Center Cluster" <https://openreview.net/forum?id=DoDz1IXjDB>`_
 
-- Carbon-aware flexible load shifting
-- Data center HVAC cooling energy optimization
-- Carbon-aware battery auxiliary supply
 
-.. image:: images/DCRL-sim1.png
-   :scale: 30 %
-   :alt: Overview of the physical and digital systems
+.. image:: images/hier.png
+   :scale: 18 %
+   :alt: Green-DCC Framework for Data Center Cluster Management 
    :align: center
 
+.. Demo of |F| (removed before colab is working)
+   ------------------
+   A demo of |F| is given in the Google Colab notebook below
+
+   .. image:: images/colab-badge.png
+      :alt: GoogleColab
+      :target: https://colab.research.google.com/drive/1XF92aR6nVYxENrviHeFyuRu0exKBb-nh?usp=sharing
 
 
-Main contributions of Sustain-DC:
 
-- The first OpenAI framework, to our knowledge, focused on carbon footprint reduction for data centers
-- Modular design, i.e users can utilize pre-defined modules for load shifting, energy and battery or build their own
-- Scalable architecture that allows multiple different types of modules and connections between them
-- Robust data center model that provides in-depth customization to fit users' needs
-- Provides pre-defined reward functions as well as interface to create custom reward functions
-- Built-in mechanisms for reward shaping focused on degree of cooperation between the agents and level of prioritization of carbon footprint reduction versus other metrics such as energy cost
-- Reward shaping through custom reward functions
-- Built-in MARL algorithms, with ability to incorporate user-specified custom agents
+Key features of |F|
+---------------------
+
+  - Dynamic time-shifting of workloads within data centers and geographic shifting between data centers in a cluster.
+  - Incorporation of non-uniform computing resources, cooling capabilities, auxiliary power resources, and varying external weather and carbon intensity conditions.
+  - A dynamic bandwidth cost model that accounts for the geographical characteristics and amount of data transferred.
+  - Realistic workload execution delays to reflect changes in data center capacity and demand.
+  - Support for benchmarking multiple heuristic and hierarchical reinforcement learning-based approaches.
+  - Customizability to address specific needs of cloud providers or enterprise data center clusters.
+
+|F| provides a complex, interdependent, and realistic benchmarking environment that is well-suited for evaluating hierarchical reinforcement learning algorithms applied to data center control. The ultimate goal is to optimize workload distribution to minimize the carbon footprint, energy usage, and energy cost, while considering various operational constraints and environmental factors. The figure above illustrates the hierarchical |F| framework for Data Center Cluster management. In this framework:
+
+  - **Top-Level Agent:** Controls the geographic distribution of workloads across the entire DCC
+  - **Lower-Level Agents:** Manage the time-shifting of workloads and the cooling processes within individual data centers
+  - **Additional Controls:** Can include energy storage, among other capabilities. These controls further enhance the system's ability to optimize for multiple objectives
+
+The hierarchical structure allows for coordinated, multi-objective optimization that considers both global strategies and local operational constraints.
+
+.. image:: images/GreenDCCv3.png
+   :scale: 15 %
+   :alt: Green-DCC Framework demonstrating Geographic and Temporal Load Shifting Strategies
+   :align: center
+
+|F| uses two main strategies to optimize data center operations and reduce carbon emissions: geographic and temporal load shifting strategies.
+
+  - **Geographic Load Shifting:** Dynamically moves workloads between different data centers based on decisions made by the Top-Level Agent
+  - **Temporal Load Shifting:** Defers non-critical/shiftable tasks to future time periods within a single data center when conditions are more favorable for energy-efficient operation
 
 .. toctree::
    :hidden:
    
-   installation/index
+   installation
    gettingstarted
    overview/index
    usage/index
-   code/index
-   train_evaluate/index
+   evaluation
+   Code<code/modules>
    contribution_guidelines
    references
+   genindex
+   modindex
+
