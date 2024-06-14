@@ -11,13 +11,15 @@ This page contains the documentation for the GitHub `repository <https://github.
    :alt: Green-DCC Framework for Data Center Cluster Management 
    :align: center
 
-.. Demo of |F| (removed before colab is working)
-   ------------------
-   A demo of |F| is given in the Google Colab notebook below
+..Demo of |F| 
+------------------
 
-   .. image:: images/colab-badge.png
-      :alt: GoogleColab
-      :target: https://colab.research.google.com/drive/1XF92aR6nVYxENrviHeFyuRu0exKBb-nh?usp=sharing
+
+A demo of |F| is given in the Google Colab notebook below
+
+.. image:: images/colab-badge.png
+   :alt: GoogleColab
+   :target: https://colab.research.google.com/drive/1NdU2-FMWxEXN2dPM1T9MSVww5jpnFExP?usp=sharing
 
 
 
