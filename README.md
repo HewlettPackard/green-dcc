@@ -128,7 +128,7 @@ This section provides instructions on how to run simulations, configure the envi
     To visualize the experiments while they are running, you can launch TensorBoard. Open a new terminal, navigate to the `results/` directory, and run the following command:
 
     ```bash
-    tensorboard --logdir=./test
+    tensorboard --logdir results/test/
     ```
 
     This will start a TensorBoard server, and you can view the experiment visualizations by opening a web browser and navigating to `http://localhost:6006`.
