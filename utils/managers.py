@@ -155,7 +155,7 @@ class Time_Manager():
 
 # Class to manage CPU workload data
 class Workload_Manager():
-    def __init__(self, workload_filename='', init_day=0, future_steps=4, weight=0.01, desired_std_dev=0.025, timezone_shift=0):
+    def __init__(self, workload_filename='', init_day=0, future_steps=4, weight=0.01, desired_std_dev=0.025, timezone_shift=0, debug=False):
         """Manager of the DC workload
 
         Args:
@@ -183,7 +183,13 @@ class Workload_Manager():
         self.time_steps_day = self.timestep_per_hour*24
         self.init_day = init_day
         self.timezone_shift = timezone_shift
+        self.debug = debug
 
+        # If self.debug and timezone_shift != 16, then, the workload with be 100% all time, else but stil self.debug, 0% all time:
+        if self.debug and timezone_shift != 16:
+            cpu_data_list = np.ones_like(cpu_data_list)
+        elif self.debug:
+            cpu_data_list = np.zeros_like(cpu_data_list)
         # Interpolate the CPU data to increase the number of data points
         x = range(0, len(cpu_data_list))
         xcpu_new = np.linspace(0, len(cpu_data_list), len(cpu_data_list)*self.timestep_per_hour)  
@@ -246,15 +252,18 @@ class Workload_Manager():
         
         baseline = np.random.random()*0.5 - 0.25
         
-        # Add noise to the workload data using the CoherentNoise 
-        cpu_data = self.original_data * np.random.uniform(0.9, 1.1, len(self.original_data))
-        cpu_smooth = cpu_data * 0.7 + self.coherent_noise.generate(len(cpu_data)) * 0.3 + baseline
-        
-        self.cpu_smooth = self.scale_array(cpu_smooth)
-        
-        num_roll_weeks = np.random.randint(0, 52) # Random roll the workload because is independed on the month, so I am rolling across weeks (52 weeks in a year)
-        self.cpu_smooth =  np.roll(self.cpu_smooth, num_roll_weeks*self.timestep_per_hour*24*7)
-
+        # if debug is true, does not add any noise to the workload data
+        if not self.debug:
+            # Add noise to the workload data using the CoherentNoise 
+            cpu_data = self.original_data * np.random.uniform(0.9, 1.1, len(self.original_data))
+            cpu_smooth = cpu_data * 0.7 + self.coherent_noise.generate(len(cpu_data)) * 0.3 + baseline
+            
+            self.cpu_smooth = self.scale_array(cpu_smooth)
+            
+            num_roll_weeks = np.random.randint(0, 52) # Random roll the workload because is independed on the month, so I am rolling across weeks (52 weeks in a year)
+            self.cpu_smooth =  np.roll(self.cpu_smooth, num_roll_weeks*self.timestep_per_hour*24*7)
+        else:
+            self.cpu_smooth = self.original_data
         return self.cpu_smooth[self.time_step]
         
     # Function to advance the time step and return the workload at the new time step
@@ -444,7 +453,7 @@ class Weather_Manager():
             desired_std_dev (float, optional): Desired standard deviation for coherent noise. Defaults to 0.025.
             temp_column (int, optional): Columng that contains the temperature data. Defaults to 6.
     """
-    def __init__(self, filename='', location='NY', init_day=0, weight=0.02, desired_std_dev=0.75, temp_column=6, rh_column=8, pres_column=9, timezone_shift=0):
+    def __init__(self, filename='', location='NY', init_day=0, weight=0.02, desired_std_dev=0.75, temp_column=6, rh_column=8, pres_column=9, timezone_shift=0, debug=False):
         """Manager of the weather data.
 
         Args:
@@ -472,12 +481,15 @@ class Weather_Manager():
         self.min_wb_temp = 0
         self.max_wb_temp = 40
 
+        self.debug = debug
+        if self.debug:
+            temperature_data = np.ones_like(temperature_data) + 29
         self.init_day = init_day
         # One year data=24*365=8760
         x = range(0, len(temperature_data))
         self.timestep_per_hour = 4
 
-        xtemperature_new = np.linspace(0, len(temperature_data), len(temperature_data)*self.timestep_per_hour )
+        xtemperature_new = np.linspace(0, len(temperature_data), len(temperature_data)*self.timestep_per_hour)
         
         self.min_temp = 0
         self.max_temp = 40
@@ -566,6 +578,13 @@ class Weather_Manager():
     def get_current_weather(self):
         # return self.temperature_data[self.time_step]
         return self.norm_temp_data[self.time_step]
+    
+    def get_forecast_weather(self, steps=4):
+        if self.time_step + steps > len(self.temperature_data):
+            data = self.norm_temp_data[self.time_step]*np.ones(shape=(steps))
+        else:
+            data = self.norm_temp_data[self.time_step:self.time_step+steps]
+        return data
 
 class GeoLag_Workload_Manager(Workload_Manager):
     def __init__(self, workload_filename='', init_day=0, future_steps=4, weight=0.01, desired_std_dev=0.025, timezone_shift=0, sustained_duration : int = 4):

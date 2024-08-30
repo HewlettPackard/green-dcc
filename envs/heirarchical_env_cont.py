@@ -25,14 +25,14 @@ DEFAULT_CONFIG = {
         'cintensity_file': 'NY_NG_&_avgCI.csv',
         'weather_file': 'USA_NY_New.York-LaGuardia.epw',
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
-        'dc_config_file': 'dc_config_dc3.json',
+        'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
         'timezone_shift': 8,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
-        'debug': True,
+        'debug': False,
         },
 
     # DC2
@@ -41,14 +41,14 @@ DEFAULT_CONFIG = {
         'cintensity_file': 'GA_NG_&_avgCI.csv',
         'weather_file': 'USA_GA_Atlanta-Hartsfield-Jackson.epw',
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
-        'dc_config_file': 'dc_config_dc2.json',
+        'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
         'timezone_shift': 0,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
-        'debug': True,
+        'debug': False,
         },
 
     # DC3
@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
         'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
-        'debug': True,
+        'debug': False,
         },
     
     # Number of transfers per step
@@ -132,7 +132,7 @@ class HeirarchicalDCRL(gym.Env):
         self.observations = [
             # 'dc_capacity',
             'curr_workload',
-            # 'weather',
+            'weather',
             # 'total_power_kw',
             'ci',
         ]
@@ -142,22 +142,13 @@ class HeirarchicalDCRL(gym.Env):
         # Observation space for this environment
         self.observation_space = Dict({dc: self.dc_observation_space for dc in self.datacenters})
 
-        # Define the components of a single transfer action
-        transfer_action = Dict({
-            'sender': Discrete(3), 
-            'receiver': Discrete(3),
-            'workload_to_move': Box(low=0.0, high=1.0, shape=(1,), dtype=float)
-        })
-
-        # Define the action space for two transfers
-        self.action_space = Dict({
-            f'transfer_{i}': transfer_action for i in range(self.config['num_transfers'])
-        })
+        # Define continuous action space with three variables for transfers
+        self.action_space = Box(low=-1.0, high=1.0, shape=(3,), dtype=float) # DC1-DC2, DC1-DC3, DC2-DC3
         
-        self.min_energy_consumption = 10e9
-        self.max_energy_consumption = 0
-        self.mean_energy_consumption = 715
-        self.std_energy_consumption = 200
+        # self.min_energy_consumption = 10e9
+        # self.max_energy_consumption = 0
+        # self.mean_energy_consumption = 715
+        # self.std_energy_consumption = 200
         self.energy_stats = []
 
     def reset(self, seed=None, options=None):
@@ -203,8 +194,55 @@ class HeirarchicalDCRL(gym.Env):
         
         return self.heir_obs, self.low_level_infos
     
-    def step(self, actions):
+    def transform_actions(self, actions):
+        # Interpret actions
+        # actions[0] -> transfer between DC1 and DC2
+        # actions[1] -> transfer between DC1 and DC3
+        # actions[2] -> transfer between DC2 and DC3
 
+        # Calculate workload to transfer based on action magnitude and direction
+        transfer_DC1_DC2 = actions[0]
+        transfer_DC1_DC3 = actions[1]
+        transfer_DC2_DC3 = actions[2]
+        
+        # The transfer is a dictionary of dictionaries with the following structure:
+        # 'transfer_0': {'receiver': 1/0, 'sender': 0/1, 'workload_to_move': array([actions[0]])
+        # 'transfer_1': {'receiver': 2/0, 'sender': 0/2, 'workload_to_move': array([actions[1]])}
+        # 'transfer_2': {'receiver': 2/1, 'sender': 1/2, 'workload_to_move': array([actions[2]])}
+        # The direction of the transfer is determined by the sign of the action
+        
+        # Transfer between DC1 and DC2
+        transfer_0 = {
+            'receiver': 1 if transfer_DC1_DC2 > 0 else 0,
+            'sender': 0 if transfer_DC1_DC2 > 0 else 1,
+            'workload_to_move': np.array([abs(transfer_DC1_DC2)])
+        }
+        
+        # Transfer between DC1 and DC3
+        transfer_1 = {
+            'receiver': 2 if transfer_DC1_DC3 > 0 else 0,
+            'sender': 0 if transfer_DC1_DC3 > 0 else 2,
+            'workload_to_move': np.array([abs(transfer_DC1_DC3)])
+        }
+        
+        # Transfer between DC2 and DC3
+        transfer_2 = {
+            'receiver': 2 if transfer_DC2_DC3 > 0 else 1,
+            'sender': 1 if transfer_DC2_DC3 > 0 else 2,
+            'workload_to_move': np.array([abs(transfer_DC2_DC3)])
+        }
+            
+        transfers = {
+            'transfer_0': transfer_0,
+            'transfer_1': transfer_1,
+            'transfer_2': transfer_2
+        }
+        return transfers
+
+
+
+    def step(self, actions):
+        actions = self.transform_actions(actions)
         # Move workload between DCs
         self.overassigned_workload = self.safety_enforcement(actions)
 
@@ -382,7 +420,7 @@ class HeirarchicalDCRL(gym.Env):
         reward = 0
         for dc in self.low_level_infos:
             carbon_footprint = self.low_level_infos[dc]['agent_bat']['bat_CO2_footprint']
-            self.energy_stats.append(carbon_footprint)
+            # self.energy_stats.append(carbon_footprint)
             # normalized_energy_consumption = self.normalize_energy_consumption(energy_consumption)
             standardized_energy_consumption = self.standarize_energy_consumption(carbon_footprint)
             reward += standardized_energy_consumption
@@ -391,7 +429,7 @@ class HeirarchicalDCRL(gym.Env):
 
     def standarize_energy_consumption(self, energy_consumption: float) -> float:
         # Negative values to encourage energy saving
-        standard_energy = -1.0 * ((energy_consumption - 560000) / 250000)
+        standard_energy = -1.0 * ((energy_consumption - 449540) / 173526)
         return standard_energy
 
     def normalize_energy_consumption(self, energy_consumption: float) -> float:

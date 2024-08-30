@@ -1,25 +1,32 @@
 '''Code used to evaluate the HL+LLP Baseline for the NeuirsIPS 2024 submission'''
+#%%
 from tqdm import tqdm
 import glob
 import numpy as np
 from ray.rllib.algorithms.algorithm import Algorithm
-from envs.geo_dcrl import HARL_HierarchicalDCRL, DEFAULT_CONFIG
+from envs.truly_heirarchical_env import TrulyHeirarchicalDCRL
+from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
 from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 
-FOLDER = 'results/simulexchange/PPO_HARL_HierarchicalDCRL_a503b_00000_0_2024-05-13_23-08-01/'
-CHECKPOINT_PATH = sorted(glob.glob(FOLDER + 'checkpoint_*'))[-1]
+# FOLDER = 'results/simulexchange/PPO_HARL_HierarchicalDCRL_a503b_00000_0_2024-05-13_23-08-01/'
+FOLDER = 'results/TrulyPPO/PPO_TrulyHeirarchicalDCRL_eb779_00000_0_2024-08-27_16-03-37'
+CHECKPOINT_PATH = sorted(glob.glob(FOLDER + '/checkpoint_*'))[-1]
 trainer = Algorithm.from_checkpoint(CHECKPOINT_PATH)
 
-env = HARL_HierarchicalDCRL(DEFAULT_CONFIG)
+env = TrulyHeirarchicalDCRL(DEFAULT_CONFIG)
 greedy_optimizer = WorkloadOptimizer(env.datacenters.keys())
 
 max_iterations = 4*24*30
 # results_all = []
 
 # Initialize lists to store the 'current_workload' metric
-workload_DC1 = [[], [], [], [], []]
-workload_DC2 = [[], [], [], [], []]
-workload_DC3 = [[], [], [], [], []]
+workload_DC1 = [[], []]
+workload_DC2 = [[], []]
+workload_DC3 = [[], []]
+
+energy_consumption_DC1 = [[], []]
+energy_consumption_DC2 = [[], []]
+energy_consumption_DC3 = [[], []]
 
 # 3 Different agents (RL, One-step Greedy, Multi-step Greedy, Do nothing)
 
@@ -38,7 +45,7 @@ for idx, control_case in enumerate(["RL", "1_step_greedy", "multistep_greedy_agp
                 actions = trainer.compute_single_action(obs)
             elif control_case == "1_step_greedy":
                 # One-step greedy
-                ci = [obs[dc][-1] for dc in env.datacenters]              
+                ci = [obs[dc][-1] for dc in env.datacenters]
                 actions = np.zeros(env.action_space.shape)
                 sender_idx, receiver_idx = np.argmax(ci), np.argmin(ci)
                 if sender_idx < receiver_idx:
@@ -100,6 +107,11 @@ for idx, control_case in enumerate(["RL", "1_step_greedy", "multistep_greedy_agp
             workload_DC1[idx].append(env.low_level_infos['DC1']['agent_ls']['ls_original_workload'])  
             workload_DC2[idx].append(env.low_level_infos['DC2']['agent_ls']['ls_original_workload'])
             workload_DC3[idx].append(env.low_level_infos['DC3']['agent_ls']['ls_original_workload'])
+            
+            # Obtain the energy consumption
+            energy_consumption_DC1[i].append(env.low_level_infos['DC1']['agent_bat']['bat_total_energy_without_battery_KWh'])
+            energy_consumption_DC2[i].append(env.low_level_infos['DC2']['agent_bat']['bat_total_energy_without_battery_KWh'])
+            energy_consumption_DC3[i].append(env.low_level_infos['DC3']['agent_bat']['bat_total_energy_without_battery_KWh'])
         
             total_reward += reward
     
@@ -109,11 +121,15 @@ for idx, control_case in enumerate(["RL", "1_step_greedy", "multistep_greedy_agp
             pbar.update(1)
 
     # results_all.append((actions_list, rewards_list))
-    print(f'{control_case} : Not computed workload: {env.not_computed_workload:.2f}')
+    # print(f'{control_case} : Not computed workload: {env.not_computed_workload:.2f}')
     # pbar.close()
 
     print(f'{control_case} total reward:  {total_reward}')
     
+    print(f'Total reward: {total_reward:.3f}')
+    print(f'Average energy consumption: {(np.mean(energy_consumption_DC1[i]) + np.mean(energy_consumption_DC2[i]) + np.mean(energy_consumption_DC3[i]))/3:.3f} Kwh')
+    
+#%% 
 import matplotlib.pyplot as plt
 # Plot the 'current_workload' metric
 controllers = ["RL", "1_step_greedy", "multistep_greedy_agp", "multistep_greedy_vineet","do_nothing"]

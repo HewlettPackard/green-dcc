@@ -4,20 +4,50 @@ from tqdm import tqdm
 
 import numpy as np
 from ray.rllib.algorithms.algorithm import Algorithm
-from heirarchical_env import HeirarchicalDCRL, HeirarchicalDCRLWithHysterisis, HeirarchicalDCRLWithHysterisisMultistep, DEFAULT_CONFIG
+from envs.heirarchical_env_cont import HeirarchicalDCRL, DEFAULT_CONFIG
 from utils.hierarchical_workload_optimizer import WorkloadOptimizer
+import glob
+import pickle
+
+#%%
+# trainer_single = Algorithm.from_checkpoint('./results/SingleStep/PPO_HeirarchicalDCRLWithHysterisis_59fd7_00000_0_2024-05-14_18-39-53/checkpoint_000350')
+# trainer_multi = Algorithm.from_checkpoint('./results/MultiStep/PPO_HeirarchicalDCRLWithHysterisisMultistep_659f8_00000_0_2024-05-14_18-40-12/checkpoint_005145')
+
+FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_0ac7c_00000_0_2024-08-30_22-27-29'
+CHECKPOINT_PATH = sorted(glob.glob(FOLDER + '/checkpoint_*'))[-1]
+trainer = Algorithm.from_checkpoint(CHECKPOINT_PATH)
+
+# print("Trained weights:")
+# print(trainer.get_weights())
+
+# # Load the specific policy state
+# with open(f'{CHECKPOINT_PATH}/policies/default_policy/policy_state.pkl', 'rb') as f:
+#     policy_state = pickle.load(f)
+
+# # Load the policy state into the trainer
+# trainer.set_weights(policy_state)
+
+# # Verify the policy is loaded correctly
+# print(trainer.get_weights())
+
+# Access the default policy (single-agent setup)
+# policy = trainer.get_policy()
+
+# Check if the policy's model has an eval() method (this is specific to PyTorch models)
+# if hasattr(policy.model, 'eval'):
+    # policy.model.eval()  # Set the model to evaluation mode
+# else:
+    # print("The model does not support eval mode, or it's not necessary for this type of policy.")
 
 #%
-trainer_single = Algorithm.from_checkpoint('./results/SingleStep/PPO_HeirarchicalDCRLWithHysterisis_59fd7_00000_0_2024-05-14_18-39-53/checkpoint_000350')
-trainer_multi = Algorithm.from_checkpoint('./results/MultiStep/PPO_HeirarchicalDCRLWithHysterisisMultistep_659f8_00000_0_2024-05-14_18-40-12/checkpoint_005145')
-#%
-env = HeirarchicalDCRLWithHysterisisMultistep(DEFAULT_CONFIG)
 # obtain the locations from DEFAULT_CONFIG
 dc_location_mapping = {
     'DC1': DEFAULT_CONFIG['config1']['location'].upper(),
     'DC2': DEFAULT_CONFIG['config2']['location'].upper(),
     'DC3': DEFAULT_CONFIG['config3']['location'].upper(),
 }
+env = HeirarchicalDCRL(DEFAULT_CONFIG)
+
 greedy_optimizer = WorkloadOptimizer(env.datacenters.keys())
 #%%
 def compare_transfer_actions(actions1, actions2):
@@ -43,78 +73,103 @@ max_iterations = 4*24*30
 results_all = []
 
 # Initialize lists to store the 'current_workload' metric
-workload_DC1 = [[], [], [], [], []]
-workload_DC2 = [[], [], [], [], []]
-workload_DC3 = [[], [], [], [], []]
+workload_DC1 = [[], [], []]
+workload_DC2 = [[], [], []]
+workload_DC3 = [[], [], []]
+
+# List to store the energy consumption
+energy_consumption_DC1 = [[], [], []]
+energy_consumption_DC2 = [[], [], []]
+energy_consumption_DC3 = [[], [], []]
 
 # Other lists to store the 'carbon_emissions' metric
-carbon_emissions_DC1 = [[], [], [], [], []]
-carbon_emissions_DC2 = [[], [], [], [], []]
-carbon_emissions_DC3 = [[], [], [], [], []]
+carbon_emissions_DC1 = [[], [], []]
+carbon_emissions_DC2 = [[], [], []]
+carbon_emissions_DC3 = [[], [], []]
 
 # Other lists to store the 'external_temperature' metric
-external_temperature_DC1 = [[], [], [], [], []]
-external_temperature_DC2 = [[], [], [], [], []]
-external_temperature_DC3 = [[], [], [], [], []]
+external_temperature_DC1 = [[], [], []]
+external_temperature_DC2 = [[], [], []]
+external_temperature_DC3 = [[], [], []]
 
 # Another list to store the carbon intensity of each datacenter
 carbon_intensity = []
 
 # 5 Different agents (One-step RL, Multi-step RL, One-step Greedy, Multi-step Greedy, Do nothing)
 
-for i in [0, 1, 2, 3, 4]:
+for i in [0, 1, 2]:
+    env = HeirarchicalDCRL(DEFAULT_CONFIG)
+
     done = False
-    obs, _ = env.reset(seed=123)    
+    obs, _ = env.reset(seed=123)
 
     actions_list = []
     rewards_list = []
-    total_reward = 0    
+    total_reward = 0
     
     with tqdm(total=max_iterations, ncols=150) as pbar:
         while not done:
             if i == 0:
-                actions = trainer_single.compute_single_action(obs)
+                # print('One-step RL')
+                # if obs = {'DC1': {'curr_workload': array([1.]), 'ci': array([-0.38324634])}, 'DC2': {'curr_workload': array([1.]), 'ci': array([0.73191553])}, 'DC3': {'curr_workload': array([0.]), 'ci': array([-0.55756748])}}, I want to explore the actions of the agents under random values of the observation
+                # obs = {'DC1': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))},
+                #        'DC2': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))},
+                #        'DC3': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))}
+                #        }
+                actions = trainer.compute_single_action(obs, explore=False)
+                # print(obs)
+                # print(actions)
             elif i == 1:
-                actions = trainer_multi.compute_single_action(obs)
-            elif i == 2:
                 # One-step greedy
-                ci = [obs[dc][-1] for dc in env.datacenters]
-                denorm_ci = [env.low_level_infos[dc_key]['agent_bat']['bat_avg_CI'] for dc_key in env.datacenters.keys()]
-                carbon_intensity.append(denorm_ci)
-                actions = {'receiver': np.argmin(ci), 'sender': np.argmax(ci), 'workload_to_move': np.array([1.])}
-                actions = {'transfer_1': actions}
-            elif i == 3:
-                # Multi-step greedy
-                # sort the ci index with repect of their values
-                ci = [obs[dc][-1] for dc in env.datacenters]
-                sorted_ci = np.argsort(ci)
-                # First create the 'transfer_1' action with the transfer from the datacenter with the highest ci to the lowest ci
-                # Then, create the 'transfer_2' action with the transfer from the datacenter with the second highest ci to the second lowest ci
-                actions = {}
-                for j in range(len(sorted_ci)-1):
-                    actions[f'transfer_{j+1}'] = {'receiver': np.argmin(ci), 'sender': sorted_ci[-(j+1)], 'workload_to_move': np.array([1.])}
-                    
-                 # Check if multi-step greedy actions are different from trainer actions
-                trainer_action = trainer_multi.compute_single_action(obs)
-                # trainer_action['transfer_1']['workload_to_move'] = 0.23
-                # Compare actions element by element
-                # if not compare_transfer_actions(actions, trainer_action):
-                #     print("WARNING: Multi-step greedy actions differ from trainer actions.")
-                #     print("Trainer actions: ", trainer_action)
-                #     print("Multi-step greedy actions: ", actions)
+                # print('One-step Greedy')
+                ci = [obs[dc]['ci'] for dc in env.datacenters]
+                # denorm_ci = [env.low_level_infos[dc_key]['agent_bat']['bat_avg_CI'] for dc_key in env.datacenters.keys()]
+                # carbon_intensity.append(denorm_ci)
+                # actions = {'receiver': np.argmin(ci), 'sender': np.argmax(ci), 'workload_to_move': np.array([1.])}
+                # actions = {'transfer_1': actions}
+                
+                # Continuous action space
+                actions = np.zeros(3)
+                
+                # Identify the indices of the sender and receiver based on carbon intensity
+                sender_idx = np.argmax(ci)  # Data center with the highest carbon intensity
+                receiver_idx = np.argmin(ci)  # Data center with the lowest carbon intensity
+
+                # Map sender-receiver pairs to the action array indices
+                if sender_idx == 0 and receiver_idx == 1:
+                    actions[0] = 1.0  # Transfer from DC1 to DC2
+                elif sender_idx == 0 and receiver_idx == 2:
+                    actions[1] = 1.0  # Transfer from DC1 to DC3
+                elif sender_idx == 1 and receiver_idx == 0:
+                    actions[0] = -1.0  # Transfer from DC2 to DC1
+                elif sender_idx == 1 and receiver_idx == 2:
+                    actions[2] = 1.0  # Transfer from DC2 to DC3
+                elif sender_idx == 2 and receiver_idx == 0:
+                    actions[1] = -1.0  # Transfer from DC3 to DC1
+                elif sender_idx == 2 and receiver_idx == 1:
+                    actions[2] = -1.0  # Transfer from DC3 to DC2
             else:
+                # print('Do nothing')
                 # Do nothing
-                actions = {'sender': 0, 'receiver': 0, 'workload_to_move': np.array([0.0])}
-                actions = {'transfer_1': actions}
+                # actions = {'sender': 0, 'receiver': 0, 'workload_to_move': np.array([0.0])}
+                # actions = {'transfer_1': actions}
+                
+                # Continuous action space
+                actions = np.zeros(3)  # All transfers are set to 0.0
 
             
             obs, reward, terminated, done, info = env.step(actions)
 
             # Obtain the 'current_workload' metric for each datacenter using the low_level_infos -> agent_ls -> ls_original_workload
-            workload_DC1[i].append(env.low_level_infos['DC1']['agent_ls']['ls_original_workload'])  
+            workload_DC1[i].append(env.low_level_infos['DC1']['agent_ls']['ls_original_workload'])
             workload_DC2[i].append(env.low_level_infos['DC2']['agent_ls']['ls_original_workload'])
             workload_DC3[i].append(env.low_level_infos['DC3']['agent_ls']['ls_original_workload'])
             
+            # Obtain the energy consumption
+            energy_consumption_DC1[i].append(env.low_level_infos['DC1']['agent_bat']['bat_total_energy_without_battery_KWh'])
+            energy_consumption_DC2[i].append(env.low_level_infos['DC2']['agent_bat']['bat_total_energy_without_battery_KWh'])
+            energy_consumption_DC3[i].append(env.low_level_infos['DC3']['agent_bat']['bat_total_energy_without_battery_KWh'])
+
             # Obtain the 'carbon_emissions' metric for each datacenter using the low_level_infos -> agent_bat -> bat_CO2_footprint
             carbon_emissions_DC1[i].append(env.low_level_infos['DC1']['agent_bat']['bat_CO2_footprint'])
             carbon_emissions_DC2[i].append(env.low_level_infos['DC2']['agent_bat']['bat_CO2_footprint'])
@@ -127,16 +182,18 @@ for i in [0, 1, 2, 3, 4]:
             
             total_reward += reward
     
-            actions_list.append(actions['transfer_1'])
+            # actions_list.append(actions['transfer_1'])
             rewards_list.append(reward)
             
             pbar.update(1)
 
     results_all.append((actions_list, rewards_list))
-    print(f'Not computed workload: {env.not_computed_workload:.2f}')
+    # print(f'Not computed workload: {env.not_computed_workload:.2f}')
     # pbar.close()
 
-    print(total_reward)
+    print(f'Total reward: {total_reward:.3f}')
+    print(f'Average energy consumption: {(np.mean(energy_consumption_DC1[i]) + np.mean(energy_consumption_DC2[i]) + np.mean(energy_consumption_DC3[i]))/3:.3f} Kwh')
+    print(f'Average carbon emissions: {(np.mean(carbon_emissions_DC1[i]) + np.mean(carbon_emissions_DC2[i]) + np.mean(carbon_emissions_DC3[i]))/3:.3f} MgCO2')
 #%%
 # First of all, let's smooth the metrics before plotting.
 # We can smooth the metrics using the moving average method.
@@ -146,6 +203,10 @@ win_size = 8
 workload_DC1 = np.array(workload_DC1)
 workload_DC2 = np.array(workload_DC2)
 workload_DC3 = np.array(workload_DC3)
+
+energy_consumption_DC1 = np.array(energy_consumption_DC1)
+energy_consumption_DC2 = np.array(energy_consumption_DC2)
+energy_consumption_DC3 = np.array(energy_consumption_DC3)
 
 carbon_emissions_DC1 = np.array(carbon_emissions_DC1)
 carbon_emissions_DC2 = np.array(carbon_emissions_DC2)
@@ -162,6 +223,11 @@ smoothed_workload_DC1 = uniform_filter1d(workload_DC1, size=win_size, axis=1)
 smoothed_workload_DC2 = uniform_filter1d(workload_DC2, size=win_size, axis=1)
 smoothed_workload_DC3 = uniform_filter1d(workload_DC3, size=win_size, axis=1)
 
+# Smooth the energy consumption metric
+energy_consumption_DC1 = uniform_filter1d(energy_consumption_DC1, size=win_size, axis=1)
+energy_consumption_DC2 = uniform_filter1d(energy_consumption_DC2, size=win_size, axis=1)
+energy_consumption_DC3 = uniform_filter1d(energy_consumption_DC3, size=win_size, axis=1)
+
 # Smooth the 'carbon_emissions' metric
 smoothed_carbon_emissions_DC1 = uniform_filter1d(carbon_emissions_DC1, size=win_size, axis=1)
 smoothed_carbon_emissions_DC2 = uniform_filter1d(carbon_emissions_DC2, size=win_size, axis=1)
@@ -177,7 +243,9 @@ smoothed_carbon_intensity = uniform_filter1d(carbon_intensity, size=win_size, ax
 #%%
 import matplotlib.pyplot as plt
 # Plot the 'current_workload' metric
-controllers = ['One-step RL', 'Multi-step RL', 'One-step Greedy', 'Multi-step Greedy', 'Do nothing']
+# controllers = ['One-step RL', 'Multi-step RL', 'One-step Greedy', 'Multi-step Greedy', 'Do nothing']
+controllers = ['One-step RL', 'One-step Greedy', 'Do nothing']
+
 for i in range(len(controllers)):
     plt.figure(figsize=(10, 6))
     plt.plot(smoothed_workload_DC1[i][:4*24*7]*100, label=dc_location_mapping['DC1'], linestyle='--', linewidth=2, alpha=1)
@@ -188,8 +256,27 @@ for i in range(len(controllers)):
     plt.ylabel('Current Workload (%)')
     plt.legend()
     plt.grid('on', linestyle='--', alpha=0.5)
-    plt.ylim(0, 101)
+    plt.ylim(-10, 111)
     plt.show()
+
+
+#%% Plot the energy consumption metric
+for i in range(len(controllers)):
+    plt.figure(figsize=(10, 6))
+    plt.plot(energy_consumption_DC1[i][:4*24*7], label=dc_location_mapping['DC1'], linestyle='--', linewidth=2, alpha=1)
+    plt.plot(energy_consumption_DC2[i][:4*24*7], label=dc_location_mapping['DC2'], linestyle='-.', linewidth=2, alpha=0.9)
+    plt.plot(energy_consumption_DC3[i][:4*24*7], label=dc_location_mapping['DC3'], linestyle='-', linewidth=2, alpha=0.7)
+    plt.title(f'Current Workload for {controllers[i]} Controller')
+    plt.xlabel('Time Step')
+    plt.ylabel('Energy Consumption (Kwh)')
+    plt.legend()
+    plt.grid('on', linestyle='--', alpha=0.5)
+    # plt.ylim(0, 101)
+    plt.show()
+
+# Print the sum energy consumption of the different controllers
+for 
+print(f'')
 #%% Plot the 'carbon_emissions' metric
 
 for i in range(len(controllers)):

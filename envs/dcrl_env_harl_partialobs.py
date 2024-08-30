@@ -103,6 +103,8 @@ class DCRL(gym.Env):
         self.timezone_shift = env_config['timezone_shift']
         self.days_per_episode = env_config['days_per_episode']
         
+        self.debug = env_config.get('debug', False)
+        
         # Assign month according to worker index, if available
         if hasattr(env_config, 'worker_index'):
             self.month = int((env_config.worker_index - 1) % 12)
@@ -175,8 +177,8 @@ class DCRL(gym.Env):
         # Create the managers: date/hour/time manager, workload manager, weather manager, and CI manager.
         self.init_day = get_init_day(self.month)
         self.t_m = Time_Manager(self.init_day, timezone_shift=self.timezone_shift, days_per_episode=self.days_per_episode)
-        self.workload_m = Workload_Manager(init_day=self.init_day, workload_filename=self.workload_file, timezone_shift=self.timezone_shift)
-        self.weather_m = Weather_Manager(init_day=self.init_day, location=wea_loc, filename=self.weather_file, timezone_shift=self.timezone_shift)
+        self.workload_m = Workload_Manager(init_day=self.init_day, workload_filename=self.workload_file, timezone_shift=self.timezone_shift, debug=self.debug)
+        self.weather_m = Weather_Manager(init_day=self.init_day, location=wea_loc, filename=self.weather_file, timezone_shift=self.timezone_shift, debug=self.debug)
         self.ci_m = CI_Manager(init_day=self.init_day, location=ci_loc, filename=self.ci_file, future_steps=n_vars_ci, timezone_shift=self.timezone_shift)
 
         # This actions_are_logits is True only for MADDPG, because RLLib defines MADDPG only for continuous actions.
@@ -230,7 +232,9 @@ class DCRL(gym.Env):
         bat_s, self.bat_info = self.bat_env.reset()
         
         # ls_state -> [time (sine/cosine enconded), original ls observation, current+future normalized CI]
-        self.ls_state = np.float32(np.hstack((t_i, ls_s, ci_i_future)))  # for p.o.
+        # self.ls_state = np.float32(np.hstack((t_i, ls_s, ci_i_future)))  # for p.o.
+        forecast_weather = self.weather_m.get_forecast_weather(steps=4)
+        self.ls_state = np.float32(np.hstack((ls_s, forecast_weather)))  # for p.o.
         
         # dc state -> [time (sine/cosine enconded), original dc observation, current normalized CI]  # p.o.
         self.dc_state = np.float32(np.hstack((t_i, self.dc_state, ci_i_future[0])))  # p.o.
@@ -341,7 +345,9 @@ class DCRL(gym.Env):
         self.bat_state, _, self.bat_terminated, self.bat_truncated, self.bat_info = self.bat_env.step(action)
         
         # ls_state -> [time (sine/cosine enconded), original ls observation, current+future normalized CI]
-        self.ls_state = np.float32(np.hstack((t_i, self.ls_state, ci_i_future)))  # for p.o.
+        # self.ls_state = np.float32(np.hstack((t_i, self.ls_state, ci_i_future)))  # for p.o.
+        forecast_weather = self.weather_m.get_forecast_weather(steps=4)
+        self.ls_state = np.float32(np.hstack((self.ls_state, forecast_weather)))  # for p.o.
         
         # Update the shared variables
         # dc state -> [time (sine/cosine enconded), original dc observation, current normalized CI]

@@ -12,8 +12,18 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
         self.writer = SummaryWriter("logs_single")
         self.global_step = 0
 
-    def step(self, actions: dict):
 
+    def reset(self, seed=None, options=None):
+        super().reset(seed)
+
+        obs = {}
+        obs['high_level_policy'] = self.heir_obs
+        for dc in self.datacenter_ids:
+            obs[dc + '_ls_policy'] = self.low_level_observations[dc]['agent_ls']
+
+        return obs, {}
+    
+    def step(self, actions: dict):
         # Move workload across DCs (high level policy)
         overassigned_workload = self.safety_enforcement(actions['high_level_policy'])
 
@@ -53,18 +63,7 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
             self.writer.flush()
             self.global_step += 1  # Increment the step counter
 
-
         return obs, rewards, terminated, truncated, {}
-    
-    def reset(self, seed=None, options=None):
-        super().reset(seed)
-
-        obs = {}
-        obs['high_level_policy'] = self.heir_obs
-        for dc in self.datacenter_ids:
-            obs[dc + '_ls_policy'] = self.low_level_observations[dc]['agent_ls']
-
-        return obs, {}
     
 if __name__ == '__main__':
     env = TrulyHeirarchicalDCRL(DEFAULT_CONFIG)
