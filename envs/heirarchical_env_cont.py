@@ -130,11 +130,15 @@ class HeirarchicalDCRL(gym.Env):
         # Define observation and action space
         # List of observations that we get from each DC
         self.observations = [
-            # 'dc_capacity',
+            'time_of_day_sin',
+            'time_of_day_cos',
             'curr_workload',
+            'predicted_workload',  # New variable
             'weather',
-            # 'total_power_kw',
+            'predicted_weather',
             'ci',
+            'predicted_ci'
+            # 'available_capacity'
         ]
         # # This is the observation for each DC
         # self.dc_observation_space = Dict({obs: Box(-2, 2) for obs in self.observations})
@@ -155,7 +159,7 @@ class HeirarchicalDCRL(gym.Env):
         
 
         # Define continuous action space with three variables for transfers
-        self.action_space = Box(low=-1.0, high=1.0, shape=(3,), dtype=float) # DC1-DC2, DC1-DC3, DC2-DC3
+        self.action_space = Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32) # DC1-DC2, DC1-DC3, DC2-DC3
         
         # self.min_energy_consumption = 10e9
         # self.max_energy_consumption = 0
@@ -319,6 +323,7 @@ class HeirarchicalDCRL(gym.Env):
         """
         Flattens the observation dictionary into a plain array, 
         ensuring a consistent order of datacenters and their variables.
+        Handles both single values and arrays.
         """
         self._original_observation = observation  # Save the original observation
 
@@ -327,12 +332,18 @@ class HeirarchicalDCRL(gym.Env):
         for dc_id in sorted(self.datacenters.keys()):  # Ensure consistent order
             dc_obs = observation[dc_id]
             for key in sorted(dc_obs.keys()):  # Ensure consistent order of variables
-                flattened_obs.extend(dc_obs[key])
+                value = dc_obs[key]
+                if np.isscalar(value):  # Check if it's a scalar
+                    flattened_obs.append(value)
+                else:
+                    flattened_obs.extend(np.asarray(value).flatten())  # Convert to array and flatten
 
-        return np.array(flattened_obs)
+        return np.array(flattened_obs, dtype=np.float32)
     
     def get_dc_variables(self, dc_id: str) -> np.ndarray:
         dc = self.datacenters[dc_id]
+
+        available_capacity = dc.datacenter_capacity_mw - dc.workload_m.get_current_workload()
 
         # TODO: check if the variables are normalized with the same values or with min_max values
         obs = {
@@ -341,6 +352,14 @@ class HeirarchicalDCRL(gym.Env):
             'weather': dc.weather_m.get_current_weather(),
             'total_power_kw': self.low_level_infos[dc_id]['agent_dc'].get('dc_total_power_kW', 0),
             'ci': dc.ci_m.get_current_ci(),
+            'predicted_workload': dc.workload_m.get_forecast_workload(),
+            'predicted_weather': dc.weather_m.get_forecast_weather(steps=1),
+            'time_of_day_sin': dc.t_m.get_time_of_day()[0],
+            'time_of_day_cos': dc.t_m.get_time_of_day()[1],
+
+            'predicted_ci': dc.ci_m.get_forecast_ci(steps=1),
+            'available_capacity': available_capacity
+
         }
         
         obs = {key: np.asarray([val]) for (key, val) in obs.items() if key in self.observations}
@@ -393,8 +412,8 @@ class HeirarchicalDCRL(gym.Env):
             sorted(actions.items(), key=lambda x: x[1]['workload_to_move'], reverse=True))
 
         # base_workload_on_next_step for all dcs
-        self.base_workload_on_curr_step = {dc : self.datacenters[dc].workload_m.get_n_step_future_workload(n=0) for dc in self.datacenters}
-        self.base_workload_on_next_step = {dc : self.datacenters[dc].workload_m.get_n_step_future_workload(n=1) for dc in self.datacenters}
+        self.base_workload_on_curr_step = {dc : self.datacenters[dc].workload_m.get_current_workload() for dc in self.datacenters}
+        self.base_workload_on_next_step = {dc : self.datacenters[dc].workload_m.get_forecast_workload() for dc in self.datacenters}
         
         # for _, base_workload in self.base_workload_on_next_step.items():
         #     assert (base_workload >= 0) & (base_workload <= 1), "base_workload next_step should be positive and a fraction"
@@ -432,11 +451,11 @@ class HeirarchicalDCRL(gym.Env):
         
         # update individual datacenters with the base_workload_on_curr_step
         for dc, base_workload in self.base_workload_on_curr_step.items():
-            self.datacenters[dc].workload_m.set_n_step_future_workload(n = 0, workload = base_workload)
+            self.datacenters[dc].workload_m.set_current_workload(base_workload)
 
         # update individual datacenters with the base_workload_on_next_step
         for dc, base_workload in self.base_workload_on_next_step.items():
-            self.datacenters[dc].workload_m.set_n_step_future_workload(n = 1, workload = base_workload)
+            self.datacenters[dc].workload_m.set_future_workload(base_workload)
         
         # Keep track of the computed workload
         self.total_computed_workload += sum([workload for workload in self.base_workload_on_curr_step.values()])

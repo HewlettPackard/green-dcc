@@ -4,17 +4,42 @@ import numpy as np
 import ray
 from ray import air, tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
-from ray.rllib.utils.filter import MeanStdFilter
+from ray.tune import Stopper
 from envs.heirarchical_env_cont import HeirarchicalDCRL, DEFAULT_CONFIG
 from utils.create_trainable import create_wrapped_trainable
 
-NUM_WORKERS = 4
+NUM_WORKERS = 8
 RESULTS_DIR = './results/'
 
+class NoImprovementStopper(Stopper):
+    def __init__(self, patience=100):
+        self.patience = patience
+        self.best_reward = None
+        self.counter = 0
+
+    def __call__(self, trial_id, result):
+        current_reward = result["episode_reward_mean"]
+        if self.best_reward is None or current_reward > self.best_reward:
+            self.best_reward = current_reward
+            self.counter = 0
+        else:
+            self.counter += 1
+        
+        if self.counter >= self.patience:
+            print(f"Trial {trial_id} has stopped after {self.patience} iterations without improvement.")
+            self.counter = 0
+            self.best_reward = None
+            return True
+        else:
+            return False
+
+    def stop_all(self):
+        return False
+    
 def sample_hyperparameters():
     """Sample a set of random hyperparameters."""
-    gamma = random.uniform(0.3, 0.99)
-    lr = 10**random.uniform(-6, -3)  # Random learning rate between 1e-6 and 1e-3
+    gamma = random.uniform(0.8, 0.99)
+    lr = 10**random.uniform(-6, -4)  # Random learning rate between 1e-6 and 1e-3
     kl_coeff = random.uniform(0.1, 0.5)
     clip_param = random.uniform(0.1, 0.3)
     entropy_coeff = random.uniform(0.0, 0.05)
@@ -66,7 +91,7 @@ if __name__ == '__main__':
                 model={'fcnet_hiddens': hyperparams["fcnet_hiddens"]}
             )
             .resources(num_gpus=0)
-            .debugging(seed=10)
+            .debugging(seed=12)
         )
 
         # Create a unique experiment name with hyperparameters
@@ -82,7 +107,7 @@ if __name__ == '__main__':
             create_wrapped_trainable(PPO),
             param_space=config.to_dict(),
             run_config=air.RunConfig(
-                stop={"training_iteration": 1000},
+                stop=NoImprovementStopper(patience=200),  # Stop if no new best reward for 20 iterations
                 verbose=0,
                 local_dir=RESULTS_DIR,
                 name=experiment_name,  # Use the experiment name

@@ -151,6 +151,23 @@ class Time_Manager():
         if self.day > self.init_day+self.days_per_episode - 1:
             done = True
         return done
+    
+    def get_time_of_day(self):
+        """Get the current time of the day
+
+        Returns:
+            float: Sine and Cosine of the current time of the day
+        """
+            # Normalize and round the current hour and day
+        two_pi = np.pi * 2
+
+        norm_hour = round(self.hour/24, 3) * two_pi
+        
+        # Calculate the cosine and sine of the norm_hour
+        cos_hour = np.cos(norm_hour)*0.5 + 0.5
+        sin_hour = np.sin(norm_hour)*0.5 + 0.5
+        
+        return [cos_hour, sin_hour]
 
 
 # Class to manage CPU workload data
@@ -285,21 +302,27 @@ class Workload_Manager():
     def get_current_workload(self):        
         return self.cpu_smooth[self.time_step]
     
+    def get_forecast_workload(self):
+        return self.cpu_smooth[self.time_step+1]
+    
     def get_n_step_future_workload(self,n):
         if (self.time_step + n) >= len(self.cpu_smooth):
             return self.cpu_smooth[self.init_time_step + (self.time_step + (n-1) - len(self.cpu_smooth))]
         else:
-            return self.cpu_smooth[self.time_step + n]
+            return self.cpu_smooth[self.time_step + n - 1]
         
     def set_n_step_future_workload(self,n,workload):
         if (self.time_step + n) >= len(self.cpu_smooth):
             self.cpu_smooth[self.init_time_step + (self.time_step + (n-1) - len(self.cpu_smooth))] = workload
         else:
-            self.cpu_smooth[self.time_step + n] = workload
+            self.cpu_smooth[self.time_step + n - 1] = workload
             
     
     def set_current_workload(self, workload):         
         self.cpu_smooth[self.time_step] = workload
+    
+    def set_future_workload(self, workload):
+        self.cpu_smooth[self.time_step+1] = workload
 
 
 # Class to manage carbon intensity data

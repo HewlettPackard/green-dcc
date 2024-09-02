@@ -8,7 +8,7 @@ from envs.heirarchical_env_cont import HeirarchicalDCRL, DEFAULT_CONFIG
 
 from utils.create_trainable import create_wrapped_trainable
 
-NUM_WORKERS = 4
+NUM_WORKERS = 8
 NAME = "PPO"
 RESULTS_DIR = './results/'
 
@@ -38,7 +38,7 @@ CONFIG = (
             model={'fcnet_hiddens': [64, 64]}
             )
         .resources(num_gpus=0)
-        .debugging(seed=10)
+        .debugging(seed=2)
     )
 
 if __name__ == '__main__':

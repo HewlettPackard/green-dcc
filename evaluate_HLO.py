@@ -14,7 +14,7 @@ from baselines.rbc_baselines import RBCBaselines
 # trainer_single = Algorithm.from_checkpoint('./results/SingleStep/PPO_HeirarchicalDCRLWithHysterisis_59fd7_00000_0_2024-05-14_18-39-53/checkpoint_000350')
 # trainer_multi = Algorithm.from_checkpoint('./results/MultiStep/PPO_HeirarchicalDCRLWithHysterisisMultistep_659f8_00000_0_2024-05-14_18-40-12/checkpoint_005145')
 
-FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_f8e85_00000_0_2024-09-02_05-41-16'
+FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_1a980_00000_0_2024-09-02_17-23-43'
 CHECKPOINT_PATH = sorted(glob.glob(FOLDER + '/checkpoint_*'))[-1]
 
 print(f'Loading checkpoing: {CHECKPOINT_PATH}')
@@ -85,33 +85,39 @@ DEFAULT_CONFIG['config3']['days_per_episode'] = int(max_iterations/(4*24))
 results_all = []
 
 # Initialize lists to store the 'current_workload' metric
-workload_DC1 = [[], [], [], []]
-workload_DC2 = [[], [], [], []]
-workload_DC3 = [[], [], [], []]
+workload_DC1 = [[], [], [], [], []]
+workload_DC2 = [[], [], [], [], []]
+workload_DC3 = [[], [], [], [], []]
 
 # List to store the energy consumption
-energy_consumption_DC1 = [[], [], [], []]
-energy_consumption_DC2 = [[], [], [], []]
-energy_consumption_DC3 = [[], [], [], []]
+energy_consumption_DC1 = [[], [], [], [], []]
+energy_consumption_DC2 = [[], [], [], [], []]
+energy_consumption_DC3 = [[], [], [], [], []]
 
 # Other lists to store the 'carbon_emissions' metric
-carbon_emissions_DC1 = [[], [], [], []]
-carbon_emissions_DC2 = [[], [], [], []]
-carbon_emissions_DC3 = [[], [], [], []]
+carbon_emissions_DC1 = [[], [], [], [], []]
+carbon_emissions_DC2 = [[], [], [], [], []]
+carbon_emissions_DC3 = [[], [], [], [], []]
 
 # Other lists to store the 'external_temperature' metric
-external_temperature_DC1 = [[], [], [], []]
-external_temperature_DC2 = [[], [], [], []]
-external_temperature_DC3 = [[], [], [], []]
+external_temperature_DC1 = [[], [], [], [], []]
+external_temperature_DC2 = [[], [], [], [], []]
+external_temperature_DC3 = [[], [], [], [], []]
+
+# List to store the water consumption metric
+water_consumption_DC1 = [[], [], [], [], []]
+water_consumption_DC2 = [[], [], [], [], []]
+water_consumption_DC3 = [[], [], [], [], []]
 
 # Another list to store the carbon intensity of each datacenter
 carbon_intensity = []
 
 # 5 Different agents (One-step RL, Multi-step RL, One-step Greedy, Multi-step Greedy, Do nothing)
 
-for i in [0, 1, 2, 3]:
+for i in [0, 1, 2, 3, 4]:
     env = HeirarchicalDCRL(DEFAULT_CONFIG)
-
+    if i == 2 or i == 3:
+        rbc_baseline = RBCBaselines(env)
     done = False
     obs, _ = env.reset(seed=123)
 
@@ -162,14 +168,14 @@ for i in [0, 1, 2, 3]:
                 elif sender_idx == 2 and receiver_idx == 1:
                     actions[2] = -1.0  # Transfer from DC3 to DC2
             elif i == 2:
+                # Multi-step greedy
+                actions = rbc_baseline.multi_step_greedy()
+            elif i == 3:
+                # Equal workload distribution
                 # Use the equal workload distribution method
                 actions = rbc_baseline.equal_workload_distribution()
             else:
-                # print('Do nothing')
                 # Do nothing
-                # actions = {'sender': 0, 'receiver': 0, 'workload_to_move': np.array([0.0])}
-                # actions = {'transfer_1': actions}
-                
                 # Continuous action space
                 actions = np.zeros(3)  # All transfers are set to 0.0
 
@@ -196,6 +202,11 @@ for i in [0, 1, 2, 3]:
             external_temperature_DC2[i].append(env.low_level_infos['DC2']['agent_dc']['dc_exterior_ambient_temp'])
             external_temperature_DC3[i].append(env.low_level_infos['DC3']['agent_dc']['dc_exterior_ambient_temp'])
             
+            # Obtain the 'water_consumption' metric for each datacenter using the low_level_infos -> agent_dc -> dc_water_usage
+            water_consumption_DC1[i].append(env.low_level_infos['DC1']['agent_dc']['dc_water_usage'])
+            water_consumption_DC2[i].append(env.low_level_infos['DC2']['agent_dc']['dc_water_usage'])
+            water_consumption_DC3[i].append(env.low_level_infos['DC3']['agent_dc']['dc_water_usage'])
+            
             total_reward += reward
     
             # actions_list.append(actions['transfer_1'])
@@ -210,6 +221,7 @@ for i in [0, 1, 2, 3]:
     print(f'Total reward: {total_reward:.3f}')
     print(f'Average energy consumption: {(np.mean(energy_consumption_DC1[i]) + np.mean(energy_consumption_DC2[i]) + np.mean(energy_consumption_DC3[i]))/3:.3f} Kwh')
     print(f'Average carbon emissions: {(np.mean(carbon_emissions_DC1[i]) + np.mean(carbon_emissions_DC2[i]) + np.mean(carbon_emissions_DC3[i]))/3:.3f} MgCO2')
+    print(f'Average water consumption: {(np.mean(water_consumption_DC1[i]) + np.mean(water_consumption_DC2[i]) + np.mean(water_consumption_DC3[i]))/3:.3f} m3')
 #%%
 # First of all, let's smooth the metrics before plotting.
 # We can smooth the metrics using the moving average method.
@@ -260,7 +272,7 @@ smoothed_carbon_intensity = uniform_filter1d(carbon_intensity, size=win_size, ax
 import matplotlib.pyplot as plt
 # Plot the 'current_workload' metric
 # controllers = ['One-step RL', 'Multi-step RL', 'One-step Greedy', 'Multi-step Greedy', 'Do nothing']
-controllers = ['One-step RL', 'One-step Greedy', 'Equal Distributed', 'Do nothing']
+controllers = ['One-step RL', 'One-step Greedy', 'Multi-step Greedy', 'Equal Distributed', 'Do nothing']
 
 for i in range(len(controllers)):
     plt.figure(figsize=(10, 6))
