@@ -152,21 +152,34 @@ class Rack():
         return tot_cpu_pwr, np.array(tot_itfan_pwr).sum()
 
     def compute_instantaneous_pwr_vecd(self, inlet_temp, ITE_load_pct):
-        
+        # inlet_temp = 32
+        # ITE_load_pct = 100
         # CPU
         base_cpu_power_ratio = (self.m_cpu+0.05)*inlet_temp + self.c_cpu
-        cpu_power_ratio_at_inlet_temp = base_cpu_power_ratio + self.ratio_shift_max_cpu*(ITE_load_pct/100)
-        temp_arr = np.concatenate((self.idle_pwr.reshape(1,-1),
-                                   (self.full_load_pwr*cpu_power_ratio_at_inlet_temp).reshape(1,-1)),
-                                  axis=0)
-        cpu_power = np.max(temp_arr,axis=0)
+        # cpu_power_ratio_at_inlet_temp = base_cpu_power_ratio + self.ratio_shift_max_cpu*(ITE_load_pct/100)
+        # temp_arr = np.concatenate((self.idle_pwr.reshape(1,-1),
+        #                            (self.full_load_pwr*cpu_power_ratio_at_inlet_temp).reshape(1,-1)),
+        #                           axis=0)
+        # cpu_power = np.max(temp_arr,axis=0)
+        # cpu_power_ratio_at_inlet_temp = base_cpu_power_ratio * np.exp(1.93*self.ratio_shift_max_cpu * (ITE_load_pct / 100) - 1)
+        cpu_power_ratio_at_inlet_temp = (base_cpu_power_ratio * (np.exp(5*self.ratio_shift_max_cpu * (ITE_load_pct / 100) - 0.4) + 50 ) * 0.01 * ITE_load_pct + 50) / self.full_load_pwr
+
+        temp_arr = np.concatenate((self.idle_pwr.reshape(1, -1),
+                                (self.full_load_pwr * cpu_power_ratio_at_inlet_temp).reshape(1, -1)),
+                                axis=0)
+        cpu_power = np.max(temp_arr, axis=0)
         
         # itfan
-        base_itfan_v_ratio = self.m_itfan*self.m_coefficient*inlet_temp + self.c_itfan*self.c_coefficient
-        itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio + self.ratio_shift_max_itfan*(ITE_load_pct/self.it_slope)
-        itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.ITFAN_REF_V_RATIO)  # [4] Eqn (3)
-        self.v_fan_rack = self.IT_FAN_FULL_LOAD_V*itfan_v_ratio_at_inlet_temp
+        # base_itfan_v_ratio = self.m_itfan*self.m_coefficient*inlet_temp + self.c_itfan*self.c_coefficient
+        # itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio + self.ratio_shift_max_itfan*(ITE_load_pct/self.it_slope)
+        # itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.ITFAN_REF_V_RATIO)  # [4] Eqn (3)
+        # self.v_fan_rack = self.IT_FAN_FULL_LOAD_V*itfan_v_ratio_at_inlet_temp
+        base_itfan_v_ratio = self.m_itfan * self.m_coefficient * inlet_temp + self.c_itfan * self.c_coefficient
+        itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio * np.exp(4.0*self.ratio_shift_max_itfan * (ITE_load_pct / 100))
+        itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp / self.ITFAN_REF_V_RATIO)  # [4] Eqn (3)
+        self.v_fan_rack = self.IT_FAN_FULL_LOAD_V * itfan_v_ratio_at_inlet_temp
         
+        # print(f'Total power: {(np.sum(cpu_power)+np.sum(itfan_pwr))/1e3:.3f} kW')
         return np.sum(cpu_power), np.sum(itfan_pwr)
 
     def get_average_rack_fan_v(self,):
@@ -252,13 +265,20 @@ class DataCenter_ITModel():
         rackwise_itfan_pwr = []
         rackwise_outlet_temp = []
         rackwise_inlet_temp = []
-                
+        
+        # Original values
+        # c = 1.918
+        # d = 1.096
+        # e = 0.824
+        # f = 0.526
+        # g = -14.01
+        
         c = 1.918
-        d = 1.096
+        d = 1.146
         e = 0.824
         f = 0.526
         g = -14.01
-        
+
         for rack, rack_supply_approach_temp, ITE_load_pct \
                                 in zip(self.racks_list, self.rack_supply_approach_temp_list, ITE_load_pct_list):
             #clamp supply approach temperatures
@@ -275,24 +295,26 @@ class DataCenter_ITModel():
             airflow_term = self.DC_ITModel_config.C_AIR*self.DC_ITModel_config.RHO_AIR*rack.get_total_rack_fan_v()**e * f
             log_term = 0# h * np.log(max(power_term / airflow_term, 1))  # Log term, avoid log(0)
             # rackwise_outlet_temp.append((rack_inlet_temp + (rack_cpu_power+rack_itfan_power)/(self.DC_ITModel_config.C_AIR*self.DC_ITModel_config.RHO_AIR*rack.get_total_rack_fan_v()*a) + b * (rack_cpu_power+rack_itfan_power) - c))
-            outlet_temp = rack_inlet_temp + c * power_term / airflow_term + g 
-            if outlet_temp > 60:
-                print(f'WARNING, the outlet temperature is higher than 60C: {outlet_temp:.3f}')
+            outlet_temp = rack_inlet_temp + np.max([c * power_term / airflow_term + g, 0])
             
-            if outlet_temp - rack_inlet_temp < 2:
+            
+            if outlet_temp > 90:
+                print(f'WARNING, the outlet temperature is higher than 90C: {outlet_temp:.3f}')
+            
+            if outlet_temp - rack_inlet_temp < 0:
                 print(f'There is something wrong with the delta calculation because is too small: {outlet_temp - rack_inlet_temp:.3f}')
                 print(f'Inlet Temp: {rack_inlet_temp:.3f}, Util: {ITE_load_pct}, ITE Power: {rack_cpu_power+rack_itfan_power:.3f}')
                 print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}, Log term: {log_term:.3f}')
                 print(f'Delta: {c * power_term / airflow_term + g + log_term:.3f}')
-                raise Exception("Sorry, no numbers below 2")
+                raise Exception("Sorry, no numbers below 0")
 
             if ITE_load_pct > 95 and CRAC_setpoint < 16.5:
-                if outlet_temp - rack_inlet_temp < 2:
+                if outlet_temp - rack_inlet_temp < 0:
                     print(f'There is something wrong with the delta calculation for MAX is too small: {outlet_temp - rack_inlet_temp:.3f}')
                     print(f'Inlet Temp: {rack_inlet_temp:.3f}, ITE Power: {rack_cpu_power+rack_itfan_power:.3f}')
                     print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}, Log term: {log_term:.3f}')
                     print(f'Delta: {c * power_term / airflow_term + g + log_term:.3f}')
-                    raise Exception("Sorry, no numbers below 2")
+                    raise Exception("Sorry, no numbers below 0")
             rackwise_outlet_temp.append(outlet_temp)
 
             # rackwise_outlet_temp.append(

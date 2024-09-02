@@ -136,11 +136,23 @@ class HeirarchicalDCRL(gym.Env):
             # 'total_power_kw',
             'ci',
         ]
-        # This is the observation for each DC
-        self.dc_observation_space = Dict({obs: Box(-2, 2) for obs in self.observations})
+        # # This is the observation for each DC
+        # self.dc_observation_space = Dict({obs: Box(-2, 2) for obs in self.observations})
         
-        # Observation space for this environment
-        self.observation_space = Dict({dc: self.dc_observation_space for dc in self.datacenters})
+        # # Observation space for this environment
+        # self.observation_space = Dict({dc: self.dc_observation_space for dc in self.datacenters})
+        
+        # Number of datacenters
+        num_dcs = len(self.datacenters)
+
+        # Each observation component has a shape of (1,) so we need to multiply by the number of observations and datacenters
+        observation_dim = len(self.observations) * num_dcs
+
+        # Define continuous observation space for the flattened observation array
+        self.observation_space = Box(
+            low=-2.0, high=2.0, shape=(observation_dim,), dtype=np.float32
+        )
+        
 
         # Define continuous action space with three variables for transfers
         self.action_space = Box(low=-1.0, high=1.0, shape=(3,), dtype=float) # DC1-DC2, DC1-DC3, DC2-DC3
@@ -151,10 +163,9 @@ class HeirarchicalDCRL(gym.Env):
         # self.std_energy_consumption = 200
         self.energy_stats = []
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=0, options=None):
         
         # Set seed if we are not in rllib
-        seed = 0
         if seed is not None:
             np.random.seed(seed)
             random.seed(seed)
@@ -192,7 +203,7 @@ class HeirarchicalDCRL(gym.Env):
 
         self.all_done = {env_id: False for env_id in self.datacenters}
         
-        return self.heir_obs, self.low_level_infos
+        return self.flatten_observation(self.heir_obs), self.low_level_infos
     
     def transform_actions(self, actions):
         # Interpret actions
@@ -244,6 +255,8 @@ class HeirarchicalDCRL(gym.Env):
     def step(self, actions):
         actions = self.transform_actions(actions)
         # Move workload between DCs
+        
+        # TODO: Add the carbon intensity in the action to sort the action in funtion of the reducction in the CI
         self.overassigned_workload = self.safety_enforcement(actions)
 
         # Step through the low-level agents in each DC
@@ -255,7 +268,7 @@ class HeirarchicalDCRL(gym.Env):
             for env_id in self.datacenters:
                 self.heir_obs[env_id] = self.get_dc_variables(env_id)
 
-        return self.heir_obs, self.calc_reward(), False, done, {}
+        return self.flatten_observation(self.heir_obs), self.calc_reward(), False, done, {}
 
     def low_level_step(self, actions: dict = {}):
         
@@ -302,6 +315,22 @@ class HeirarchicalDCRL(gym.Env):
         done = any(self.all_done.values())
         return done
 
+    def flatten_observation(self, observation: dict) -> np.ndarray:
+        """
+        Flattens the observation dictionary into a plain array, 
+        ensuring a consistent order of datacenters and their variables.
+        """
+        self._original_observation = observation  # Save the original observation
+
+        flattened_obs = []
+
+        for dc_id in sorted(self.datacenters.keys()):  # Ensure consistent order
+            dc_obs = observation[dc_id]
+            for key in sorted(dc_obs.keys()):  # Ensure consistent order of variables
+                flattened_obs.extend(dc_obs[key])
+
+        return np.array(flattened_obs)
+    
     def get_dc_variables(self, dc_id: str) -> np.ndarray:
         dc = self.datacenters[dc_id]
 
@@ -318,6 +347,13 @@ class HeirarchicalDCRL(gym.Env):
         
         return obs
 
+    def get_original_observation(self) -> dict:
+        """
+        Returns the original (unflattened) observation dictionary.
+        """
+        return self._original_observation
+
+        
     def workload_mapper(self, origin_dc, target_dc, action):
         """
         Translates the workload values from origin dc scale to target dc scale
@@ -367,7 +403,6 @@ class HeirarchicalDCRL(gym.Env):
 
         overassigned_workload = []
         for _, action in actions.items():
-
             sender = self.datacenter_ids[action['sender']]
             receiver = self.datacenter_ids[action['receiver']]
             workload_to_move = action['workload_to_move'][0]
@@ -429,7 +464,7 @@ class HeirarchicalDCRL(gym.Env):
 
     def standarize_energy_consumption(self, energy_consumption: float) -> float:
         # Negative values to encourage energy saving
-        standard_energy = -1.0 * ((energy_consumption - 449540) / 173526)
+        standard_energy = -1.0 * ((energy_consumption - 215000) / 160000)
         return standard_energy
 
     def normalize_energy_consumption(self, energy_consumption: float) -> float:

@@ -25,19 +25,20 @@ CONFIG = (
             )
         .training(
             # gamma=0.99,
-            gamma=0.95, 
+            gamma=0.90, 
             lr=1e-5,
             kl_coeff=0.2,
-            clip_param=0.1,
-            entropy_coeff=0.0,
+            clip_param=0.2,
+            grad_clip = 0.5,
+            entropy_coeff=0.01,
             use_gae=True,
-            train_batch_size=1024,
-            num_sgd_iter=50,
-            model={'fcnet_hiddens': [64, 64]}, 
-            shuffle_sequences=True
-        )
+            train_batch_size=4096,
+            sgd_minibatch_size=128,
+            num_sgd_iter=15,
+            model={'fcnet_hiddens': [64, 64]}
+            )
         .resources(num_gpus=0)
-        .debugging(seed=0)
+        .debugging(seed=10)
     )
 
 if __name__ == '__main__':

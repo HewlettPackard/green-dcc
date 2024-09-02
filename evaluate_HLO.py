@@ -8,13 +8,16 @@ from envs.heirarchical_env_cont import HeirarchicalDCRL, DEFAULT_CONFIG
 from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 import glob
 import pickle
+from baselines.rbc_baselines import RBCBaselines
 
 #%%
 # trainer_single = Algorithm.from_checkpoint('./results/SingleStep/PPO_HeirarchicalDCRLWithHysterisis_59fd7_00000_0_2024-05-14_18-39-53/checkpoint_000350')
 # trainer_multi = Algorithm.from_checkpoint('./results/MultiStep/PPO_HeirarchicalDCRLWithHysterisisMultistep_659f8_00000_0_2024-05-14_18-40-12/checkpoint_005145')
 
-FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_0ac7c_00000_0_2024-08-30_22-27-29'
+FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_f8e85_00000_0_2024-09-02_05-41-16'
 CHECKPOINT_PATH = sorted(glob.glob(FOLDER + '/checkpoint_*'))[-1]
+
+print(f'Loading checkpoing: {CHECKPOINT_PATH}')
 trainer = Algorithm.from_checkpoint(CHECKPOINT_PATH)
 
 # print("Trained weights:")
@@ -31,13 +34,13 @@ trainer = Algorithm.from_checkpoint(CHECKPOINT_PATH)
 # print(trainer.get_weights())
 
 # Access the default policy (single-agent setup)
-# policy = trainer.get_policy()
+policy = trainer.get_policy()
 
 # Check if the policy's model has an eval() method (this is specific to PyTorch models)
-# if hasattr(policy.model, 'eval'):
-    # policy.model.eval()  # Set the model to evaluation mode
-# else:
-    # print("The model does not support eval mode, or it's not necessary for this type of policy.")
+if hasattr(policy.model, 'eval'):
+    policy.model.eval()  # Set the model to evaluation mode
+else:
+    print("The model does not support eval mode, or it's not necessary for this type of policy.")
 
 #%
 # obtain the locations from DEFAULT_CONFIG
@@ -47,6 +50,9 @@ dc_location_mapping = {
     'DC3': DEFAULT_CONFIG['config3']['location'].upper(),
 }
 env = HeirarchicalDCRL(DEFAULT_CONFIG)
+
+# Initialize the RBCBaselines with the environment
+rbc_baseline = RBCBaselines(env)
 
 greedy_optimizer = WorkloadOptimizer(env.datacenters.keys())
 #%%
@@ -69,35 +75,41 @@ def compare_transfer_actions(actions1, actions2):
 
     return True
 
-max_iterations = 4*24*30
+max_iterations = 4*24*7
+
+# TODO: change the max iterations in the DEFAULT_CONFIG using the parameter max_iterations
+DEFAULT_CONFIG['config1']['days_per_episode'] = int(max_iterations/(4*24))
+DEFAULT_CONFIG['config2']['days_per_episode'] = int(max_iterations/(4*24))
+DEFAULT_CONFIG['config3']['days_per_episode'] = int(max_iterations/(4*24))
+
 results_all = []
 
 # Initialize lists to store the 'current_workload' metric
-workload_DC1 = [[], [], []]
-workload_DC2 = [[], [], []]
-workload_DC3 = [[], [], []]
+workload_DC1 = [[], [], [], []]
+workload_DC2 = [[], [], [], []]
+workload_DC3 = [[], [], [], []]
 
 # List to store the energy consumption
-energy_consumption_DC1 = [[], [], []]
-energy_consumption_DC2 = [[], [], []]
-energy_consumption_DC3 = [[], [], []]
+energy_consumption_DC1 = [[], [], [], []]
+energy_consumption_DC2 = [[], [], [], []]
+energy_consumption_DC3 = [[], [], [], []]
 
 # Other lists to store the 'carbon_emissions' metric
-carbon_emissions_DC1 = [[], [], []]
-carbon_emissions_DC2 = [[], [], []]
-carbon_emissions_DC3 = [[], [], []]
+carbon_emissions_DC1 = [[], [], [], []]
+carbon_emissions_DC2 = [[], [], [], []]
+carbon_emissions_DC3 = [[], [], [], []]
 
 # Other lists to store the 'external_temperature' metric
-external_temperature_DC1 = [[], [], []]
-external_temperature_DC2 = [[], [], []]
-external_temperature_DC3 = [[], [], []]
+external_temperature_DC1 = [[], [], [], []]
+external_temperature_DC2 = [[], [], [], []]
+external_temperature_DC3 = [[], [], [], []]
 
 # Another list to store the carbon intensity of each datacenter
 carbon_intensity = []
 
 # 5 Different agents (One-step RL, Multi-step RL, One-step Greedy, Multi-step Greedy, Do nothing)
 
-for i in [0, 1, 2]:
+for i in [0, 1, 2, 3]:
     env = HeirarchicalDCRL(DEFAULT_CONFIG)
 
     done = False
@@ -122,7 +134,8 @@ for i in [0, 1, 2]:
             elif i == 1:
                 # One-step greedy
                 # print('One-step Greedy')
-                ci = [obs[dc]['ci'] for dc in env.datacenters]
+                hier_obs = env.get_original_observation()
+                ci = [hier_obs[dc]['ci'] for dc in env.datacenters]
                 # denorm_ci = [env.low_level_infos[dc_key]['agent_bat']['bat_avg_CI'] for dc_key in env.datacenters.keys()]
                 # carbon_intensity.append(denorm_ci)
                 # actions = {'receiver': np.argmin(ci), 'sender': np.argmax(ci), 'workload_to_move': np.array([1.])}
@@ -148,6 +161,9 @@ for i in [0, 1, 2]:
                     actions[1] = -1.0  # Transfer from DC3 to DC1
                 elif sender_idx == 2 and receiver_idx == 1:
                     actions[2] = -1.0  # Transfer from DC3 to DC2
+            elif i == 2:
+                # Use the equal workload distribution method
+                actions = rbc_baseline.equal_workload_distribution()
             else:
                 # print('Do nothing')
                 # Do nothing
@@ -244,7 +260,7 @@ smoothed_carbon_intensity = uniform_filter1d(carbon_intensity, size=win_size, ax
 import matplotlib.pyplot as plt
 # Plot the 'current_workload' metric
 # controllers = ['One-step RL', 'Multi-step RL', 'One-step Greedy', 'Multi-step Greedy', 'Do nothing']
-controllers = ['One-step RL', 'One-step Greedy', 'Do nothing']
+controllers = ['One-step RL', 'One-step Greedy', 'Equal Distributed', 'Do nothing']
 
 for i in range(len(controllers)):
     plt.figure(figsize=(10, 6))
@@ -275,8 +291,6 @@ for i in range(len(controllers)):
     plt.show()
 
 # Print the sum energy consumption of the different controllers
-for 
-print(f'')
 #%% Plot the 'carbon_emissions' metric
 
 for i in range(len(controllers)):

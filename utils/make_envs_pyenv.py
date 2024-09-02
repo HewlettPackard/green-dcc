@@ -169,7 +169,7 @@ def make_dc_pyeplus_env(month : int = 1,
     # Find highest and lowest values of ITE power, rackwise outlet temperature
     dc = DataCenter.DataCenter_ITModel(num_racks=dc_config.NUM_RACKS, rack_supply_approach_temp_list=dc_config.RACK_SUPPLY_APPROACH_TEMP_LIST,
                                     rack_CPU_config=dc_config.RACK_CPU_CONFIG, max_W_per_rack=dc_config.MAX_W_PER_RACK, DC_ITModel_config=dc_config)
-    raw_curr_stpt_list = range(15,23)
+    raw_curr_stpt_list = range(16,23)
     cpu_load_list = range(0,110,10) # We assume same data center load for all servers; Here it will be max
     p = itertools.product(raw_curr_stpt_list,cpu_load_list)
     dc_ambient_temp_list = []
