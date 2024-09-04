@@ -20,7 +20,7 @@ class BaseLoadShiftingAgent:
         Returns:
             action (int): The action (do nothing) to be taken.
         """
-        return 1
+        return [0]
     
 class BaseHVACAgent:
     """

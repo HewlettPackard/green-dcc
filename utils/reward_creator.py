@@ -1,5 +1,7 @@
 # File where the rewards are defined
 
+bat_dcload = []
+bat_footprint = []
 def default_ls_reward(params: dict) -> float:
     """
     Calculates a reward value based on normalized load shifting.
@@ -14,14 +16,18 @@ def default_ls_reward(params: dict) -> float:
         float: Reward value.
     """
     # Energy part of the reward
-    total_energy_with_battery = params['bat_total_energy_with_battery_KWh']
-    norm_CI = params['norm_CI']
-    dcload_min = params['bat_dcload_min']
-    dcload_max = params['bat_dcload_max']
+    # total_energy_with_battery = params['bat_total_energy_with_battery_KWh']
+    total_footprint = params['bat_CO2_footprint']
+    # bat_footprint.append(params['bat_CO2_footprint'])
+    # bat_dcload.append(total_energy_with_battery)
+    # norm_CI = params['norm_CI']
+    # dcload_min = params['bat_dcload_min']
+    # dcload_max = params['bat_dcload_max']
         
     # Calculate the reward associted to the energy consumption
-    norm_net_dc_load = (total_energy_with_battery - dcload_min) / (dcload_max - dcload_min)
-    footprint = -1.0 * norm_CI * norm_net_dc_load
+    # norm_net_dc_load = (total_energy_with_battery - dcload_min) / (dcload_max - dcload_min)
+    # footprint = -1.0 * norm_CI * norm_net_dc_load
+    footprint_reward = -1.0 * (total_footprint - 200860) / 140225  # Mean and std reward. Negate to maximize reward and minimize footprint
 
     # Penalize the agent for each task that was dropped due to queue limit
     penalty_per_dropped_task = -10  # Define the penalty value per dropped task
@@ -39,7 +45,7 @@ def default_ls_reward(params: dict) -> float:
     if current_step % (24*4) == 0:   # Penalty for queued tasks at the end of the day
         penalty_tasks_queue = -1.0 * tasks_in_queue/10 # Penalty for each task left in the queue
     
-    reward = footprint + penalty_dropped_tasks + penalty_tasks_queue    
+    reward = footprint_reward + penalty_dropped_tasks + penalty_tasks_queue    
     return reward
 
 

@@ -162,7 +162,12 @@ class Rack():
         #                           axis=0)
         # cpu_power = np.max(temp_arr,axis=0)
         # cpu_power_ratio_at_inlet_temp = base_cpu_power_ratio * np.exp(1.93*self.ratio_shift_max_cpu * (ITE_load_pct / 100) - 1)
-        cpu_power_ratio_at_inlet_temp = (base_cpu_power_ratio * (np.exp(5*self.ratio_shift_max_cpu * (ITE_load_pct / 100) - 0.4) + 50 ) * 0.01 * ITE_load_pct + 50) / self.full_load_pwr
+        
+        # 08/29/2024
+        # cpu_power_ratio_at_inlet_temp = (base_cpu_power_ratio * (np.exp(5*self.ratio_shift_max_cpu * (ITE_load_pct / 100) - 0.4) + 50 ) * 0.01 * ITE_load_pct + 50) / self.full_load_pwr
+        
+        # 09/03/2024
+        cpu_power_ratio_at_inlet_temp = (base_cpu_power_ratio * (np.exp(4*self.ratio_shift_max_cpu * (ITE_load_pct / 100) - 1.1) + 50 ) * 0.01 * (ITE_load_pct+70)) / self.full_load_pwr
 
         temp_arr = np.concatenate((self.idle_pwr.reshape(1, -1),
                                 (self.full_load_pwr * cpu_power_ratio_at_inlet_temp).reshape(1, -1)),

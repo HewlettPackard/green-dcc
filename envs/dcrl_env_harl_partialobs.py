@@ -103,6 +103,7 @@ class DCRL(gym.Env):
         self.timezone_shift = env_config['timezone_shift']
         self.days_per_episode = env_config['days_per_episode']
         
+        self.workload_baseline = env_config.get('workload_baseline', False)
         self.debug = env_config.get('debug', False)
         
         # Assign month according to worker index, if available
@@ -177,7 +178,7 @@ class DCRL(gym.Env):
         # Create the managers: date/hour/time manager, workload manager, weather manager, and CI manager.
         self.init_day = get_init_day(self.month)
         self.t_m = Time_Manager(self.init_day, timezone_shift=self.timezone_shift, days_per_episode=self.days_per_episode)
-        self.workload_m = Workload_Manager(init_day=self.init_day, workload_filename=self.workload_file, timezone_shift=self.timezone_shift, debug=self.debug)
+        self.workload_m = Workload_Manager(init_day=self.init_day, workload_filename=self.workload_file, timezone_shift=self.timezone_shift, debug=self.debug, workload_baseline=self.workload_baseline)
         self.weather_m = Weather_Manager(init_day=self.init_day, location=wea_loc, filename=self.weather_file, timezone_shift=self.timezone_shift, debug=self.debug)
         self.ci_m = CI_Manager(init_day=self.init_day, location=ci_loc, filename=self.ci_file, future_steps=n_vars_ci, timezone_shift=self.timezone_shift)
 
@@ -233,8 +234,16 @@ class DCRL(gym.Env):
         
         # ls_state -> [time (sine/cosine enconded), original ls observation, current+future normalized CI]
         # self.ls_state = np.float32(np.hstack((t_i, ls_s, ci_i_future)))  # for p.o.
+        # forecast_weather = self.weather_m.get_forecast_weather(steps=4)
+        # self.ls_state = np.float32(np.hstack((ls_s, forecast_weather)))  # for p.o.
         forecast_weather = self.weather_m.get_forecast_weather(steps=4)
-        self.ls_state = np.float32(np.hstack((ls_s, forecast_weather)))  # for p.o.
+        forecast_workload = self.workload_m.get_n_forecast_workload(n=4)
+        self.ls_state = np.float32(np.hstack((t_i,
+                                              ls_s,
+                                              forecast_weather,
+                                              ci_i_future[:4],
+                                              forecast_workload
+                                              )))  # for p.o.
         
         # dc state -> [time (sine/cosine enconded), original dc observation, current normalized CI]  # p.o.
         self.dc_state = np.float32(np.hstack((t_i, self.dc_state, ci_i_future[0])))  # p.o.
@@ -344,10 +353,16 @@ class DCRL(gym.Env):
         # Do a step in the battery environment
         self.bat_state, _, self.bat_terminated, self.bat_truncated, self.bat_info = self.bat_env.step(action)
         
-        # ls_state -> [time (sine/cosine enconded), original ls observation, current+future normalized CI]
+        # ls_state -> [time (sine/cosine enconded), original ls observation (current_utilization_after_action, tasks_in_queue/queue_max_len), current+future normalized CI]
         # self.ls_state = np.float32(np.hstack((t_i, self.ls_state, ci_i_future)))  # for p.o.
         forecast_weather = self.weather_m.get_forecast_weather(steps=4)
-        self.ls_state = np.float32(np.hstack((self.ls_state, forecast_weather)))  # for p.o.
+        forecast_workload = self.workload_m.get_n_forecast_workload(n=4)
+        self.ls_state = np.float32(np.hstack((t_i,
+                                              self.ls_state,
+                                              forecast_weather,
+                                              ci_i_future[:4],
+                                              forecast_workload
+                                              )))  # for p.o.
         
         # Update the shared variables
         # dc state -> [time (sine/cosine enconded), original dc observation, current normalized CI]
@@ -367,7 +382,7 @@ class DCRL(gym.Env):
         # If agent_ls is included in the agents list, then update the observation, reward, terminated, truncated, and info dictionaries. 
         if "agent_ls" in self.agents:
             obs['agent_ls'] = self.ls_state
-            rew["agent_ls"] = self.indv_reward * self.ls_reward + self.collab_reward * self.bat_reward + self.collab_reward * self.dc_reward
+            rew["agent_ls"] = self.ls_reward #self.indv_reward * self.ls_reward + self.collab_reward * self.bat_reward + self.collab_reward * self.dc_reward
             terminateds["agent_ls"] = False
             truncateds["agent_ls"] = False
         info["agent_ls"] = {**self.dc_info, **self.ls_info, **self.bat_info, **add_info}

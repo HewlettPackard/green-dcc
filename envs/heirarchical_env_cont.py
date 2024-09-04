@@ -24,7 +24,7 @@ DEFAULT_CONFIG = {
         'location': 'ny',
         'cintensity_file': 'NY_NG_&_avgCI.csv',
         'weather_file': 'USA_NY_New.York-LaGuardia.epw',
-        'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
+        'workload_file': 'Alibaba_CPU_Data_Hourly_2.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
         'timezone_shift': 8,
@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
+        'workload_baseline': -0.1,
         },
 
     # DC2
@@ -49,6 +50,7 @@ DEFAULT_CONFIG = {
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
+        'workload_baseline': 0.2,
         },
 
     # DC3
@@ -56,7 +58,7 @@ DEFAULT_CONFIG = {
         'location': 'ca',
         'cintensity_file': 'CA_NG_&_avgCI.csv',
         'weather_file': 'USA_CA_San.Jose-Mineta.epw',
-        'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
+        'workload_file': 'GoogleClusteData_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
         'timezone_shift': 16,
@@ -65,6 +67,7 @@ DEFAULT_CONFIG = {
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
+        'workload_baseline': -0.2,
         },
     
     # Number of transfers per step
@@ -179,6 +182,7 @@ class HeirarchicalDCRL(gym.Env):
         self.low_level_observations = {}
         self.low_level_infos = {}
         self.heir_obs = {}
+        self.flat_obs = []
 
         # Reset environments and store initial observations and infos
         for env_id, env in self.datacenters.items():
@@ -254,8 +258,6 @@ class HeirarchicalDCRL(gym.Env):
         }
         return transfers
 
-
-
     def step(self, actions):
         actions = self.transform_actions(actions)
         # Move workload between DCs
@@ -289,6 +291,7 @@ class HeirarchicalDCRL(gym.Env):
         for env_id, env_obs in self.low_level_observations.items():
             if self.all_done[env_id]:
                 continue
+            # Only the 'active_agents' are considered, the rest are using the default "do-nothing" action
             low_level_actions[env_id] = self.lower_level_actor.compute_actions(env_obs)
 
             # Override computed low-level actions with provided actions
@@ -338,7 +341,8 @@ class HeirarchicalDCRL(gym.Env):
                 else:
                     flattened_obs.extend(np.asarray(value).flatten())  # Convert to array and flatten
 
-        return np.array(flattened_obs, dtype=np.float32)
+        self.flat_obs = np.array(flattened_obs, dtype=np.float32)
+        return self.flat_obs
     
     def get_dc_variables(self, dc_id: str) -> np.ndarray:
         dc = self.datacenters[dc_id]
@@ -451,10 +455,14 @@ class HeirarchicalDCRL(gym.Env):
         
         # update individual datacenters with the base_workload_on_curr_step
         for dc, base_workload in self.base_workload_on_curr_step.items():
+            if base_workload < 0 or base_workload > 1:
+                raise ValueError(f"base_workload on curr_step should be > 0 and < 1, got {base_workload}")
             self.datacenters[dc].workload_m.set_current_workload(base_workload)
 
         # update individual datacenters with the base_workload_on_next_step
         for dc, base_workload in self.base_workload_on_next_step.items():
+            if base_workload < 0 or base_workload > 1:
+                raise ValueError(f"base_workload on curr_step should be > 0 and < 1, got {base_workload}")
             self.datacenters[dc].workload_m.set_future_workload(base_workload)
         
         # Keep track of the computed workload

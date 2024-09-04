@@ -21,7 +21,7 @@ class DCRLEnv:
         # The observation should be padded to have the same shape
         # Define observation spaces and action spaces according to the DCRL environment
         
-        self.env = ss.pad_action_space_v0(ss.pad_observations_v0(self.env))
+        # self.env = ss.pad_observations_v0(self.env)
         
         self._seed = 0
         self.agents = self.env.possible_agents

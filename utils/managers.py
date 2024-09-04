@@ -172,7 +172,7 @@ class Time_Manager():
 
 # Class to manage CPU workload data
 class Workload_Manager():
-    def __init__(self, workload_filename='', init_day=0, future_steps=4, weight=0.01, desired_std_dev=0.025, timezone_shift=0, debug=False):
+    def __init__(self, workload_filename='', init_day=0, future_steps=4, weight=0.01, desired_std_dev=0.025, timezone_shift=0, debug=False, workload_baseline=0):
         """Manager of the DC workload
 
         Args:
@@ -201,6 +201,7 @@ class Workload_Manager():
         self.init_day = init_day
         self.timezone_shift = timezone_shift
         self.debug = debug
+        self.workload_baseline = workload_baseline
 
         # If self.debug and timezone_shift != 16, then, the workload with be 100% all time, else but stil self.debug, 0% all time:
         if self.debug and timezone_shift != 16:
@@ -210,11 +211,14 @@ class Workload_Manager():
         # Interpolate the CPU data to increase the number of data points
         x = range(0, len(cpu_data_list))
         xcpu_new = np.linspace(0, len(cpu_data_list), len(cpu_data_list)*self.timestep_per_hour)  
-        self.cpu_smooth = np.interp(xcpu_new, x, cpu_data_list)
+        self.cpu_smooth = np.interp(xcpu_new, x, cpu_data_list) + self.workload_baseline
+        self.cpu_smooth = np.clip(self.cpu_smooth, 0, 1)
         
         # Shift the data to match the timezone shift
         self.cpu_smooth =  np.roll(self.cpu_smooth, -1*self.timezone_shift*self.timestep_per_hour)
         
+        if self.cpu_smooth.max() > 1 or self.cpu_smooth.min() < 0:
+            raise ValueError(f"Workload out of bound when init: MAX:{self.cpu_smooth.max()} - MIN:{self.cpu_smooth.min()}")
         # Save a copy of the original data
         self.original_data = self.cpu_smooth.copy()
                 
@@ -248,8 +252,8 @@ class Workload_Manager():
         
         # Scale the array based on the percentiles, without clipping
         # This ensures values outside the 5th to 95th percentile range naturally
-        # fall outside the 0.2 to 0.8 range.
-        scaled_arr = 0.2 + ((arr - p5) * (0.8 - 0.2) / (p95 - p5))
+        # fall outside the 0.3 to 0.7 range.
+        scaled_arr = 0.3 + ((arr - p5) * (0.7 - 0.3) / (p95 - p5)) + self.workload_baseline
         
         # Clip values to be within 0 to 1
         scaled_arr = np.clip(scaled_arr, 0, 1)
@@ -267,7 +271,7 @@ class Workload_Manager():
         self.time_step = self.init_day*self.time_steps_day
         self.init_time_step = self.time_step
         
-        baseline = np.random.random()*0.5 - 0.25
+        baseline = np.random.random()*0.05 - 0.025
         
         # if debug is true, does not add any noise to the workload data
         if not self.debug:
@@ -278,9 +282,14 @@ class Workload_Manager():
             self.cpu_smooth = self.scale_array(cpu_smooth)
             
             num_roll_weeks = np.random.randint(0, 52) # Random roll the workload because is independed on the month, so I am rolling across weeks (52 weeks in a year)
-            self.cpu_smooth =  np.roll(self.cpu_smooth, num_roll_weeks*self.timestep_per_hour*24*7)
+            self.cpu_smooth =  np.clip(np.roll(self.cpu_smooth, num_roll_weeks*self.timestep_per_hour*24*7), 0, 1)
         else:
+            print('DEBUG MODE: Workload is fixed all time')
             self.cpu_smooth = self.original_data
+        
+        if self.cpu_smooth.max() > 1 or self.cpu_smooth.min() < 0:
+            raise ValueError(f"Workload out of bound when reset: MAX:{self.cpu_smooth.max()} - MIN:{self.cpu_smooth.min()}")
+        
         return self.cpu_smooth[self.time_step]
         
     # Function to advance the time step and return the workload at the new time step
@@ -297,13 +306,25 @@ class Workload_Manager():
         if self.time_step - 1 >= len(self.cpu_smooth):
             self.time_step = self.init_time_step
         # assert self.time_step < len(self.cpu_smooth), f'Episode length: {self.time_step} is longer than the provide cpu_smooth: {len(self.cpu_smooth)}'
+        if self.cpu_smooth[max(self.time_step - 1,0)] > 1 or self.cpu_smooth[max(self.time_step - 1,0)] < 0:
+            print(f"Workload: {self.cpu_smooth[max(self.time_step - 1,0)]}")
         return self.cpu_smooth[max(self.time_step - 1,0)]  # to avoid logical error
     
-    def get_current_workload(self):        
+    def get_current_workload(self):
+        if self.cpu_smooth[self.time_step] > 1 or self.cpu_smooth[self.time_step] < 0:
+            raise ValueError(f"Workload out of bound when get_current_workload: {self.cpu_smooth[self.time_step]}")        
         return self.cpu_smooth[self.time_step]
     
     def get_forecast_workload(self):
+        if self.cpu_smooth[self.time_step] > 1 or self.cpu_smooth[self.time_step] < 0:
+            raise ValueError(f"Workload out of bound when get_forecast_workload: {self.cpu_smooth[self.time_step]}")
         return self.cpu_smooth[self.time_step+1]
+    
+    def get_n_forecast_workload(self, n):
+        if (self.time_step + n) >= len(self.cpu_smooth):
+            return self.cpu_smooth[self.init_time_step + (self.time_step + (n-1) - len(self.cpu_smooth))]
+        else:
+            return self.cpu_smooth[self.time_step+1:n+self.time_step+1]
     
     def get_n_step_future_workload(self,n):
         if (self.time_step + n) >= len(self.cpu_smooth):
@@ -318,10 +339,14 @@ class Workload_Manager():
             self.cpu_smooth[self.time_step + n - 1] = workload
             
     
-    def set_current_workload(self, workload):         
+    def set_current_workload(self, workload):
+        if workload > 1 or workload < 0:
+            raise ValueError(f"Workload out of bound when set_current_workload: {workload}")
         self.cpu_smooth[self.time_step] = workload
     
     def set_future_workload(self, workload):
+        if workload > 1 or workload < 0:
+            raise ValueError(f"Workload out of bound when set_future_workload: {workload}")
         self.cpu_smooth[self.time_step+1] = workload
 
 

@@ -1,10 +1,11 @@
-'''Code used to train the High Level Only Baseline for the NeuirsIPS 2024 submission'''
+'''Code used to train the High Level Only Baseline for the TechCon 2024 submission'''
 import os
 import ray
 from ray import air, tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
 from ray.rllib.utils.filter import MeanStdFilter
 from envs.heirarchical_env_cont import HeirarchicalDCRL, DEFAULT_CONFIG
+from utils.rllib_callbacks import CustomMetricsCallback
 
 from utils.create_trainable import create_wrapped_trainable
 
@@ -39,6 +40,7 @@ CONFIG = (
             )
         .resources(num_gpus=0)
         .debugging(seed=2)
+        .callbacks(CustomMetricsCallback)
     )
 
 if __name__ == '__main__':

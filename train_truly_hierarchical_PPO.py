@@ -1,3 +1,4 @@
+'''Code used to train the Hierarchical Reinforcement Learning (HRL) for the TechCon 2024 submission'''
 import os
 
 import ray
@@ -7,11 +8,11 @@ from gymnasium.spaces import Discrete, Box
 from ray.rllib.algorithms.ppo import PPOConfig
 
 from envs.truly_heirarchical_env import TrulyHeirarchicalDCRL
-from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
+from envs.heirarchical_env_cont import HeirarchicalDCRL, DEFAULT_CONFIG
 from utils.create_trainable import create_wrapped_trainable
 from utils.rllib_callbacks import CustomMetricsCallback
 
-NUM_WORKERS = 4
+NUM_WORKERS = 8
 NAME = "TrulyPPO"
 RESULTS_DIR = './results/'
 
@@ -29,16 +30,16 @@ CONFIG = (
             num_rollout_workers=NUM_WORKERS,
             )
         .training(
-            gamma=0.99,
             lr=1e-5,
             kl_coeff=0.2,
-            clip_param=0.1,
-            entropy_coeff=0.0,
+            clip_param=0.2,
+            grad_clip = 0.5,
+            entropy_coeff=0.01,
             use_gae=True,
-            train_batch_size=1024,
-            num_sgd_iter=10,
-            model={'fcnet_hiddens': [256, 256]}, 
-            shuffle_sequences=True
+            train_batch_size=4096,
+            sgd_minibatch_size=128,
+            num_sgd_iter=15,
+            model={'fcnet_hiddens': [64, 64]}
         )
         .multi_agent(
         policies={
@@ -46,25 +47,25 @@ CONFIG = (
                 None,
                 hdcrl_env.observation_space,
                 hdcrl_env.action_space,
-                PPOConfig()
+                PPOConfig().training(gamma=0.7)  # High-level policy gamma
             ),
             "DC1_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (6,)),
-                Discrete(3),
-                PPOConfig()
+                Box(-1.0, 1.0, (18,)),
+                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                PPOConfig().training(gamma=0.99)  # DC1_ls_policy gamma
             ),
             "DC2_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (6,)),
-                Discrete(3),
-                PPOConfig()
+                Box(-1.0, 1.0, (18,)),
+                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                PPOConfig().training(gamma=0.99)  # DC2_ls_policy gamma
             ),
             "DC3_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (6,)),
-                Discrete(3),
-                PPOConfig()
+                Box(-1.0, 1.0, (18,)),
+                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                PPOConfig().training(gamma=0.99)  # DC3_ls_policy gamma
             ),
         },
         policy_mapping_fn=lambda agent_id, episode, worker, **kwargs: agent_id,

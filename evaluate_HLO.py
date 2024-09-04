@@ -14,7 +14,7 @@ from baselines.rbc_baselines import RBCBaselines
 # trainer_single = Algorithm.from_checkpoint('./results/SingleStep/PPO_HeirarchicalDCRLWithHysterisis_59fd7_00000_0_2024-05-14_18-39-53/checkpoint_000350')
 # trainer_multi = Algorithm.from_checkpoint('./results/MultiStep/PPO_HeirarchicalDCRLWithHysterisisMultistep_659f8_00000_0_2024-05-14_18-40-12/checkpoint_005145')
 
-FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_1a980_00000_0_2024-09-02_17-23-43'
+FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_6eae7_00000_0_2024-09-03_19-33-44'
 CHECKPOINT_PATH = sorted(glob.glob(FOLDER + '/checkpoint_*'))[-1]
 
 print(f'Loading checkpoing: {CHECKPOINT_PATH}')
@@ -109,6 +109,11 @@ water_consumption_DC1 = [[], [], [], [], []]
 water_consumption_DC2 = [[], [], [], [], []]
 water_consumption_DC3 = [[], [], [], [], []]
 
+# List to store the carbon intensity of each datacenter
+carbon_intensity_DC1 = [[], [], [], [], []]
+carbon_intensity_DC2 = [[], [], [], [], []]
+carbon_intensity_DC3 = [[], [], [], [], []]
+
 # Another list to store the carbon intensity of each datacenter
 carbon_intensity = []
 
@@ -119,7 +124,7 @@ for i in [0, 1, 2, 3, 4]:
     if i == 2 or i == 3:
         rbc_baseline = RBCBaselines(env)
     done = False
-    obs, _ = env.reset(seed=123)
+    obs, _ = env.reset(seed=43)
 
     actions_list = []
     rewards_list = []
@@ -156,17 +161,17 @@ for i in [0, 1, 2, 3, 4]:
 
                 # Map sender-receiver pairs to the action array indices
                 if sender_idx == 0 and receiver_idx == 1:
-                    actions[0] = 1.0  # Transfer from DC1 to DC2
+                    actions[0] = 0.9  # Transfer from DC1 to DC2
                 elif sender_idx == 0 and receiver_idx == 2:
-                    actions[1] = 1.0  # Transfer from DC1 to DC3
+                    actions[1] = 0.9  # Transfer from DC1 to DC3
                 elif sender_idx == 1 and receiver_idx == 0:
-                    actions[0] = -1.0  # Transfer from DC2 to DC1
+                    actions[0] = -0.9  # Transfer from DC2 to DC1
                 elif sender_idx == 1 and receiver_idx == 2:
-                    actions[2] = 1.0  # Transfer from DC2 to DC3
+                    actions[2] = 0.9  # Transfer from DC2 to DC3
                 elif sender_idx == 2 and receiver_idx == 0:
-                    actions[1] = -1.0  # Transfer from DC3 to DC1
+                    actions[1] = -0.9  # Transfer from DC3 to DC1
                 elif sender_idx == 2 and receiver_idx == 1:
-                    actions[2] = -1.0  # Transfer from DC3 to DC2
+                    actions[2] = -0.9  # Transfer from DC3 to DC2
             elif i == 2:
                 # Multi-step greedy
                 actions = rbc_baseline.multi_step_greedy()
@@ -181,7 +186,7 @@ for i in [0, 1, 2, 3, 4]:
 
             
             obs, reward, terminated, done, info = env.step(actions)
-
+            
             # Obtain the 'current_workload' metric for each datacenter using the low_level_infos -> agent_ls -> ls_original_workload
             workload_DC1[i].append(env.low_level_infos['DC1']['agent_ls']['ls_original_workload'])
             workload_DC2[i].append(env.low_level_infos['DC2']['agent_ls']['ls_original_workload'])
@@ -206,6 +211,11 @@ for i in [0, 1, 2, 3, 4]:
             water_consumption_DC1[i].append(env.low_level_infos['DC1']['agent_dc']['dc_water_usage'])
             water_consumption_DC2[i].append(env.low_level_infos['DC2']['agent_dc']['dc_water_usage'])
             water_consumption_DC3[i].append(env.low_level_infos['DC3']['agent_dc']['dc_water_usage'])
+            
+            # Obtain the carbon intensity of each datacenter using the low_level_infos -> agent_bat -> bat_avg_CI
+            carbon_intensity_DC1[i].append(env.low_level_infos['DC1']['agent_bat']['bat_avg_CI'])
+            carbon_intensity_DC2[i].append(env.low_level_infos['DC2']['agent_bat']['bat_avg_CI'])
+            carbon_intensity_DC3[i].append(env.low_level_infos['DC3']['agent_bat']['bat_avg_CI'])
             
             total_reward += reward
     
@@ -244,6 +254,10 @@ external_temperature_DC1 = np.array(external_temperature_DC1)
 external_temperature_DC2 = np.array(external_temperature_DC2)
 external_temperature_DC3 = np.array(external_temperature_DC3)
 
+carbon_intensity_DC1 = np.array(carbon_intensity_DC1)
+carbon_intensity_DC2 = np.array(carbon_intensity_DC2)
+carbon_intensity_DC3 = np.array(carbon_intensity_DC3)
+
 # Smooth the 'current_workload' metric, remeber that workload_DC1.shape=(num_controllers, time_steps).
 # Use scipy.ndimage.filters with 1D filter to only smooth the time dimension.
 from scipy.ndimage import uniform_filter1d
@@ -267,12 +281,15 @@ smoothed_external_temperature_DC2 = uniform_filter1d(external_temperature_DC2, s
 smoothed_external_temperature_DC3 = uniform_filter1d(external_temperature_DC3, size=win_size, axis=1)
 
 # Smooth the 'carbon_intensity' metric
-smoothed_carbon_intensity = uniform_filter1d(carbon_intensity, size=win_size, axis=0)
+smoothed_carbon_intensity_DC1 = uniform_filter1d(carbon_intensity_DC1, size=win_size, axis=1)
+smoothed_carbon_intensity_DC2 = uniform_filter1d(carbon_intensity_DC2, size=win_size, axis=1)
+smoothed_carbon_intensity_DC3 = uniform_filter1d(carbon_intensity_DC3, size=win_size, axis=1)
+ 
 #%%
 import matplotlib.pyplot as plt
 # Plot the 'current_workload' metric
 # controllers = ['One-step RL', 'Multi-step RL', 'One-step Greedy', 'Multi-step Greedy', 'Do nothing']
-controllers = ['One-step RL', 'One-step Greedy', 'Multi-step Greedy', 'Equal Distributed', 'Do nothing']
+controllers = ['RL', 'One-step Greedy', 'Multi-step Greedy', 'Equal Distributed', 'Do nothing']
 
 for i in range(len(controllers)):
     plt.figure(figsize=(10, 6))
@@ -315,7 +332,7 @@ for i in range(len(controllers)):
     plt.ylabel('Carbon Emissions (MgCO2)')
     plt.legend()
     plt.grid('on', linestyle='--', alpha=0.5)
-    plt.ylim(0.2, 1)
+    # plt.ylim(0.2, 1)
     plt.show()
 
 #%% Let's plot the carbon intensity for each datacenter
@@ -324,7 +341,9 @@ for i in range(len(controllers)):
 # Only plot the first week (:4*24*7)
 
 plt.figure(figsize=(10, 6))
-plt.plot(carbon_intensity[1:4*24*7], linestyle='-', linewidth=2, alpha=1)
+plt.plot(smoothed_carbon_intensity_DC1[0][:4*24*7], label=dc_location_mapping['DC1'], linestyle='--', linewidth=2, alpha=1)
+plt.plot(smoothed_carbon_intensity_DC2[0][:4*24*7], label=dc_location_mapping['DC2'], linestyle='-.', linewidth=2, alpha=0.9)
+plt.plot(smoothed_carbon_intensity_DC3[0][:4*24*7], label=dc_location_mapping['DC3'], linestyle='-', linewidth=2, alpha=0.7)
 plt.title('Carbon Intensity for Each Datacenter')
 plt.xlabel('Time Step')
 plt.ylabel('Carbon Intensity (gCO2/kWh)')
@@ -371,3 +390,49 @@ plt.grid('on', linestyle='--', alpha=0.5)
 plt.show()
 
 # %%
+import pandas as pd
+# Organize the data by agent type
+agent_data = {
+    "RL Agent": {
+        "Total Reward": [653.303, 691.818, 628.551, 617.627, 603.921],
+        "Average Energy Consumption (Kwh)": [268.892, 261.257, 261.902, 272.090, 275.621],
+        "Average Carbon Emissions (MgCO2)": [157786.788, 154413.867, 159954.490, 160911.155, 162111.437],
+        "Average Water Consumption (m3)": [792.488, 765.893, 768.503, 786.667, 782.350]
+    },
+    "Single Step Greedy": {
+        "Total Reward": [312.827, 337.403, 219.580, 206.932, 219.580],
+        "Average Energy Consumption (Kwh)": [347.027, 337.556, 355.307, 359.854, 355.307],
+        "Average Carbon Emissions (MgCO2)": [187604.068, 185451.872, 195770.192, 196877.847, 195770.192],
+        "Average Water Consumption (m3)": [947.795, 918.471, 948.334, 950.352, 948.334]
+    },
+    "Multi Step Greedy": {
+        "Total Reward": [-126.149, -51.072, -239.828, -196.286, -196.286],
+        "Average Energy Consumption (Kwh)": [428.776, 409.079, 438.723, 434.761, 434.761],
+        "Average Carbon Emissions (MgCO2)": [226047.543, 219472.642, 236003.023, 232189.772, 232189.772],
+        "Average Water Consumption (m3)": [1097.301, 1049.803, 1102.135, 1091.683, 1091.683]
+    },
+    "Equally Distributed": {
+        "Total Reward": [583.282, 607.073, 537.161, 545.987, 537.329],
+        "Average Energy Consumption (Kwh)": [270.646, 264.787, 277.266, 277.186, 280.364],
+        "Average Carbon Emissions (MgCO2)": [163918.946, 161835.392, 167957.960, 167185.077, 167943.239],
+        "Average Water Consumption (m3)": [796.941, 774.887, 798.342, 785.642, 790.977]
+    },
+    "Do Nothing": {
+        "Total Reward": [565.175, 502.696, 545.987, 537.329, 537.329],
+        "Average Energy Consumption (Kwh)": [274.301, 280.768, 277.186, 280.364, 280.364],
+        "Average Carbon Emissions (MgCO2)": [165504.682, 170976.241, 167957.960, 167943.239, 167943.239],
+        "Average Water Consumption (m3)": [803.632, 804.786, 798.342, 790.977, 790.977]
+    }
+}
+
+# Calculate mean and std for each agent
+agent_summary_stats = {
+    agent: {metric: {"Mean": np.mean(values), "Std": np.std(values)} for metric, values in metrics.items()}
+    for agent, metrics in agent_data.items()
+}
+
+# Convert to DataFrame for better visualization
+agent_summary_df = pd.concat({agent: pd.DataFrame(metrics).T for agent, metrics in agent_summary_stats.items()}, axis=1)
+
+
+#%%

@@ -136,15 +136,43 @@ class HierarchicalDCRL_Callback(DefaultCallbacks):
         episode.custom_metrics["runningstats/ax3"] = ax3
 
 class CustomMetricsCallback(DefaultCallbacks):
+    def on_episode_start(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
+        # Initialize the cumulative CFP for the episode
+        episode.user_data["cumulative_cfp"] = 0.0
+        episode.user_data["steps"] = 0  # To count the number of steps in the episode
 
-    def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
+    def on_episode_step(self, *, worker, base_env, episode, **kwargs) -> None:
+        # This is called at every step to update the CFP metric
         if hasattr(base_env, 'vector_env'):
-            metrics = base_env.vector_env.envs[0].metrics            
+            metrics = base_env.vector_env.envs[0].metrics
         else:
             metrics = base_env.envs[0].metrics
-            
+        
         cfp = 0
         for dc in metrics:
-            cfp += sum(metrics[dc]['bat_CO2_footprint']) / 1e6
+            cfp += sum(metrics[dc]['bat_CO2_footprint']) / 1e6  # Summing up the CFP from all data centers
+        
+        # Accumulate CFP and increment the step count
+        episode.user_data["cumulative_cfp"] += cfp
+        episode.user_data["steps"] += 1
 
-        episode.custom_metrics['custom_metrics/CFP']=  cfp
+    def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
+        # Calculate the average CFP per step in the episode
+        if episode.user_data["steps"] > 0:
+            average_cfp = episode.user_data["cumulative_cfp"] / episode.user_data["steps"]
+        else:
+            average_cfp = 0.0
+        
+        # Record the average CFP in custom metrics
+        episode.custom_metrics['custom_metrics/average_CFP'] = average_cfp
+    # def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
+    #     if hasattr(base_env, 'vector_env'):
+    #         metrics = base_env.vector_env.envs[0].metrics            
+    #     else:
+    #         metrics = base_env.envs[0].metrics
+            
+    #     cfp = 0
+    #     for dc in metrics:
+    #         cfp += sum(metrics[dc]['bat_CO2_footprint']) / 1e6
+
+    #     episode.custom_metrics['custom_metrics/CFP']=  cfp

@@ -54,35 +54,35 @@ class LowLevelActorHARL(LowLevelActorBase):
         algo_args['eval']['n_eval_rollout_threads'] = 1
         algo_args['train']['model_dir'] = os.path.join(config['model_dir'], 'models')
     
-        self.ll_actors = RUNNER_REGISTRY[saved_config["main_args"]["algo"]](config, algo_args, env_args)
+        # self.ll_actors = RUNNER_REGISTRY[saved_config["main_args"]["algo"]](config, algo_args, env_args)
         self.active_agents = active_agents
         
     def compute_actions(self, observations, **kwargs):
         actions = {}
         
-        eval_rnn_states = np.zeros((1, 1, 1), dtype=np.float32)
-        eval_masks = np.ones((1, 1), dtype=np.float32)
+        # eval_rnn_states = np.zeros((1, 1, 1), dtype=np.float32)
+        # eval_masks = np.ones((1, 1), dtype=np.float32)
         
-        expected_length = self.ll_actors.actor[0].obs_space.shape[0]
+        # expected_length = self.ll_actors.actor[0].obs_space.shape[0]
 
         for agent_idx, (agent_id, agent_obs) in enumerate(observations.items()):
-            if agent_id in self.active_agents:
-                additional_length = expected_length - len(agent_obs)
+            # if agent_id in self.active_agents:
+            #     additional_length = expected_length - len(agent_obs)
                 
-                # Create an array of 1's with the required additional length
-                ones_to_add = np.ones(additional_length, dtype=agent_obs.dtype)
+            #     # Create an array of 1's with the required additional length
+            #     ones_to_add = np.ones(additional_length, dtype=agent_obs.dtype)
 
-                # Concatenate the current array with the array of 1's
-                agent_obs = np.concatenate((agent_obs, ones_to_add))
+            #     # Concatenate the current array with the array of 1's
+            #     agent_obs = np.concatenate((agent_obs, ones_to_add))
 
-                # eval_rnn_states and eval_masks is only being used on RNN
-                # Obtain the action of each actor
-                # TODO: Make sure that we are asking the correct actor for their agent_id and agent_idx
-                action, _ = self.ll_actors.actor[agent_idx].act(agent_obs, eval_rnn_states, eval_masks, deterministic=True)
+            #     # eval_rnn_states and eval_masks is only being used on RNN
+            #     # Obtain the action of each actor
+            #     # TODO: Make sure that we are asking the correct actor for their agent_id and agent_idx
+            #     action, _ = self.ll_actors.actor[agent_idx].act(agent_obs, eval_rnn_states, eval_masks, deterministic=True)
         
-                actions[agent_id] = action.numpy()[0]
-            else:
-                actions[agent_id] = self.do_nothing_actors[agent_id].do_nothing_action()
+            #     actions[agent_id] = action.numpy()[0]
+            # else:
+            actions[agent_id] = self.do_nothing_actors[agent_id].do_nothing_action()
 
         return actions
 

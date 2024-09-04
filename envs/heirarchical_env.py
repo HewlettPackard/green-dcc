@@ -71,7 +71,7 @@ DEFAULT_CONFIG = {
     'num_transfers': 2,
 
     # List of active low-level agents
-    'active_agents': ['agent_dc'],
+    'active_agents': [''],
 
     # config for loading trained low-level agents
     'low_level_actor_config': {

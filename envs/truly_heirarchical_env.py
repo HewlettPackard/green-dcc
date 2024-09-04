@@ -1,7 +1,7 @@
 from tqdm import tqdm
 from ray.rllib.env import MultiAgentEnv
 
-from envs.heirarchical_env import HeirarchicalDCRL, DEFAULT_CONFIG
+from envs.heirarchical_env_cont import HeirarchicalDCRL, DEFAULT_CONFIG
 from tensorboardX import SummaryWriter
 
 class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
@@ -17,7 +17,7 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
         super().reset(seed)
 
         obs = {}
-        obs['high_level_policy'] = self.heir_obs
+        obs['high_level_policy'] = self.flat_obs
         for dc in self.datacenter_ids:
             obs[dc + '_ls_policy'] = self.low_level_observations[dc]['agent_ls']
 
@@ -25,6 +25,7 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
     
     def step(self, actions: dict):
         # Move workload across DCs (high level policy)
+        actions['high_level_policy'] = self.transform_actions(actions['high_level_policy'])
         overassigned_workload = self.safety_enforcement(actions['high_level_policy'])
 
         # Move workload within DCs
@@ -32,15 +33,15 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
         done = self.low_level_step(low_level_actions)
         
         # Get observations for high-level agent
-        if not done:
-            self.heir_obs = {}
-            for dc in self.datacenter_ids:
-                self.heir_obs[dc] = self.get_dc_variables(dc)
+        # if not done:
+        #     self.heir_obs = {}
+        #     for dc in self.datacenter_ids:
+        #         self.heir_obs[dc] = self.get_dc_variables(dc)
 
         # Prepare high-level obs and rewards
         obs = {}
         rewards = {}
-        obs['high_level_policy'] = self.heir_obs
+        obs['high_level_policy'] = self.flat_obs
         rewards['high_level_policy'] = self.calc_reward()
 
         # Low-level obs and rewards
@@ -56,7 +57,8 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
             totalfp = 0
             for dc in self.datacenter_ids:
                 totalfp += sum(self.metrics[dc]['bat_CO2_footprint'])
-            print("Total CO2 footprint: ", totalfp)
+            # print("Total CO2 footprint: ", totalfp)
+            print(f'The total CO2 footprint is {totalfp}')
 
             # Log the scalar totalfp to TensorBoard
             self.writer.add_scalar("Total CO2 footprint", totalfp, self.global_step)
