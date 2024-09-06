@@ -27,25 +27,25 @@ def default_ls_reward(params: dict) -> float:
     # Calculate the reward associted to the energy consumption
     # norm_net_dc_load = (total_energy_with_battery - dcload_min) / (dcload_max - dcload_min)
     # footprint = -1.0 * norm_CI * norm_net_dc_load
-    footprint_reward = -1.0 * (total_footprint - 200860) / 140225  # Mean and std reward. Negate to maximize reward and minimize footprint
+    footprint_reward = -1.0 * (total_footprint - 186012) / 140399  # Mean and std reward. Negate to maximize reward and minimize footprint
 
     # Penalize the agent for each task that was dropped due to queue limit
-    penalty_per_dropped_task = -10  # Define the penalty value per dropped task
+    penalty_per_dropped_task = -0.1  # Define the penalty value per dropped task
     tasks_dropped = params['ls_tasks_dropped']
     penalty_dropped_tasks = tasks_dropped * penalty_per_dropped_task
     
     tasks_in_queue = params['ls_tasks_in_queue']
     current_step = params['ls_current_hour']
     penalty_tasks_queue = 0
-    if current_step % (24*4) >= (23*4):   # Penalty for queued tasks at the end of the day
-        factor_hour = (current_step % (24*4)) / 96 # min = 0.95833, max = 0.98953
+    if current_step % 24 >= 23:   # Penalty for queued tasks at the end of the day
+        factor_hour = (current_step % 24) / 24 # min = 0.95833, max = 0.98953
         factor_hour = (factor_hour - 0.95833) / (0.98935 - 0.95833)
         penalty_tasks_queue = -1.0 * factor_hour * tasks_in_queue/10  # Penalty for each task left in the queue
     
-    if current_step % (24*4) == 0:   # Penalty for queued tasks at the end of the day
+    if current_step % 24 == 0:   # Penalty for queued tasks at the end of the day
         penalty_tasks_queue = -1.0 * tasks_in_queue/10 # Penalty for each task left in the queue
     
-    reward = footprint_reward + penalty_dropped_tasks + penalty_tasks_queue    
+    reward = footprint_reward + penalty_dropped_tasks + penalty_tasks_queue
     return reward
 
 

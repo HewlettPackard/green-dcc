@@ -473,7 +473,7 @@ class CI_Manager():
     def get_current_ci(self):
         # Normalize the carbon_smooth with min=250 and max=870
         min_ci = 600
-        max_ci = 900
+        max_ci = 1000
         return (self.carbon_smooth[self.time_step] - min_ci)/(max_ci - min_ci)
         # return self.carbon_smooth[self.time_step]
         # return self.norm_carbon[self.time_step]
@@ -484,6 +484,7 @@ class CI_Manager():
         else:
             data = self.norm_carbon[self.time_step:self.time_step+steps]
         return data
+    
         
 # Class to manage weather data
 # Where to obtain other weather files:

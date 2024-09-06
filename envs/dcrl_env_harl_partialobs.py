@@ -236,12 +236,13 @@ class DCRL(gym.Env):
         # self.ls_state = np.float32(np.hstack((t_i, ls_s, ci_i_future)))  # for p.o.
         # forecast_weather = self.weather_m.get_forecast_weather(steps=4)
         # self.ls_state = np.float32(np.hstack((ls_s, forecast_weather)))  # for p.o.
-        forecast_weather = self.weather_m.get_forecast_weather(steps=4)
+        forescast_ci = self.ci_m.get_forecast_ci(steps=4*4)
+        forecast_weather = self.weather_m.get_forecast_weather(steps=4*4)
         forecast_workload = self.workload_m.get_n_forecast_workload(n=4)
         self.ls_state = np.float32(np.hstack((t_i,
                                               ls_s,
-                                              forecast_weather,
-                                              ci_i_future[:4],
+                                              forecast_weather[::4],
+                                              forescast_ci[::4],
                                               forecast_workload
                                               )))  # for p.o.
         
@@ -355,12 +356,13 @@ class DCRL(gym.Env):
         
         # ls_state -> [time (sine/cosine enconded), original ls observation (current_utilization_after_action, tasks_in_queue/queue_max_len), current+future normalized CI]
         # self.ls_state = np.float32(np.hstack((t_i, self.ls_state, ci_i_future)))  # for p.o.
-        forecast_weather = self.weather_m.get_forecast_weather(steps=4)
+        forescast_ci = self.ci_m.get_forecast_ci(steps=4*4)
+        forecast_weather = self.weather_m.get_forecast_weather(steps=4*4)
         forecast_workload = self.workload_m.get_n_forecast_workload(n=4)
         self.ls_state = np.float32(np.hstack((t_i,
                                               self.ls_state,
-                                              forecast_weather,
-                                              ci_i_future[:4],
+                                              forecast_weather[::4],
+                                              forescast_ci[::4],
                                               forecast_workload
                                               )))  # for p.o.
         

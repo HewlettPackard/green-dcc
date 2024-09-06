@@ -7,39 +7,36 @@ class RBCBaselines:
         self.datacenters = env.datacenters
         self.datacenter_ids = list(self.datacenters.keys())
 
-    def equal_workload_distribution(self):
-        """Distribute the workload equally between datacenters."""
+    def fair_workload_distribution(self):
+        """Distribute workloads in a way that minimizes deviation across datacenters."""
         
-        # Step 1: Determine the datacenter with the minimum workload
+        # Get current workloads
         workloads = [self.datacenters[dc].workload_m.get_current_workload() for dc in self.datacenters]
-        min_workload_index = np.argmin(workloads)
         
-        # Step 2: Create action array representing the percentage of workload to move
-        actions = np.zeros(3)
-        
-        # Iterate through data centers and transfer workload to the one with the minimum workload
-        for i, workload in enumerate(workloads):
-            if i == min_workload_index:
-                continue  # Skip the receiver
+        # Calculate average workload
+        avg_workload = sum(workloads) / len(workloads)
 
-            # Determine the workload to transfer from DC i to the receiver
-            workload_to_move = workload - workloads[min_workload_index]
-            
-            # Action direction and magnitude for each possible transfer
-            if i == 0 and min_workload_index == 1:
-                actions[0] = workload_to_move / workload  # Transfer from DC1 to DC2
-            elif i == 0 and min_workload_index == 2:
-                actions[1] = workload_to_move / workload  # Transfer from DC1 to DC3
-            elif i == 1 and min_workload_index == 0:
-                actions[0] = -workload_to_move / workload  # Transfer from DC2 to DC1
-            elif i == 1 and min_workload_index == 2:
-                actions[2] = workload_to_move / workload  # Transfer from DC2 to DC3
-            elif i == 2 and min_workload_index == 0:
-                actions[1] = -workload_to_move / workload  # Transfer from DC3 to DC1
-            elif i == 2 and min_workload_index == 1:
-                actions[2] = -workload_to_move / workload  # Transfer from DC3 to DC2
-        
-        # Ensure actions are within the expected range [-1, 1]
+        actions = np.zeros(3)
+
+        # Transfer workload to datacenters with workloads below the average
+        for i in range(len(workloads)):
+            for j in range(len(workloads)):
+                if i != j:
+                    workload_to_move = workloads[i] - avg_workload
+                    if workload_to_move > 0:
+                        if i == 0 and j == 1:
+                            actions[0] = workload_to_move / workloads[i]
+                        elif i == 0 and j == 2:
+                            actions[1] = workload_to_move / workloads[i]
+                        elif i == 1 and j == 0:
+                            actions[0] = -workload_to_move / workloads[i]
+                        elif i == 1 and j == 2:
+                            actions[2] = workload_to_move / workloads[i]
+                        elif i == 2 and j == 0:
+                            actions[1] = -workload_to_move / workloads[i]
+                        elif i == 2 and j == 1:
+                            actions[2] = -workload_to_move / workloads[i]
+
         actions = np.clip(actions, -1, 1)
         
         return actions

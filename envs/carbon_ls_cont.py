@@ -106,6 +106,7 @@ class CarbonLoadEnv(gym.Env):
             done (bool): A boolean signaling if the episode has ended.
             info (dict): A dictionary containing additional information about the environment state.
         """
+        
         self.current_hour += 0.25
 
         shiftable_tasks_percentage = self.flexible_workload_ratio
@@ -115,7 +116,7 @@ class CarbonLoadEnv(gym.Env):
         shiftable_tasks     = int(math.floor(self.workload * shiftable_tasks_percentage * 100))
         tasks_dropped = 0  # Track the number of dropped tasks
         
-        action_value = action[0]  # Single continuous action
+        action_value = np.clip(action[0], -1, 1)  # Clip the action to [-1, 1]  # Single continuous action
 
         if action_value < 0:  # Defer tasks
             defer_ratio = abs(action_value)  # Convert the negative action to a positive defer ratio (0 to 1)

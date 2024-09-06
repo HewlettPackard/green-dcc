@@ -14,7 +14,7 @@ from baselines.rbc_baselines import RBCBaselines
 # trainer_single = Algorithm.from_checkpoint('./results/SingleStep/PPO_HeirarchicalDCRLWithHysterisis_59fd7_00000_0_2024-05-14_18-39-53/checkpoint_000350')
 # trainer_multi = Algorithm.from_checkpoint('./results/MultiStep/PPO_HeirarchicalDCRLWithHysterisisMultistep_659f8_00000_0_2024-05-14_18-40-12/checkpoint_005145')
 
-FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_6eae7_00000_0_2024-09-03_19-33-44'
+FOLDER = 'results/PPO/PPO_HeirarchicalDCRL_82458_00000_0_2024-09-04_23-07-51'
 CHECKPOINT_PATH = sorted(glob.glob(FOLDER + '/checkpoint_*'))[-1]
 
 print(f'Loading checkpoing: {CHECKPOINT_PATH}')
@@ -75,7 +75,7 @@ def compare_transfer_actions(actions1, actions2):
 
     return True
 
-max_iterations = 4*24*7
+max_iterations = 4*24*31
 
 # TODO: change the max iterations in the DEFAULT_CONFIG using the parameter max_iterations
 DEFAULT_CONFIG['config1']['days_per_episode'] = int(max_iterations/(4*24))
@@ -85,44 +85,53 @@ DEFAULT_CONFIG['config3']['days_per_episode'] = int(max_iterations/(4*24))
 results_all = []
 
 # Initialize lists to store the 'current_workload' metric
-workload_DC1 = [[], [], [], [], []]
-workload_DC2 = [[], [], [], [], []]
-workload_DC3 = [[], [], [], [], []]
+workload_DC1 = [[], [], [], []]
+workload_DC2 = [[], [], [], []]
+workload_DC3 = [[], [], [], []]
 
 # List to store the energy consumption
-energy_consumption_DC1 = [[], [], [], [], []]
-energy_consumption_DC2 = [[], [], [], [], []]
-energy_consumption_DC3 = [[], [], [], [], []]
+energy_consumption_DC1 = [[], [], [], []]
+energy_consumption_DC2 = [[], [], [], []]
+energy_consumption_DC3 = [[], [], [], []]
 
 # Other lists to store the 'carbon_emissions' metric
-carbon_emissions_DC1 = [[], [], [], [], []]
-carbon_emissions_DC2 = [[], [], [], [], []]
-carbon_emissions_DC3 = [[], [], [], [], []]
+carbon_emissions_DC1 = [[], [], [], []]
+carbon_emissions_DC2 = [[], [], [], []]
+carbon_emissions_DC3 = [[], [], [], []]
 
 # Other lists to store the 'external_temperature' metric
-external_temperature_DC1 = [[], [], [], [], []]
-external_temperature_DC2 = [[], [], [], [], []]
-external_temperature_DC3 = [[], [], [], [], []]
+external_temperature_DC1 = [[], [], [], []]
+external_temperature_DC2 = [[], [], [], []]
+external_temperature_DC3 = [[], [], [], []]
 
 # List to store the water consumption metric
-water_consumption_DC1 = [[], [], [], [], []]
-water_consumption_DC2 = [[], [], [], [], []]
-water_consumption_DC3 = [[], [], [], [], []]
+water_consumption_DC1 = [[], [], [], []]
+water_consumption_DC2 = [[], [], [], []]
+water_consumption_DC3 = [[], [], [], []]
 
 # List to store the carbon intensity of each datacenter
-carbon_intensity_DC1 = [[], [], [], [], []]
-carbon_intensity_DC2 = [[], [], [], [], []]
-carbon_intensity_DC3 = [[], [], [], [], []]
+carbon_intensity_DC1 = [[], [], [], []]
+carbon_intensity_DC2 = [[], [], [], []]
+carbon_intensity_DC3 = [[], [], [], []]
 
 # Another list to store the carbon intensity of each datacenter
 carbon_intensity = []
 
 # 5 Different agents (One-step RL, Multi-step RL, One-step Greedy, Multi-step Greedy, Do nothing)
 
-for i in [0, 1, 2, 3, 4]:
+for i in [0, 1, 2, 3]:
+    if i == 1 or i == 2:
+        # Set the parameter 'max_util' in "DEFAULT_CONFIG" to 0.8 for the greedy optimizer
+        # Otherwise, set the parameter to 1.0
+        DEFAULT_CONFIG['max_util'] = 0.90
+    else:
+        DEFAULT_CONFIG['max_util'] = 1.0
+        
     env = HeirarchicalDCRL(DEFAULT_CONFIG)
+    
     if i == 2 or i == 3:
         rbc_baseline = RBCBaselines(env)
+
     done = False
     obs, _ = env.reset(seed=43)
 
@@ -161,24 +170,24 @@ for i in [0, 1, 2, 3, 4]:
 
                 # Map sender-receiver pairs to the action array indices
                 if sender_idx == 0 and receiver_idx == 1:
-                    actions[0] = 0.9  # Transfer from DC1 to DC2
+                    actions[0] = 1.0  # Transfer from DC1 to DC2
                 elif sender_idx == 0 and receiver_idx == 2:
-                    actions[1] = 0.9  # Transfer from DC1 to DC3
+                    actions[1] = 1.0  # Transfer from DC1 to DC3
                 elif sender_idx == 1 and receiver_idx == 0:
-                    actions[0] = -0.9  # Transfer from DC2 to DC1
+                    actions[0] = -1.0  # Transfer from DC2 to DC1
                 elif sender_idx == 1 and receiver_idx == 2:
-                    actions[2] = 0.9  # Transfer from DC2 to DC3
+                    actions[2] = 1.0  # Transfer from DC2 to DC3
                 elif sender_idx == 2 and receiver_idx == 0:
-                    actions[1] = -0.9  # Transfer from DC3 to DC1
+                    actions[1] = -1.0  # Transfer from DC3 to DC1
                 elif sender_idx == 2 and receiver_idx == 1:
-                    actions[2] = -0.9  # Transfer from DC3 to DC2
+                    actions[2] = -1.0  # Transfer from DC3 to DC2
             elif i == 2:
                 # Multi-step greedy
                 actions = rbc_baseline.multi_step_greedy()
-            elif i == 3:
-                # Equal workload distribution
-                # Use the equal workload distribution method
-                actions = rbc_baseline.equal_workload_distribution()
+            # elif i == 3:
+            #     # Equal workload distribution
+            #     # Use the equal workload distribution method
+            #     actions = rbc_baseline.fair_workload_distribution()
             else:
                 # Do nothing
                 # Continuous action space
@@ -229,9 +238,9 @@ for i in [0, 1, 2, 3, 4]:
     # pbar.close()
 
     print(f'Total reward: {total_reward:.3f}')
-    print(f'Average energy consumption: {(np.mean(energy_consumption_DC1[i]) + np.mean(energy_consumption_DC2[i]) + np.mean(energy_consumption_DC3[i]))/3:.3f} Kwh')
-    print(f'Average carbon emissions: {(np.mean(carbon_emissions_DC1[i]) + np.mean(carbon_emissions_DC2[i]) + np.mean(carbon_emissions_DC3[i]))/3:.3f} MgCO2')
-    print(f'Average water consumption: {(np.mean(water_consumption_DC1[i]) + np.mean(water_consumption_DC2[i]) + np.mean(water_consumption_DC3[i]))/3:.3f} m3')
+    print(f'Average energy consumption: {(np.mean(energy_consumption_DC1[i]) + np.mean(energy_consumption_DC2[i]) + np.mean(energy_consumption_DC3[i])):.3f} Kwh')
+    print(f'Average carbon emissions: {(np.mean(carbon_emissions_DC1[i]) + np.mean(carbon_emissions_DC2[i]) + np.mean(carbon_emissions_DC3[i]))/1e3:.3f} MgCO2')
+    print(f'Average water consumption: {(np.mean(water_consumption_DC1[i]) + np.mean(water_consumption_DC2[i]) + np.mean(water_consumption_DC3[i])):.3f} m3')
 #%%
 # First of all, let's smooth the metrics before plotting.
 # We can smooth the metrics using the moving average method.
@@ -289,13 +298,16 @@ smoothed_carbon_intensity_DC3 = uniform_filter1d(carbon_intensity_DC3, size=win_
 import matplotlib.pyplot as plt
 # Plot the 'current_workload' metric
 # controllers = ['One-step RL', 'Multi-step RL', 'One-step Greedy', 'Multi-step Greedy', 'Do nothing']
-controllers = ['RL', 'One-step Greedy', 'Multi-step Greedy', 'Equal Distributed', 'Do nothing']
+controllers = ['RL', 'One-step Greedy', 'Multi-step Greedy', 'Do nothing']
 
+start_day = 0
+simulated_days = 24
+end = 4*24*(simulated_days+start_day)
 for i in range(len(controllers)):
     plt.figure(figsize=(10, 6))
-    plt.plot(smoothed_workload_DC1[i][:4*24*7]*100, label=dc_location_mapping['DC1'], linestyle='--', linewidth=2, alpha=1)
-    plt.plot(smoothed_workload_DC2[i][:4*24*7]*100, label=dc_location_mapping['DC2'], linestyle='-.', linewidth=2, alpha=0.9)
-    plt.plot(smoothed_workload_DC3[i][:4*24*7]*100, label=dc_location_mapping['DC3'], linestyle='-', linewidth=2, alpha=0.7)
+    plt.plot(smoothed_workload_DC1[i][start_day*24*4:end]*100, label=dc_location_mapping['DC1'], linestyle='--', linewidth=2, alpha=1)
+    plt.plot(smoothed_workload_DC2[i][start_day*24*4:end]*100, label=dc_location_mapping['DC2'], linestyle='-.', linewidth=2, alpha=0.9)
+    plt.plot(smoothed_workload_DC3[i][start_day*24*4:end]*100, label=dc_location_mapping['DC3'], linestyle='-', linewidth=2, alpha=0.7)
     plt.title(f'Current Workload for {controllers[i]} Controller')
     plt.xlabel('Time Step')
     plt.ylabel('Current Workload (%)')
@@ -389,50 +401,147 @@ plt.legend()
 plt.grid('on', linestyle='--', alpha=0.5)
 plt.show()
 
-# %%
+#%%
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
-# Organize the data by agent type
-agent_data = {
-    "RL Agent": {
-        "Total Reward": [653.303, 691.818, 628.551, 617.627, 603.921],
-        "Average Energy Consumption (Kwh)": [268.892, 261.257, 261.902, 272.090, 275.621],
-        "Average Carbon Emissions (MgCO2)": [157786.788, 154413.867, 159954.490, 160911.155, 162111.437],
-        "Average Water Consumption (m3)": [792.488, 765.893, 768.503, 786.667, 782.350]
-    },
-    "Single Step Greedy": {
-        "Total Reward": [312.827, 337.403, 219.580, 206.932, 219.580],
-        "Average Energy Consumption (Kwh)": [347.027, 337.556, 355.307, 359.854, 355.307],
-        "Average Carbon Emissions (MgCO2)": [187604.068, 185451.872, 195770.192, 196877.847, 195770.192],
-        "Average Water Consumption (m3)": [947.795, 918.471, 948.334, 950.352, 948.334]
-    },
-    "Multi Step Greedy": {
-        "Total Reward": [-126.149, -51.072, -239.828, -196.286, -196.286],
-        "Average Energy Consumption (Kwh)": [428.776, 409.079, 438.723, 434.761, 434.761],
-        "Average Carbon Emissions (MgCO2)": [226047.543, 219472.642, 236003.023, 232189.772, 232189.772],
-        "Average Water Consumption (m3)": [1097.301, 1049.803, 1102.135, 1091.683, 1091.683]
-    },
-    "Equally Distributed": {
-        "Total Reward": [583.282, 607.073, 537.161, 545.987, 537.329],
-        "Average Energy Consumption (Kwh)": [270.646, 264.787, 277.266, 277.186, 280.364],
-        "Average Carbon Emissions (MgCO2)": [163918.946, 161835.392, 167957.960, 167185.077, 167943.239],
-        "Average Water Consumption (m3)": [796.941, 774.887, 798.342, 785.642, 790.977]
-    },
-    "Do Nothing": {
-        "Total Reward": [565.175, 502.696, 545.987, 537.329, 537.329],
-        "Average Energy Consumption (Kwh)": [274.301, 280.768, 277.186, 280.364, 280.364],
-        "Average Carbon Emissions (MgCO2)": [165504.682, 170976.241, 167957.960, 167943.239, 167943.239],
-        "Average Water Consumption (m3)": [803.632, 804.786, 798.342, 790.977, 790.977]
-    }
-}
 
-# Calculate mean and std for each agent
-agent_summary_stats = {
-    agent: {metric: {"Mean": np.mean(values), "Std": np.std(values)} for metric, values in metrics.items()}
-    for agent, metrics in agent_data.items()
-}
+from matplotlib import cm
+from matplotlib.colors import Normalize
+import matplotlib.patches as mpatches
 
-# Convert to DataFrame for better visualization
-agent_summary_df = pd.concat({agent: pd.DataFrame(metrics).T for agent, metrics in agent_summary_stats.items()}, axis=1)
+# Configuration parameters
+start_day = 8  # Starting day of the simulation
+simulated_days = 2  # Number of simulated days to plot
+time_in_hours = np.arange(4*24*simulated_days)  # Convert timesteps to hours
 
+# Generate x-axis labels for business days
+time_labels = pd.date_range(start=f'2024-09-{start_day} 13:00', periods=4*24*simulated_days, freq='15min')
+time_labels = time_labels.strftime('%I:%M %p')  # Format as 'Sep 01 - 12:00 AM'
+
+# Set the start and end indices based on start_day and simulated_days
+start_index = 4*24*start_day
+end_index = 4*24*(start_day + simulated_days)
+
+# Set font sizes for paper
+plt.rcParams.update({
+    'font.size': 10,  # Set general font size suitable for NeurIPS papers
+    'axes.titlesize': 10,  # Set title size for each subplot
+    'axes.labelsize': 10,  # Set x and y axis labels size
+    'legend.fontsize': 9,  # Set legend font size
+    'xtick.labelsize': 9,  # Set x-axis tick label size
+    'ytick.labelsize': 9,  # Set y-axis tick label size
+})
+
+# Create a 1x3 subplot (Left, Center, Right) with figure size adjusted for top of A4 paper
+fig, axs = plt.subplots(1, 3, figsize=(11.69, 5), dpi=100)  # Half of A4's height
+
+# --- Left Plot: "Do nothing" controller with workload distribution and Carbon Intensity for each location ---
+axs[0].plot(time_in_hours, smoothed_workload_DC1[3][start_index:end_index] * 100, label=f'{dc_location_mapping["DC1"]} Workload', linestyle='-', linewidth=2, alpha=1)
+axs[0].plot(time_in_hours, smoothed_workload_DC2[3][start_index:end_index] * 100, label=f'{dc_location_mapping["DC2"]} Workload', linestyle='-', linewidth=2, alpha=1)
+axs[0].plot(time_in_hours, smoothed_workload_DC3[3][start_index:end_index] * 100, label=f'{dc_location_mapping["DC3"]} Workload', linestyle='-', linewidth=2, alpha=1)
+axs[0].set_ylabel('Data Center Workload (%)')
+axs[0].set_xlabel('Simulated Time (Hour)')
+axs[0].grid(True, linestyle='--', alpha=0.5)
+axs[0].set_ylim(-1, 101)
+axs[0].set_xlim(0, len(time_in_hours))
+axs[0].set_xticks(np.linspace(0, len(time_labels), 4))
+axs[0].set_xticklabels(time_labels[::48], rotation=0, ha='center')
+
+# Plot Carbon Intensity on secondary y-axis
+ax2 = axs[0].twinx()
+ax2.plot(time_in_hours, smoothed_carbon_intensity_DC1[3][start_index:end_index]/1e3, label=f'{dc_location_mapping["DC1"]} Carbon Intensity', linestyle='--', color='tab:blue', linewidth=1.9, alpha=0.85)
+ax2.plot(time_in_hours, smoothed_carbon_intensity_DC2[3][start_index:end_index]/1e3, label=f'{dc_location_mapping["DC2"]} Carbon Intensity', linestyle='--', color='tab:orange', linewidth=1.9, alpha=0.85)
+ax2.plot(time_in_hours, smoothed_carbon_intensity_DC3[3][start_index:end_index]/1e3, label=f'{dc_location_mapping["DC3"]} Carbon Intensity', linestyle='--', color='tab:green', linewidth=1.9, alpha=0.85)
+ax2.set_ylabel('Carbon Intensity (gCO2/Wh)')
+ax2.legend(loc='lower center', bbox_to_anchor=(0.8, -0.5))
+
+axs[0].set_title('Scheduled Workload Distribution \n and Carbon Intensity')
+axs[0].legend(loc='lower center', bbox_to_anchor=(0.1, -0.5))
+
+# --- Center Plot: Multi-step Greedy controller with Workload and Total Carbon Emissions ---
+total_carbon_emissions_greedy = (smoothed_carbon_emissions_DC1[2][start_index:end_index] +
+                                 smoothed_carbon_emissions_DC2[2][start_index:end_index] +
+                                 smoothed_carbon_emissions_DC3[2][start_index:end_index]) / 1e6
+
+norm = Normalize(vmin=total_carbon_emissions_greedy.min()*1.05, vmax=total_carbon_emissions_greedy.max() * 1.05)
+cmap = cm.Greys  # Grayscale colormap
+
+# Create a gradient fill based on carbon emissions for each timestep
+for i in range(len(time_in_hours) - 1):
+    axs[1].fill_between(time_in_hours[i:i+2],
+                        0, (np.array(total_carbon_emissions_greedy[i:i+2])*1000-400)/(700-400)*100,
+                        color=cmap(norm(total_carbon_emissions_greedy[i])),
+                        alpha=0.5, zorder=1)  # Set a lower zorder for the background
+
+# Plot the workload on the primary y-axis (axs[1])
+axs[1].plot(time_in_hours, smoothed_workload_DC1[2][start_index:end_index] * 100, label=f'{dc_location_mapping["DC1"]} Workload', linestyle='-', linewidth=2, alpha=1, zorder=3)
+axs[1].plot(time_in_hours, smoothed_workload_DC2[2][start_index:end_index] * 100, label=f'{dc_location_mapping["DC2"]} Workload', linestyle='-', linewidth=2, alpha=1, zorder=3)
+axs[1].plot(time_in_hours, smoothed_workload_DC3[2][start_index:end_index] * 100, label=f'{dc_location_mapping["DC3"]} Workload', linestyle='-', linewidth=2, alpha=1, zorder=3)
+axs[1].set_ylabel('Data Center Workload (%)')
+axs[1].set_xlabel('Simulated Time (Hour)')
+axs[1].set_ylim(-1, 101)
+axs[1].set_xlim(0, len(time_in_hours))
+axs[1].grid(True, linestyle='--', alpha=0.5)
+axs[1].set_xticks(np.linspace(0, len(time_labels), 4))
+axs[1].set_xticklabels(time_labels[::48], rotation=0, ha='center')
+
+# Plot Total Carbon Emissions on the secondary y-axis (ax3)
+ax3 = axs[1].twinx()
+ax3.plot(time_in_hours, total_carbon_emissions_greedy*1000, label='Total Carbon Emissions', linestyle='--', color='black', linewidth=1.5, alpha=0.5, zorder=3)
+ax3.set_ylabel('Total CO2 Emissions (Kg)')
+ax3.set_ylim(0.4*1000, 0.7*1000)
+
+# Create a patch for the gray fill representation
+gray_patch = mpatches.Patch(color='gray', label='CO2 Emissions')
+
+# Add the patches to the legend for the workload and the gray background
+axs[1].set_title('Multi-step Greedy Controller with \n Workload Distribution')
+axs[1].legend(loc='lower center', bbox_to_anchor=(0.2, -0.5))
+ax3.legend(handles=[gray_patch], loc='lower center', bbox_to_anchor=(0.8, -0.4))
+
+# --- Right Plot: High Level Only (HLO) Controller with Workload and Total Carbon Emissions ---
+axs[2].plot(time_in_hours, smoothed_workload_DC1[0][start_index:end_index] * 100, label=f'{dc_location_mapping["DC1"]} Workload', linestyle='-', linewidth=2, alpha=1)
+axs[2].plot(time_in_hours, smoothed_workload_DC2[0][start_index:end_index] * 100, label=f'{dc_location_mapping["DC2"]} Workload', linestyle='-', linewidth=2, alpha=1)
+axs[2].plot(time_in_hours, smoothed_workload_DC3[0][start_index:end_index] * 100, label=f'{dc_location_mapping["DC3"]} Workload', linestyle='-', linewidth=2, alpha=1)
+axs[2].set_ylabel('Data Center Workload (%)')
+axs[2].set_ylim(-1, 101)
+axs[2].set_xlim(0, len(time_in_hours))
+axs[2].set_xlabel('Simulated Time (Hour)')
+axs[2].grid(True, linestyle='--', alpha=0.5)
+axs[2].set_xticks(np.linspace(0, len(time_labels), 4))
+axs[2].set_xticklabels(time_labels[::48], rotation=0, ha='center')
+
+# Plot Total Carbon Emissions on secondary y-axis
+ax4 = axs[2].twinx()
+total_carbon_emissions_hlo = (smoothed_carbon_emissions_DC1[0][start_index:end_index] +
+                              smoothed_carbon_emissions_DC2[0][start_index:end_index] +
+                              smoothed_carbon_emissions_DC3[0][start_index:end_index]) / 1e6
+
+# Create a gradient fill based on carbon emissions for each timestep
+for i in range(len(time_in_hours) - 1):
+    axs[2].fill_between(time_in_hours[i:i+2],
+                        0, (np.array(total_carbon_emissions_hlo[i:i+2])*1000-400)/(700-400)*100,
+                        color=cmap(norm(total_carbon_emissions_hlo[i])),
+                        alpha=0.5, zorder=1)  # Set a lower zorder for the background
+    
+ax4.plot(time_in_hours, total_carbon_emissions_hlo*1000, label='Total Carbon Emissions', linestyle='--', color='black', linewidth=1.5, alpha=0.5, zorder=3)
+ax4.set_ylabel('Total CO2 Emissions (Kg)')
+ax4.set_ylim(0.4*1000, 0.7*1000)
+ax4.legend(handles=[gray_patch], loc='lower center', bbox_to_anchor=(0.8, -0.4))
+
+axs[2].set_title('Hierarchical RL Controller with \n Workload Distribution')
+axs[2].legend(loc='lower center', bbox_to_anchor=(0.2, -0.5))
+
+# Adjust layout for aesthetics
+plt.tight_layout(rect=[0, 0.0, 1, 0.95])  # Leave space at the bottom for text if needed
+
+# Save the figure in PDF in the Figures folder
+plt.savefig('Figures/Workload_CarbonEmissions_Comparison_HLO.pdf', format='pdf')
+# Show the plot
+plt.show()
+
+
+#%%
 
 #%%

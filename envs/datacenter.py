@@ -353,10 +353,13 @@ class DataCenter_ITModel():
         y_intercept = 0.3528 * range_temp + 0.101
         
         # The water usage estimation formula would need to be derived from the graph you provided.
+        # Use an exponential function to make water consumption more aggressive at high wet-bulb temperatures
+        # Apply an exponential scaling factor to the wet-bulb temperature
+        wet_bulb_factor = np.exp(0.1 * (self.wet_bulb_temp - self.cold_water_temp))  # Adjust the base factor as necessary
+
+        norm_water_usage = (0.044 * self.wet_bulb_temp * wet_bulb_factor) + y_intercept
         
-        norm_water_usage = 0.044 * self.wet_bulb_temp + y_intercept
-        
-        water_usage = np.clip(norm_water_usage, 0, None)
+        water_usage = np.clip(norm_water_usage/2, 0, None)
         
         water_usage += water_usage * self.drift_rate  # adjust for drift
 
@@ -440,7 +443,7 @@ def calculate_chiller_power(max_cooling_cap, load, ambient_temp):
 
     return power if oper_part_load_rat > 0 else 0
 
-
+v_air_hist = []
 def calculate_HVAC_power(CRAC_setpoint, avg_CRAC_return_temp, ambient_temp, data_center_full_load, DC_Config, ctafr=None):
     """Calculate the HVAV power attributes
 
@@ -480,7 +483,9 @@ def calculate_HVAC_power(CRAC_setpoint, avg_CRAC_return_temp, ambient_temp, data
     # Reference cooling tower air flow rate
     if ctafr is None:
         ctafr = DC_Config.CT_REFRENCE_AIR_FLOW_RATE
-    CT_Fan_pwr = DC_Config.CT_FAN_REF_P * (min(v_air / ctafr, 1))**3
+    
+    # v_air_hist.append(v_air)
+    CT_Fan_pwr = DC_Config.CT_FAN_REF_P * (min(v_air / 20, 1))**3
     
     # ToDo: exploring the new chiller_power method
     return CRAC_Fan_load, CT_Fan_pwr, CRAC_cooling_load, chiller_power, power_consumed_CW, power_consumed_CT

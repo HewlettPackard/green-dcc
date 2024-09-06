@@ -8,26 +8,63 @@ from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 import glob
 import pickle
 from baselines.rbc_baselines import RBCBaselines
+import os
 #%%
 # Load the checkpoint
-FOLDER = 'results/TrulyPPO/PPO_TrulyHeirarchicalDCRL_e153d_00000_0_2024-09-04_00-23-16'
+FOLDER = 'results/TrulyPPO/PPO_TrulyHeirarchicalDCRL_5ab0f_00000_0_2024-09-05_17-14-48'
 CHECKPOINT_PATH = sorted(glob.glob(FOLDER + '/checkpoint_*'))[-1]
 
-print(f'Loading checkpoint: {CHECKPOINT_PATH}')
+# Function to load policy state from the policy folder
+def load_policy_state(policy_folder):
+    with open(os.path.join(policy_folder, 'policy_state.pkl'), 'rb') as f:
+        return pickle.load(f)
+
+# Load the policy states from their respective folders
+high_level_policy_state = load_policy_state(CHECKPOINT_PATH + '/policies/high_level_policy')
+DC1_ls_policy_state = load_policy_state(CHECKPOINT_PATH + '/policies/DC1_ls_policy')
+DC2_ls_policy_state = load_policy_state(CHECKPOINT_PATH + '/policies/DC2_ls_policy')
+DC3_ls_policy_state = load_policy_state(CHECKPOINT_PATH + '/policies/DC3_ls_policy')
+
+# Load the algorithm state (if needed)
+algorithm_state_path = os.path.join(CHECKPOINT_PATH, 'algorithm_state.pkl')
+with open(algorithm_state_path, 'rb') as f:
+    algorithm_state = pickle.load(f)
+
+# Initialize the policies from the saved states
 trainer = Algorithm.from_checkpoint(CHECKPOINT_PATH)
 
-# Access policies
+# Create a dictionary to hold the policies initialized from the saved states
 policies = {
-    "high_level_policy": trainer.get_policy("high_level_policy"),
-    "DC1_ls_policy": trainer.get_policy("DC1_ls_policy"),
-    "DC2_ls_policy": trainer.get_policy("DC2_ls_policy"),
-    "DC3_ls_policy": trainer.get_policy("DC3_ls_policy"),
+    "high_level_policy": trainer.get_policy("high_level_policy").from_state(high_level_policy_state),
+    "DC1_ls_policy": trainer.get_policy("DC1_ls_policy").from_state(DC1_ls_policy_state),
+    "DC2_ls_policy": trainer.get_policy("DC2_ls_policy").from_state(DC2_ls_policy_state),
+    "DC3_ls_policy": trainer.get_policy("DC3_ls_policy").from_state(DC3_ls_policy_state),
 }
 
 # Set the models to evaluation mode (for PyTorch)
 for policy_name, policy in policies.items():
     if hasattr(policy.model, 'eval'):
         policy.model.eval()
+
+print("Policies successfully loaded from states and set to evaluation mode.")
+        
+# CHECKPOINT_PATH = sorted(glob.glob(FOLDER + '/checkpoint_*'))[-1]
+
+# print(f'Loading checkpoint: {CHECKPOINT_PATH}')
+# trainer = Algorithm.from_checkpoint(CHECKPOINT_PATH)
+
+# # Access policies
+# policies = {
+#     "high_level_policy": trainer.get_policy("high_level_policy"),
+#     "DC1_ls_policy": trainer.get_policy("DC1_ls_policy"),
+#     "DC2_ls_policy": trainer.get_policy("DC2_ls_policy"),
+#     "DC3_ls_policy": trainer.get_policy("DC3_ls_policy"),
+# }
+
+# # Set the models to evaluation mode (for PyTorch)
+# for policy_name, policy in policies.items():
+#     if hasattr(policy.model, 'eval'):
+#         policy.model.eval()
 #%%
 dc_location_mapping = {
     'DC1': DEFAULT_CONFIG['config1']['location'].upper(),
@@ -51,10 +88,15 @@ strategies = {
     0: "PPO Agent",
     1: "One-step Greedy",
     2: "Multi-step Greedy",
-    3: "Equal Workload Distribution",
-    4: "Do Nothing"
+    3: "Do Nothing"
 }
 #%%
+# Function to clip the action values within the dictionary
+def clip_actions(action_dict, low=-1, high=1):
+    for key, transfer_action in action_dict.items():
+        transfer_action['workload_to_move'] = np.clip(transfer_action['workload_to_move'], low, high)
+    return action_dict
+
 results_all = []
 
 for strategy_id, strategy_name in strategies.items():
@@ -101,6 +143,13 @@ for strategy_id, strategy_name in strategies.items():
                     "DC2_ls_policy": policies["DC2_ls_policy"].compute_single_action(obs["DC2_ls_policy"], explore=False)[0],
                     "DC3_ls_policy": policies["DC3_ls_policy"].compute_single_action(obs["DC3_ls_policy"], explore=False)[0],
                 }
+                
+                # Make sure the actions are within the expected range [-1, 1]
+                actions["high_level_policy"] = np.clip(actions["high_level_policy"], -1, 1)
+                actions["DC1_ls_policy"] = np.clip(actions["DC1_ls_policy"], -1, 1)
+                actions["DC2_ls_policy"] = np.clip(actions["DC2_ls_policy"], -1, 1)
+                actions["DC3_ls_policy"] = np.clip(actions["DC3_ls_policy"], -1, 1)
+                
             elif strategy_id == 1:  # One-step Greedy
                 hier_obs = env.get_original_observation()
                 ci = [hier_obs[dc]['ci'] for dc in env.datacenters]
@@ -110,17 +159,17 @@ for strategy_id, strategy_name in strategies.items():
                 receiver_idx = np.argmin(ci)
 
                 if sender_idx == 0 and receiver_idx == 1:
-                    high_level_action[0] = 1.0  # Transfer from DC1 to DC2
+                    high_level_action[0] = 0.8  # Transfer from DC1 to DC2
                 elif sender_idx == 0 and receiver_idx == 2:
-                    high_level_action[1] = 1.0  # Transfer from DC1 to DC3
+                    high_level_action[1] = 0.8  # Transfer from DC1 to DC3
                 elif sender_idx == 1 and receiver_idx == 0:
-                    high_level_action[0] = -1.0  # Transfer from DC2 to DC1
+                    high_level_action[0] = -0.8  # Transfer from DC2 to DC1
                 elif sender_idx == 1 and receiver_idx == 2:
-                    high_level_action[2] = 1.0  # Transfer from DC2 to DC3
+                    high_level_action[2] = 0.8  # Transfer from DC2 to DC3
                 elif sender_idx == 2 and receiver_idx == 0:
-                    high_level_action[1] = -1.0  # Transfer from DC3 to DC1
+                    high_level_action[1] = -0.8  # Transfer from DC3 to DC1
                 elif sender_idx == 2 and receiver_idx == 1:
-                    high_level_action[2] = -1.0  # Transfer from DC3 to DC2
+                    high_level_action[2] = -0.8  # Transfer from DC3 to DC2
                 
                 actions = {
                     "high_level_policy": high_level_action,
@@ -130,14 +179,6 @@ for strategy_id, strategy_name in strategies.items():
                 }
             elif strategy_id == 2:  # Multi-step Greedy
                 high_level_action = rbc_baseline.multi_step_greedy()
-                actions = {
-                    "high_level_policy": high_level_action,
-                    "DC1_ls_policy": np.array([0], dtype=np.float32),
-                    "DC2_ls_policy": np.array([0], dtype=np.float32),
-                    "DC3_ls_policy": np.array([0], dtype=np.float32),
-                }
-            elif strategy_id == 3:  # Equal Workload Distribution
-                high_level_action = rbc_baseline.equal_workload_distribution()
                 actions = {
                     "high_level_policy": high_level_action,
                     "DC1_ls_policy": np.array([0], dtype=np.float32),
@@ -190,9 +231,9 @@ for strategy_id, strategy_name in strategies.items():
     
     print(f'Strategy: {strategy_name}')
     print(f'Total reward: {total_reward:.3f}')
-    print(f'Average energy consumption: {(np.mean(metrics["energy_consumption_DC1"]) + np.mean(metrics["energy_consumption_DC2"]) + np.mean(metrics["energy_consumption_DC3"]))/3:.3f} Kwh')
-    print(f'Average carbon emissions: {(np.mean(metrics["carbon_emissions_DC1"]) + np.mean(metrics["carbon_emissions_DC2"]) + np.mean(metrics["carbon_emissions_DC3"]))/3:.3f} MgCO2')
-    print(f'Average water consumption: {(np.mean(metrics["water_consumption_DC1"]) + np.mean(metrics["water_consumption_DC2"]) + np.mean(metrics["water_consumption_DC3"]))/3:.3f} m3')
+    print(f'Average energy consumption: {(np.mean(metrics["energy_consumption_DC1"]) + np.mean(metrics["energy_consumption_DC2"]) + np.mean(metrics["energy_consumption_DC3"])):.3f} Kwh')
+    print(f'Average carbon emissions: {(np.mean(metrics["carbon_emissions_DC1"]) + np.mean(metrics["carbon_emissions_DC2"]) + np.mean(metrics["carbon_emissions_DC3"]))/1e3:.3f} MgCO2')
+    print(f'Average water consumption: {(np.mean(metrics["water_consumption_DC1"]) + np.mean(metrics["water_consumption_DC2"]) + np.mean(metrics["water_consumption_DC3"])):.3f} m3')
 
 #%%
 import numpy as np
@@ -203,7 +244,8 @@ from scipy.ndimage import uniform_filter1d
 win_size = 8
 
 # Define controllers/strategies names
-controllers = ['RL', 'One-step Greedy', 'Multi-step Greedy', 'Equal Distributed', 'Do nothing']
+# controllers = ['RL', 'One-step Greedy', 'Multi-step Greedy', 'Equal Distributed', 'Do nothing']
+controllers = ['RL', 'Do nothing']
 
 # Assuming `results_all` is a list of metrics dictionaries, where each element corresponds to a different strategy
 for strategy_idx, metrics in enumerate(results_all):
@@ -214,20 +256,20 @@ for strategy_idx, metrics in enumerate(results_all):
     smoothed_metrics = {key: uniform_filter1d(value, size=win_size) for key, value in metrics_np.items()}
 
     # Plot the original workload vs shifted workload
-    plt.figure(figsize=(10, 6))
-    plt.plot(smoothed_metrics["original_workload_DC1"][:4*24*7] * 100, label=f'Original {dc_location_mapping["DC1"]}', linestyle='--', linewidth=2, alpha=1)
-    plt.plot(smoothed_metrics["shifted_workload_DC1"][:4*24*7] * 100, label=f'Shifted {dc_location_mapping["DC1"]}', linestyle='-', linewidth=2, alpha=0.7)
-    plt.plot(smoothed_metrics["original_workload_DC2"][:4*24*7] * 100, label=f'Original {dc_location_mapping["DC2"]}', linestyle='--', linewidth=2, alpha=0.9)
-    plt.plot(smoothed_metrics["shifted_workload_DC2"][:4*24*7] * 100, label=f'Shifted {dc_location_mapping["DC2"]}', linestyle='-', linewidth=2, alpha=0.6)
-    plt.plot(smoothed_metrics["original_workload_DC3"][:4*24*7] * 100, label=f'Original {dc_location_mapping["DC3"]}', linestyle='--', linewidth=2, alpha=0.8)
-    plt.plot(smoothed_metrics["shifted_workload_DC3"][:4*24*7] * 100, label=f'Shifted {dc_location_mapping["DC3"]}', linestyle='-', linewidth=2, alpha=0.5)
-    plt.title(f'Original vs Shifted Workload for {controllers[strategy_idx]} Controller')
-    plt.xlabel('Time Step')
-    plt.ylabel('Workload (%)')
-    plt.legend()
-    plt.grid('on', linestyle='--', alpha=0.5)
-    plt.ylim(-10, 111)
-    plt.show()
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(smoothed_metrics["original_workload_DC1"][:4*24*7] * 100, label=f'Original {dc_location_mapping["DC1"]}', linestyle='--', linewidth=2, alpha=1)
+    # plt.plot(smoothed_metrics["shifted_workload_DC1"][:4*24*7] * 100, label=f'Shifted {dc_location_mapping["DC1"]}', linestyle='-', linewidth=2, alpha=0.7)
+    # plt.plot(smoothed_metrics["original_workload_DC2"][:4*24*7] * 100, label=f'Original {dc_location_mapping["DC2"]}', linestyle='--', linewidth=2, alpha=0.9)
+    # plt.plot(smoothed_metrics["shifted_workload_DC2"][:4*24*7] * 100, label=f'Shifted {dc_location_mapping["DC2"]}', linestyle='-', linewidth=2, alpha=0.6)
+    # plt.plot(smoothed_metrics["original_workload_DC3"][:4*24*7] * 100, label=f'Original {dc_location_mapping["DC3"]}', linestyle='--', linewidth=2, alpha=0.8)
+    # plt.plot(smoothed_metrics["shifted_workload_DC3"][:4*24*7] * 100, label=f'Shifted {dc_location_mapping["DC3"]}', linestyle='-', linewidth=2, alpha=0.5)
+    # plt.title(f'Original vs Shifted Workload for {controllers[strategy_idx]} Controller')
+    # plt.xlabel('Time Step')
+    # plt.ylabel('Workload (%)')
+    # plt.legend()
+    # plt.grid('on', linestyle='--', alpha=0.5)
+    # plt.ylim(-10, 111)
+    # plt.show()
 
     # # Plot energy consumption for each strategy
     # plt.figure(figsize=(10, 6))
@@ -241,17 +283,17 @@ for strategy_idx, metrics in enumerate(results_all):
     # plt.grid('on', linestyle='--', alpha=0.5)
     # plt.show()
 
-    # # Plot carbon emissions for each strategy
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(smoothed_metrics["carbon_emissions_DC1"][:4*24*7] / 1e6, label=dc_location_mapping['DC1'], linestyle='--', linewidth=2, alpha=1)
-    # plt.plot(smoothed_metrics["carbon_emissions_DC2"][:4*24*7] / 1e6, label=dc_location_mapping['DC2'], linestyle='-.', linewidth=2, alpha=0.9)
-    # plt.plot(smoothed_metrics["carbon_emissions_DC3"][:4*24*7] / 1e6, label=dc_location_mapping['DC3'], linestyle='-', linewidth=2, alpha=0.7)
-    # plt.title(f'Carbon Emissions for {controllers[strategy_idx]} Controller')
-    # plt.xlabel('Time Step')
-    # plt.ylabel('Carbon Emissions (MgCO2)')
-    # plt.legend()
-    # plt.grid('on', linestyle='--', alpha=0.5)
-    # plt.show()
+    # Plot carbon emissions for each strategy
+    plt.figure(figsize=(10, 6))
+    plt.plot(smoothed_metrics["carbon_emissions_DC1"][:4*24*7] / 1e6, label=dc_location_mapping['DC1'], linestyle='--', linewidth=2, alpha=1)
+    plt.plot(smoothed_metrics["carbon_emissions_DC2"][:4*24*7] / 1e6, label=dc_location_mapping['DC2'], linestyle='-.', linewidth=2, alpha=0.9)
+    plt.plot(smoothed_metrics["carbon_emissions_DC3"][:4*24*7] / 1e6, label=dc_location_mapping['DC3'], linestyle='-', linewidth=2, alpha=0.7)
+    plt.title(f'Carbon Emissions for {controllers[strategy_idx]} Controller')
+    plt.xlabel('Time Step')
+    plt.ylabel('Carbon Emissions (MgCO2)')
+    plt.legend()
+    plt.grid('on', linestyle='--', alpha=0.5)
+    plt.show()
 
 # # Plot carbon intensity for each datacenter for the first strategy as an example
 # plt.figure(figsize=(10, 6))

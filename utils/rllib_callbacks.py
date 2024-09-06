@@ -139,32 +139,56 @@ class CustomMetricsCallback(DefaultCallbacks):
     def on_episode_start(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
         # Initialize the cumulative CFP for the episode
         episode.user_data["cumulative_cfp"] = 0.0
+        episode.user_data["cumulative_water"] = 0
         episode.user_data["steps"] = 0  # To count the number of steps in the episode
+        episode.user_data["dropped_tasks"] = 0  # To count the number of dropped tasks
 
     def on_episode_step(self, *, worker, base_env, episode, **kwargs) -> None:
         # This is called at every step to update the CFP metric
+        # if hasattr(base_env, 'vector_env'):
+        #     metrics = base_env.vector_env.envs[0].metrics
+        # else:
+        #     metrics = base_env.envs[0].metrics
+        
+        # cfp = 0
+        # dropped_tasks = 0
+        # for dc in metrics:
+        #     cfp += sum(metrics[dc]['bat_CO2_footprint']) / 1e6  # Summing up the CFP from all data centers
+        #     dropped_tasks += sum(metrics[dc]['ls_tasks_dropped'])
+        
+        # # Accumulate CFP and increment the step count
+        # episode.user_data["cumulative_cfp"] += cfp
+        # episode.user_data["dropped_tasks"] += dropped_tasks
+        episode.user_data["steps"] += 1
+
+    def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
+        # Calculate the average CFP per step in the episode
         if hasattr(base_env, 'vector_env'):
             metrics = base_env.vector_env.envs[0].metrics
         else:
             metrics = base_env.envs[0].metrics
         
         cfp = 0
+        water = 0
+        dropped_tasks = 0
         for dc in metrics:
-            cfp += sum(metrics[dc]['bat_CO2_footprint']) / 1e6  # Summing up the CFP from all data centers
-        
-        # Accumulate CFP and increment the step count
-        episode.user_data["cumulative_cfp"] += cfp
-        episode.user_data["steps"] += 1
-
-    def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
-        # Calculate the average CFP per step in the episode
+            cfp += np.mean(metrics[dc]['bat_CO2_footprint']) / 1e3  # Summing up the CFP from all data centers
+            water += np.mean(metrics[dc]['dc_water_usage'])
+            dropped_tasks += sum(metrics[dc]['ls_tasks_dropped'])
+            
         if episode.user_data["steps"] > 0:
-            average_cfp = episode.user_data["cumulative_cfp"] / episode.user_data["steps"]
+            average_cfp = cfp
+            total_dropped_tasks = dropped_tasks
+            average_water = water
         else:
             average_cfp = 0.0
+            total_dropped_tasks = 0
+            average_water = 0
         
         # Record the average CFP in custom metrics
         episode.custom_metrics['custom_metrics/average_CFP'] = average_cfp
+        episode.custom_metrics['custom_metrics/total_dropped_tasks'] = total_dropped_tasks
+        episode.custom_metrics['custom_metrics/average_water_usage'] = average_water
     # def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
     #     if hasattr(base_env, 'vector_env'):
     #         metrics = base_env.vector_env.envs[0].metrics            
