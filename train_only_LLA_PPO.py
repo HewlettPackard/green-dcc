@@ -4,7 +4,7 @@ import os
 import ray
 from ray import air, tune
 from ray.rllib.algorithms.ppo import PPO, PPOConfig
-from gymnasium.spaces import Discrete, Box
+from gymnasium.spaces import Discrete, Box, MultiDiscrete
 from ray.rllib.algorithms.ppo import PPOConfig
 
 from envs.lla_env import LLADCRL
@@ -12,11 +12,11 @@ from envs.heirarchical_env_cont import HeirarchicalDCRL, DEFAULT_CONFIG
 from utils.create_trainable import create_wrapped_trainable
 from utils.rllib_callbacks import CustomMetricsCallback
 
+# NUM_WORKERS = 1
 NUM_WORKERS = 8
-NAME = "LLAPPO"
-RESULTS_DIR = './results/'
 
-# Dummy env to get obs and action space
+NAME = "LLAPPO/MultiDiscrete"
+RESULTS_DIR = './results/'
 
 CONFIG = (
         PPOConfig()
@@ -30,35 +30,41 @@ CONFIG = (
             )
         .training(
             gamma=0.99,
-            lr=1e-4,
+            lr=1e-5,
             kl_coeff=0.2,
             clip_param=0.2,
-            grad_clip = 0.5,
-            entropy_coeff=0.02,
+            grad_clip = 2.0,
+            entropy_coeff=0.00001,
             use_gae=True,
-            train_batch_size=4096,
+            train_batch_size=2048,
             sgd_minibatch_size=128,
-            num_sgd_iter=25,
+            num_sgd_iter=5,
             model={'fcnet_hiddens': [64, 64]}
         )
         .multi_agent(
         policies={
             "DC1_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (18,)),
-                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                Box(-100.0, 100.0, (26,)),
+                # Discrete(3),
+                # Box(low=-1.0, high=1.0, shape=(1,)),
+                MultiDiscrete([3, 3]),
                 PPOConfig()
             ),
             "DC2_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (18,)),
-                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                Box(-100.0, 100.0, (26,)),
+                # Discrete(3),
+                # Box(low=-1.0, high=1.0, shape=(1,)),
+                MultiDiscrete([3, 3]),
                 PPOConfig()
             ),
             "DC3_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (18,)),
-                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                Box(-100.0, 100.0, (26,)),
+                # Discrete(3),
+                # Box(low=-1.0, high=1.0, shape=(1,)),
+                MultiDiscrete([3, 3]),
                 PPOConfig()
             ),
         },
@@ -72,7 +78,8 @@ CONFIG = (
 
 if __name__ == "__main__":
     os.environ["RAY_DEDUP_LOGS"] = "0"
-    # ray.init(local_mode=True, ignore_reinit_error=True)
+    
+    # ray.init(local_mode=True)
     ray.init(num_cpus=NUM_WORKERS+1, ignore_reinit_error=True)
     
     tune.Tuner(

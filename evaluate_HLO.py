@@ -464,7 +464,7 @@ total_carbon_emissions_greedy = (smoothed_carbon_emissions_DC1[2][start_index:en
                                  smoothed_carbon_emissions_DC2[2][start_index:end_index] +
                                  smoothed_carbon_emissions_DC3[2][start_index:end_index]) / 1e6
 
-norm = Normalize(vmin=total_carbon_emissions_greedy.min()*1.05, vmax=total_carbon_emissions_greedy.max() * 1.05)
+norm = Normalize(vmin=total_carbon_emissions_greedy.min()*0.99, vmax=total_carbon_emissions_greedy.max() * 1.1)
 cmap = cm.Greys  # Grayscale colormap
 
 # Create a gradient fill based on carbon emissions for each timestep
@@ -537,7 +537,7 @@ axs[2].legend(loc='lower center', bbox_to_anchor=(0.2, -0.5))
 plt.tight_layout(rect=[0, 0.0, 1, 0.95])  # Leave space at the bottom for text if needed
 
 # Save the figure in PDF in the Figures folder
-plt.savefig('Figures/Workload_CarbonEmissions_Comparison_HLO.pdf', format='pdf')
+# plt.savefig('Figures/Workload_CarbonEmissions_Comparison_HLO.pdf', format='pdf')
 # Show the plot
 plt.show()
 

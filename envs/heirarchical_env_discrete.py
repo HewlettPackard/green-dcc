@@ -27,12 +27,15 @@ DEFAULT_CONFIG = {
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc3.json',
         'datacenter_capacity_mw' : 1.0,
+        'flexible_load': 0.6,
         'timezone_shift': 8,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
-        'debug': True,
+        'debug': False,
+        'initialize_queue_at_reset': True,
+
         },
 
     # DC2
@@ -43,12 +46,15 @@ DEFAULT_CONFIG = {
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc2.json',
         'datacenter_capacity_mw' : 1.0,
+        'flexible_load': 0.6,
         'timezone_shift': 0,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
-        'debug': True,
+        'debug': False,
+        'initialize_queue_at_reset': True,
+
         },
 
     # DC3
@@ -59,12 +65,15 @@ DEFAULT_CONFIG = {
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
+        'flexible_load': 0.6,
         'timezone_shift': 16,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
-        'debug': True,
+        'debug': False,
+        'initialize_queue_at_reset': True,
+        
         },
     
     # Number of transfers per step

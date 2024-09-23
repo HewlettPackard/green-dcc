@@ -11,6 +11,7 @@ from gymnasium.spaces import Dict, Box, Discrete
 from envs.dcrl_env_harl_partialobs import DCRL
 from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 from utils.low_level_wrapper import LowLevelActorRLLIB, LowLevelActorHARL
+from utils.utils_cf import get_init_day
 
 warnings.filterwarnings(
     action="ignore",
@@ -24,16 +25,20 @@ DEFAULT_CONFIG = {
         'location': 'ny',
         'cintensity_file': 'NY_NG_&_avgCI.csv',
         'weather_file': 'USA_NY_New.York-LaGuardia.epw',
-        'workload_file': 'Alibaba_CPU_Data_Hourly_2.csv',
-        'dc_config_file': 'dc_config_dc1.json',
+        'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
+        'dc_config_file': 'dc_config_dc3.json',
         'datacenter_capacity_mw' : 1.0,
+        'flexible_load': 0.6,
         'timezone_shift': 8,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
+        'initialize_queue_at_reset': True,
+        'agents': ['agent_ls'],
         'workload_baseline': -0.1,
+
         },
 
     # DC2
@@ -44,6 +49,7 @@ DEFAULT_CONFIG = {
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
+        'flexible_load': 0.6,
         'timezone_shift': 0,
         'month': 7,
         'days_per_episode': 30,
@@ -51,6 +57,10 @@ DEFAULT_CONFIG = {
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
         'workload_baseline': 0.2,
+        'initialize_queue_at_reset': True,
+        'agents': ['agent_ls'],
+        'workload_baseline': 0.2,
+
         },
 
     # DC3
@@ -58,23 +68,27 @@ DEFAULT_CONFIG = {
         'location': 'ca',
         'cintensity_file': 'CA_NG_&_avgCI.csv',
         'weather_file': 'USA_CA_San.Jose-Mineta.epw',
-        'workload_file': 'GoogleClusteData_CPU_Data_Hourly_1.csv',
+        'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
+        'flexible_load': 0.6,
         'timezone_shift': 16,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
+        'initialize_queue_at_reset': True,
+        'agents': ['agent_ls'],
         'workload_baseline': -0.2,
+
         },
     
     # Number of transfers per step
     'num_transfers': 2,
 
     # List of active low-level agents
-    'active_agents': ['agent_dc'],
+    'active_agents': [''],
 
     # config for loading trained low-level agents
     'low_level_actor_config': {
@@ -90,7 +104,6 @@ DEFAULT_CONFIG = {
         }
     },
 }
-
 class HeirarchicalDCRL(gym.Env):
 
     def __init__(self, config: dict = DEFAULT_CONFIG):
@@ -116,19 +129,11 @@ class HeirarchicalDCRL(gym.Env):
             config['active_agents']
             )
         
-        # self.lower_level_actor = LowLevelActorRLLIB(
-        #     config['low_level_actor_config'], 
-        #     config['active_agents']
-        #     )
-        
+
         # Set max episode steps
         self._max_episode_steps = 4 * 24 * DEFAULT_CONFIG['config1']['days_per_episode']
         self.max_episode_steps = 4 * 24 * DEFAULT_CONFIG['config1']['days_per_episode']
-        # Add the spec attribute with max_episode_steps
-        # self.spec = gym.spec(
-        #     id="HeirarchicalDCRL-v0",
-        #     max_episode_steps=self._max_episode_steps
-        # )
+
 
         # Define observation and action space
         # List of observations that we get from each DC
@@ -143,11 +148,7 @@ class HeirarchicalDCRL(gym.Env):
             'predicted_ci'
             # 'available_capacity'
         ]
-        # # This is the observation for each DC
-        # self.dc_observation_space = Dict({obs: Box(-2, 2) for obs in self.observations})
-        
-        # # Observation space for this environment
-        # self.observation_space = Dict({dc: self.dc_observation_space for dc in self.datacenters})
+
         
         # Number of datacenters
         num_dcs = len(self.datacenters)
@@ -166,13 +167,13 @@ class HeirarchicalDCRL(gym.Env):
         # Define continuous action space with three variables for transfers
         self.action_space = Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32) # DC1-DC2, DC1-DC3, DC2-DC3
         
-        # self.min_energy_consumption = 10e9
-        # self.max_energy_consumption = 0
-        # self.mean_energy_consumption = 715
-        # self.std_energy_consumption = 200
+        self.base_month  = config['config1']['month']
+        self.init_day = get_init_day(self.base_month)
+        self.ranges_day = [max(0, self.init_day - 7), min(364, self.init_day + 7)]
+        
         self.energy_stats = []
 
-    def reset(self, seed=0, options=None):
+    def reset(self, seed=None, options=None):
         
         # Set seed if we are not in rllib
         if seed is not None:
@@ -186,9 +187,12 @@ class HeirarchicalDCRL(gym.Env):
         self.heir_obs = {}
         self.flat_obs = []
 
+        random_init_day  = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1])) # self.init_day 
+        random_init_hour = random.randint(0, 23)
+        
         # Reset environments and store initial observations and infos
         for env_id, env in self.datacenters.items():
-            obs, info, _ = env.reset()
+            obs, info, _ = env.reset(random_init_day, random_init_hour)
             self.low_level_observations[env_id] = obs
             self.low_level_infos[env_id] = info
             
@@ -363,7 +367,7 @@ class HeirarchicalDCRL(gym.Env):
             'time_of_day_sin': dc.t_m.get_time_of_day()[0],
             'time_of_day_cos': dc.t_m.get_time_of_day()[1],
 
-            'predicted_ci': dc.ci_m.get_forecast_ci(steps=1),
+            'predicted_ci': dc.ci_m.get_forecast_ci(),
             'available_capacity': available_capacity
 
         }
@@ -484,7 +488,7 @@ class HeirarchicalDCRL(gym.Env):
         reward = 0
         for dc in self.low_level_infos:
             carbon_footprint = self.low_level_infos[dc]['agent_bat']['bat_CO2_footprint']
-            water_usage = self.low_level_infos[dc]['agent_dc']['dc_water_usage']
+            # water_usage = self.low_level_infos[dc]['agent_dc']['dc_water_usage']
             # self.energy_stats.append(water_usage)
             # normalized_energy_consumption = self.normalize_energy_consumption(energy_consumption)
             standarized_energy_consumption = self.standarize_energy_consumption(carbon_footprint)

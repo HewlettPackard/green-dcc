@@ -1,7 +1,19 @@
 # File where the rewards are defined
+import numpy as np
 
 bat_dcload = []
-bat_footprint = []
+# bat_footprint is a dictionary that stores the CO2 footprint of each data center
+# The key is the data center location and the value is a list of CO2 footprints
+bat_footprint = {}
+norm_cfp_values = {'ny': {'mean': 53174, 'std': 14873},
+                   'ca': {'mean': 49973, 'std': 17429},
+                   'az': {'mean': 142121, 'std': 48681},
+}
+
+norm_energy_values = {'ny': {'mean': 173, 'std': 45},
+                      'ca': {'mean': 170, 'std': 49},
+                      'az': {'mean': 234, 'std': 78},
+    }
 def default_ls_reward(params: dict) -> float:
     """
     Calculates a reward value based on normalized load shifting.
@@ -15,38 +27,31 @@ def default_ls_reward(params: dict) -> float:
     Returns:
         float: Reward value.
     """
-    # Energy part of the reward
-    # total_energy_with_battery = params['bat_total_energy_with_battery_KWh']
-    total_footprint = params['bat_CO2_footprint']
-    # bat_footprint.append(params['bat_CO2_footprint'])
-    # bat_dcload.append(total_energy_with_battery)
-    # norm_CI = params['norm_CI']
-    # dcload_min = params['bat_dcload_min']
-    # dcload_max = params['bat_dcload_max']
-        
-    # Calculate the reward associted to the energy consumption
-    # norm_net_dc_load = (total_energy_with_battery - dcload_min) / (dcload_max - dcload_min)
-    # footprint = -1.0 * norm_CI * norm_net_dc_load
-    footprint_reward = -1.0 * (total_footprint - 186012) / 140399  # Mean and std reward. Negate to maximize reward and minimize footprint
+    location = params['location']
+    total_energy = params['bat_total_energy_with_battery_KWh']
+    norm_total_energy = (total_energy - norm_energy_values[location]['mean']) / norm_energy_values[location]['std']
+    
+    norm_ci = params['norm_CI']
+    # if location not in bat_footprint:
+        # bat_footprint[location] = []
+    # bat_footprint[location].append(total_energy)
+    
+    footprint_reward = -1.0 * (norm_ci * norm_total_energy / 0.50)  # Mean and std reward. Negate to maximize reward and minimize energy consumption
+    # footprint_reward = -1.0 * (total_CFP - norm_values[location]['mean']) / norm_values[location]['std']  # Mean and std reward. Negate to maximize reward and minimize energy consumption
+    
+    # Overdue Tasks Penalty (scaled)
+    overdue_penalty_scale = 5.0  # Adjust this scaling factor as needed
+    overdue_penalty_bias = 1.0
+    # tasks_overdue_penalty = -overdue_penalty_scale * np.log(params['ls_overdue_penalty'] + 1) # +1 to avoid log(0) and be always negative
+    tasks_overdue_penalty = -overdue_penalty_scale * np.sqrt(params['ls_overdue_penalty']) + overdue_penalty_bias # To have a +1 if the number of overdue tasks is 0, and a negative value otherwise
+    # Oldest Task Age Penalty
+    age_penalty_scale = 0.5  # Adjust this scaling factor as needed
+    tasks_age_penalty = -age_penalty_scale * params['ls_oldest_task_age']  # Assume normalized between 0 and 1
 
-    # Penalize the agent for each task that was dropped due to queue limit
-    penalty_per_dropped_task = -0.1  # Define the penalty value per dropped task
-    tasks_dropped = params['ls_tasks_dropped']
-    penalty_dropped_tasks = tasks_dropped * penalty_per_dropped_task
-    
-    tasks_in_queue = params['ls_tasks_in_queue']
-    current_step = params['ls_current_hour']
-    penalty_tasks_queue = 0
-    if current_step % 24 >= 23:   # Penalty for queued tasks at the end of the day
-        factor_hour = (current_step % 24) / 24 # min = 0.95833, max = 0.98953
-        factor_hour = (factor_hour - 0.95833) / (0.98935 - 0.95833)
-        penalty_tasks_queue = -1.0 * factor_hour * tasks_in_queue/10  # Penalty for each task left in the queue
-    
-    if current_step % 24 == 0:   # Penalty for queued tasks at the end of the day
-        penalty_tasks_queue = -1.0 * tasks_in_queue/10 # Penalty for each task left in the queue
-    
-    reward = footprint_reward + penalty_dropped_tasks + penalty_tasks_queue
-    return reward
+    # Total Reward
+    total_reward = footprint_reward + tasks_overdue_penalty + tasks_age_penalty
+
+    return total_reward
 
 
 def default_dc_reward(params: dict) -> float:
