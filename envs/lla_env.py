@@ -7,6 +7,7 @@ from tensorboardX import SummaryWriter
 class LLADCRL(HeirarchicalDCRL, MultiAgentEnv):
 
     def __init__(self, config):
+        # super(LLADCRL, self).__init__(config)
         HeirarchicalDCRL.__init__(self, config)
         MultiAgentEnv.__init__(self)
         self.writer = SummaryWriter("logs_single")
@@ -36,7 +37,7 @@ class LLADCRL(HeirarchicalDCRL, MultiAgentEnv):
         # Prepare high-level obs and rewards
         obs = {}
         rewards = {}
-        rewards['high_level_policy'] = self.calc_reward()
+        # rewards['high_level_policy'] = self.calc_reward()
 
         # Low-level obs and rewards
         for dc in self.datacenter_ids:

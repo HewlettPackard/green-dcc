@@ -363,7 +363,7 @@ class HeirarchicalDCRL(gym.Env):
             'time_of_day_sin': dc.t_m.get_time_of_day()[0],
             'time_of_day_cos': dc.t_m.get_time_of_day()[1],
 
-            'predicted_ci': dc.ci_m.get_forecast_ci(steps=1),
+            'predicted_ci': dc.ci_m.get_forecast_ci(),
             'available_capacity': available_capacity
 
         }
@@ -479,18 +479,26 @@ class HeirarchicalDCRL(gym.Env):
 
         self.datacenters[sender].dc_env.set_workload_hysterisis(cost_of_moving_mw)
         self.datacenters[receiver].dc_env.set_workload_hysterisis(cost_of_moving_mw)
+    
 
+    
     def calc_reward(self) -> float:
-        reward = 0
+        # I need to normalize the reward with respect of the sum of the CFP in all DCs
+        total_carbon_footprint = 0
         for dc in self.low_level_infos:
             carbon_footprint = self.low_level_infos[dc]['agent_bat']['bat_CO2_footprint']
-            water_usage = self.low_level_infos[dc]['agent_dc']['dc_water_usage']
+            total_carbon_footprint += carbon_footprint
+            # water_usage = self.low_level_infos[dc]['agent_dc']['dc_water_usage']
             # self.energy_stats.append(water_usage)
             # normalized_energy_consumption = self.normalize_energy_consumption(energy_consumption)
-            standarized_energy_consumption = self.standarize_energy_consumption(carbon_footprint)
+            # print(f'Normalize the carbon footprint with the CI in each DC')
+            # print(f'Carbon footprint: {carbon_footprint}')
+            # standarized_energy_consumption = self.standarize_energy_consumption(carbon_footprint)
             # standarized_water_usage = -1.0 * ((water_usage - 782) / 578)
             
-            reward += standarized_energy_consumption #+  0*standarized_water_usage
+            # reward += standarized_energy_consumption #+  0*standarized_water_usage
+        # print(f'Total carbon footprint: {total_carbon_footprint}')
+        reward = -1.0 * ((total_carbon_footprint - 190000) / 150000)
         return reward
 
 

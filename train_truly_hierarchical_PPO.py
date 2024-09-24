@@ -30,41 +30,42 @@ CONFIG = (
             num_rollout_workers=NUM_WORKERS,
             )
         .training(
-            lr=1e-6,
+            gamma=0.99,
+            lr=1e-5,
             kl_coeff=0.2,
             clip_param=0.2,
-            grad_clip = 0.5,
-            entropy_coeff=0.02,
+            grad_clip = 2.0,
+            entropy_coeff=0.00001,
             use_gae=True,
-            train_batch_size=8192,
+            train_batch_size=2048,
             sgd_minibatch_size=128,
-            num_sgd_iter=25,
-            model={'fcnet_hiddens': [128, 128]}
+            num_sgd_iter=5,
+            model={'fcnet_hiddens': [64, 64]}
         )
         .multi_agent(
         policies={
             "high_level_policy": (
                 None,
-                hdcrl_env.observation_space,
+                Box(-100.0, 100.0, (45,)),
                 hdcrl_env.action_space,
                 PPOConfig().training(gamma=0.9)  # High-level policy gamma
             ),
             "DC1_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (18,)),
-                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                Box(-100.0, 100.0, (26,)),
+                Box(low=-1.0, high=1.0, shape=(1,)),
                 PPOConfig().training(gamma=0.99)  # DC1_ls_policy gamma
             ),
             "DC2_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (18,)),
-                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                Box(-100.0, 100.0, (26,)),
+                Box(low=-1.0, high=1.0, shape=(1,)),
                 PPOConfig().training(gamma=0.99)  # DC2_ls_policy gamma
             ),
             "DC3_ls_policy": (
                 None,
-                Box(-1.0, 1.0, (18,)),
-                Box(-1.0, 1.0, (1,)),  # New continuous action space [-1, 1]
+                Box(-100.0, 100.0, (26,)),
+                Box(low=-1.0, high=1.0, shape=(1,)),
                 PPOConfig().training(gamma=0.99)  # DC3_ls_policy gamma
             ),
         },
@@ -72,13 +73,13 @@ CONFIG = (
         )
         .callbacks(CustomMetricsCallback)
         .resources(num_gpus=0)
-        .debugging(seed=43)
+        .debugging(seed=42)
     )
 
 
 if __name__ == "__main__":
     os.environ["RAY_DEDUP_LOGS"] = "0"
-    # ray.init(local_mode=True, ignore_reinit_error=True)
+    # ray.init(local_mode=True)
     ray.init(num_cpus=NUM_WORKERS+1, ignore_reinit_error=True)
     
     tune.Tuner(

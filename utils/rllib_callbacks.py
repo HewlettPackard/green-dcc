@@ -135,7 +135,7 @@ class HierarchicalDCRL_Callback(DefaultCallbacks):
         episode.custom_metrics["runningstats/ax2"] = ax2
         episode.custom_metrics["runningstats/ax3"] = ax3
 
-class CustomMetricsCallback(DefaultCallbacks):
+class CustomMetricsCallback_deprecated(DefaultCallbacks):
     def on_episode_start(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
         # Initialize the cumulative CFP for the episode
         episode.user_data["cumulative_cfp"] = 0.0
@@ -144,21 +144,7 @@ class CustomMetricsCallback(DefaultCallbacks):
         episode.user_data["dropped_tasks"] = 0  # To count the number of dropped tasks
 
     def on_episode_step(self, *, worker, base_env, episode, **kwargs) -> None:
-        # This is called at every step to update the CFP metric
-        # if hasattr(base_env, 'vector_env'):
-        #     metrics = base_env.vector_env.envs[0].metrics
-        # else:
-        #     metrics = base_env.envs[0].metrics
-        
-        # cfp = 0
-        # dropped_tasks = 0
-        # for dc in metrics:
-        #     cfp += sum(metrics[dc]['bat_CO2_footprint']) / 1e6  # Summing up the CFP from all data centers
-        #     dropped_tasks += sum(metrics[dc]['ls_tasks_dropped'])
-        
-        # # Accumulate CFP and increment the step count
-        # episode.user_data["cumulative_cfp"] += cfp
-        # episode.user_data["dropped_tasks"] += dropped_tasks
+        # This is called at every step 
         episode.user_data["steps"] += 1
 
     def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
@@ -189,14 +175,106 @@ class CustomMetricsCallback(DefaultCallbacks):
         episode.custom_metrics['custom_metrics/average_CFP'] = average_cfp
         episode.custom_metrics['custom_metrics/total_dropped_tasks'] = total_dropped_tasks
         episode.custom_metrics['custom_metrics/average_water_usage'] = average_water
-    # def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
-    #     if hasattr(base_env, 'vector_env'):
-    #         metrics = base_env.vector_env.envs[0].metrics            
-    #     else:
-    #         metrics = base_env.envs[0].metrics
-            
-    #     cfp = 0
-    #     for dc in metrics:
-    #         cfp += sum(metrics[dc]['bat_CO2_footprint']) / 1e6
 
-    #     episode.custom_metrics['custom_metrics/CFP']=  cfp
+
+class CustomMetricsCallback(DefaultCallbacks):
+    def on_episode_start(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
+        # Initialize the cumulative metrics for the episode
+        episode.user_data["cumulative_cfp"] = 0.0
+        episode.user_data["cumulative_water"] = 0
+        episode.user_data["steps"] = 0  # To count the number of steps in the episode
+        episode.user_data["dropped_tasks"] = 0  # To count the number of dropped tasks
+        episode.user_data["net_energy_sum"] = 0
+        episode.user_data["ite_power_sum"] = 0
+        episode.user_data["ct_power_sum"] = 0
+        episode.user_data["chiller_power_sum"] = 0
+        episode.user_data["hvac_power_sum"] = 0
+        episode.user_data["total_tasks_in_queue"] = 0
+        episode.user_data["total_tasks_dropped"] = 0
+        episode.user_data["total_tasks_overdue"] = 0
+        episode.user_data["total_computed_tasks"] = 0
+        episode.user_data["hvac_power_on_used"] = []
+
+    def on_episode_step(self, *, worker, base_env, episode, **kwargs) -> None:
+        # This is called at every step
+        episode.user_data["steps"] += 1
+
+    def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs) -> None:
+        # Access the metrics from the environment
+        if hasattr(base_env, 'vector_env'):
+            metrics = base_env.vector_env.envs[0].low_level_infos
+        else:
+            metrics = base_env.envs[0].low_level_infos
+
+        cfp = 0
+        water = 0
+        dropped_tasks = 0
+        net_energy_sum = 0
+        ite_power_sum = 0
+        ct_power_sum = 0
+        chiller_power_sum = 0
+        hvac_power_sum = 0
+        total_tasks_in_queue = 0
+        total_tasks_dropped = 0
+        total_tasks_overdue = 0
+        total_computed_tasks = 0
+        hvac_power_on_used = []
+
+        # Loop through the metrics for each datacenter and aggregate
+        for dc in metrics:
+            cfp += np.sum(metrics[dc]['__common__']['bat_CO2_footprint']) / 1e3  # Summing up the CFP from all data centers
+            water += np.sum(metrics[dc]['__common__']['dc_water_usage'])
+            dropped_tasks += np.sum(metrics[dc]['__common__']['ls_tasks_dropped'])
+            net_energy_sum += np.sum(metrics[dc]['__common__']['bat_total_energy_with_battery_KWh'])  # Assuming this is net energy
+            ite_power_sum += np.sum(metrics[dc]['__common__']['dc_ITE_total_power_kW'])
+            ct_power_sum += np.sum(metrics[dc]['__common__']['dc_CT_total_power_kW'])
+            chiller_power_sum += np.sum(metrics[dc]['__common__']['dc_Compressor_total_power_kW'])
+            hvac_power_sum += np.sum(metrics[dc]['__common__']['dc_HVAC_total_power_kW'])
+            total_tasks_in_queue += np.sum(metrics[dc]['__common__']['ls_tasks_in_queue'])
+            total_tasks_dropped += np.sum(metrics[dc]['__common__']['ls_tasks_dropped'])
+            total_tasks_overdue += np.sum(metrics[dc]['__common__']['ls_overdue_penalty'])  # Overdue tasks represented as a penalty
+            total_computed_tasks += np.sum(metrics[dc]['__common__']['ls_computed_tasks'])  # Number of computed tasks
+
+        # Calculate averages
+        if episode.user_data["steps"] > 0:
+            average_cfp = cfp
+            total_dropped_tasks = dropped_tasks
+            average_water = water
+            average_net_energy = net_energy_sum / episode.user_data["steps"]
+            average_ite_power = ite_power_sum / episode.user_data["steps"]
+            average_ct_power = ct_power_sum / episode.user_data["steps"]
+            average_chiller_power = chiller_power_sum / episode.user_data["steps"]
+            average_hvac_power = hvac_power_sum / episode.user_data["steps"]
+            average_CO2_footprint = cfp / episode.user_data["steps"]
+            PUE = 1 + average_hvac_power / average_ite_power if average_ite_power != 0 else float('inf')
+            if len(hvac_power_on_used) > 0:
+                avg_hvac_power_on_used = np.mean(hvac_power_on_used)
+                max_hvac_power_on_used = np.max(hvac_power_on_used)
+                perc_90_hvac_power_on_used = np.percentile(hvac_power_on_used, 90)
+            else:
+                avg_hvac_power_on_used = max_hvac_power_on_used = perc_90_hvac_power_on_used = 0
+        else:
+            average_cfp = total_dropped_tasks = average_water = 0
+            average_net_energy = average_ite_power = average_ct_power = 0
+            average_chiller_power = average_hvac_power = average_CO2_footprint = 0
+            PUE = float('inf')
+            avg_hvac_power_on_used = max_hvac_power_on_used = perc_90_hvac_power_on_used = 0
+
+        # Log metrics to custom_metrics for RLlib
+        episode.custom_metrics['custom_metrics/average_CFP'] = average_cfp
+        episode.custom_metrics['custom_metrics/total_dropped_tasks'] = total_dropped_tasks
+        episode.custom_metrics['custom_metrics/average_water_usage'] = average_water
+        episode.custom_metrics['custom_metrics/average_net_energy'] = average_net_energy
+        episode.custom_metrics['custom_metrics/average_ITE_power'] = average_ite_power
+        episode.custom_metrics['custom_metrics/average_CT_power'] = average_ct_power
+        episode.custom_metrics['custom_metrics/average_chiller_power'] = average_chiller_power
+        episode.custom_metrics['custom_metrics/average_HVAC_power'] = average_hvac_power
+        episode.custom_metrics['custom_metrics/average_CO2_footprint'] = average_CO2_footprint
+        episode.custom_metrics['custom_metrics/PUE'] = PUE
+        episode.custom_metrics['custom_metrics/average_HVAC_power_on_used'] = avg_hvac_power_on_used
+        episode.custom_metrics['custom_metrics/max_HVAC_power_on_used'] = max_hvac_power_on_used
+        episode.custom_metrics['custom_metrics/percentile_90_HVAC_power_on_used'] = perc_90_hvac_power_on_used
+        episode.custom_metrics['custom_metrics/total_tasks_in_queue'] = total_tasks_in_queue
+        episode.custom_metrics['custom_metrics/total_tasks_dropped'] = total_tasks_dropped
+        episode.custom_metrics['custom_metrics/total_tasks_overdue'] = total_tasks_overdue
+        episode.custom_metrics['custom_metrics/total_computed_tasks'] = total_computed_tasks

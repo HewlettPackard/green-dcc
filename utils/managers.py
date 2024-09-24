@@ -44,8 +44,8 @@ class CoherentNoise:
         """
         steps = np.random.normal(loc=0, scale=self.scale, size=n_steps)
         random_walk = np.cumsum(self.weight * steps)
-        random_walk_scaled = self.base + (random_walk / np.std(random_walk)) * self.desired_std_dev
-        return random_walk_scaled
+        normalized_noise = (random_walk / np.std(random_walk)) * self.desired_std_dev
+        return self.base + normalized_noise
 
 
 # Function to normalize a value v given a minimum and a maximum
@@ -117,16 +117,22 @@ class Time_Manager():
         self.timestep_per_hour = 4
         self.days_per_episode = days_per_episode
         self.timezone_shift = timezone_shift
+        
+        # Calculate the total timesteps for the episode based on init_day
+        self.simulated_total_timesteps = (self.days_per_episode * 24 * self.timestep_per_hour)
+        self.current_timestep = 0
 
-    def reset(self):
-        """Reset time manager to initial day
 
-        Returns:
-            List[float]: Hour and day in sine and cosine form
-        """
-        self.day = self.init_day
-        self.hour = self.timezone_shift
+    def reset(self, init_day=None, init_hour=None):
+        """Reset the time manager to a specific initial day and hour."""
+        self.day = init_day if init_day is not None else self.init_day
+        self.hour = init_hour if init_hour is not None else self.timezone_shift
+
+        # Recalculate the current timestep based on day/hour
+        self.current_timestep = int(self.day * 24 * self.timestep_per_hour + self.hour * self.timestep_per_hour)
+        self.total_timesteps = self.current_timestep + self.simulated_total_timesteps
         return sc_obs(self.hour, self.day)
+
         
     def step(self):
         """Step function for the time maneger
@@ -135,11 +141,13 @@ class Time_Manager():
             List[float]: Current hour and day in sine and cosine form.
             bool: Signal if the episode has reach the end.
         """
+        self.current_timestep += 1
+        self.hour += 1 / self.timestep_per_hour
         if self.hour >= 24:
             self.hour = 0
             self.day += 1
-        self.hour += 1/self.timestep_per_hour
         return self.day, self.hour, sc_obs(self.hour, self.day), self.isterminal()
+    
     
     def isterminal(self):
         """Function to identify terminal state
@@ -147,10 +155,8 @@ class Time_Manager():
         Returns:
             bool: Signals if a state is terminal or not
         """
-        done = False
-        if self.day > self.init_day+self.days_per_episode - 1:
-            done = True
-        return done
+        return self.current_timestep >= self.total_timesteps
+    
     
     def get_time_of_day(self):
         """Get the current time of the day
@@ -172,7 +178,7 @@ class Time_Manager():
 
 # Class to manage CPU workload data
 class Workload_Manager():
-    def __init__(self, workload_filename='', init_day=0, future_steps=4, weight=0.01, desired_std_dev=0.025, timezone_shift=0, debug=False, workload_baseline=0):
+    def __init__(self, workload_filename='', init_day=0, future_steps=4, weight=0.005, desired_std_dev=0.01, timezone_shift=0, debug=False, workload_baseline=0):
         """Manager of the DC workload
 
         Args:
@@ -223,7 +229,19 @@ class Workload_Manager():
         self.original_data = self.cpu_smooth.copy()
                 
         # Initialize CoherentNoise process
-        self.coherent_noise = CoherentNoise(base=self.original_data[0], weight=weight, desired_std_dev=desired_std_dev)
+        self.coherent_noise = CoherentNoise(base=0, weight=weight, desired_std_dev=desired_std_dev)
+
+
+    def smooth_workload(self, window_size=3):
+        """Apply moving average to smooth out workload changes.
+
+        Args:
+            window_size (int): The size of the moving window. Defaults to 3.
+
+        Returns:
+            np.array: Smoothed workload data.
+        """
+        return np.convolve(self.cpu_smooth, np.ones(window_size) / window_size, mode='same')
 
     # Function to return all workload data
     def get_total_wkl(self):
@@ -261,14 +279,17 @@ class Workload_Manager():
         return scaled_arr
 
     # Function to reset the time step and return the workload at the first time step
-    def reset(self):
-        """Reset Workload_Manager
+    def reset(self, init_day=None, init_hour=None):
+        """Reset Workload_Manager to a specific initial day and hour.
+
+        Args:
+            init_day (int, optional): Day to start from. If None, defaults to the initial day set during initialization.
+            init_hour (int, optional): Hour to start from. If None, defaults to 0.
 
         Returns:
-            float: CPU workload at current time step
-            float: Amount of daily flexible workload
+            float: CPU workload at current time step.
         """
-        self.time_step = self.init_day*self.time_steps_day
+        self.time_step = (init_day if init_day is not None else self.init_day) * self.time_steps_day + (init_hour if init_hour is not None else 0) * self.timestep_per_hour
         self.init_time_step = self.time_step
         
         baseline = np.random.random()*0.05 - 0.025
@@ -276,10 +297,13 @@ class Workload_Manager():
         # if debug is true, does not add any noise to the workload data
         if not self.debug:
             # Add noise to the workload data using the CoherentNoise 
-            cpu_data = self.original_data * np.random.uniform(0.9, 1.1, len(self.original_data))
-            cpu_smooth = cpu_data * 0.7 + self.coherent_noise.generate(len(cpu_data)) * 0.3 + baseline
+            cpu_data = self.original_data
+            cpu_smooth = cpu_data + self.coherent_noise.generate(len(cpu_data)) + baseline
             
             self.cpu_smooth = self.scale_array(cpu_smooth)
+            
+            # Apply smoothing method
+            self.cpu_smooth = self.smooth_workload(window_size=4)
             
             num_roll_weeks = np.random.randint(0, 52) # Random roll the workload because is independed on the month, so I am rolling across weeks (52 weeks in a year)
             self.cpu_smooth =  np.clip(np.roll(self.cpu_smooth, num_roll_weeks*self.timestep_per_hour*24*7), 0, 1)
@@ -290,7 +314,9 @@ class Workload_Manager():
         if self.cpu_smooth.max() > 1 or self.cpu_smooth.min() < 0:
             raise ValueError(f"Workload out of bound when reset: MAX:{self.cpu_smooth.max()} - MIN:{self.cpu_smooth.min()}")
         
-        return self.cpu_smooth[self.time_step]
+        self._current_workload = self.cpu_smooth[self.time_step]
+        self._next_workload = self.cpu_smooth[self.time_step + 1]
+        return self._current_workload
         
     # Function to advance the time step and return the workload at the new time step
     def step(self):
@@ -306,39 +332,48 @@ class Workload_Manager():
         if self.time_step - 1 >= len(self.cpu_smooth):
             self.time_step = self.init_time_step
         # assert self.time_step < len(self.cpu_smooth), f'Episode length: {self.time_step} is longer than the provide cpu_smooth: {len(self.cpu_smooth)}'
-        if self.cpu_smooth[max(self.time_step - 1,0)] > 1 or self.cpu_smooth[max(self.time_step - 1,0)] < 0:
-            print(f"Workload: {self.cpu_smooth[max(self.time_step - 1,0)]}")
-        return self.cpu_smooth[max(self.time_step - 1,0)]  # to avoid logical error
+        self._current_workload = self.cpu_smooth[self.time_step]
+        self._next_workload = self.cpu_smooth[self.time_step + 1]
+        
+        # assert self.time_step < len(self.cpu_smooth), f'Episode length: {self.time_step} is longer than the provide cpu_smooth: {len(self.cpu_smooth)}'
+        return self._current_workload  # to avoid logical error
     
     def get_current_workload(self):
-        if self.cpu_smooth[self.time_step] > 1 or self.cpu_smooth[self.time_step] < 0:
-            raise ValueError(f"Workload out of bound when get_current_workload: {self.cpu_smooth[self.time_step]}")        
-        return self.cpu_smooth[self.time_step]
+        if self._current_workload > 1 or self._current_workload < 0:
+            raise ValueError(f"Workload out of bound when get_current_workload: {self._current_workload}")        
+        return self._current_workload
     
     def get_forecast_workload(self):
-        if self.cpu_smooth[self.time_step] > 1 or self.cpu_smooth[self.time_step] < 0:
-            raise ValueError(f"Workload out of bound when get_forecast_workload: {self.cpu_smooth[self.time_step]}")
-        return self.cpu_smooth[self.time_step+1]
+        if self._next_workload > 1 or self._next_workload < 0:
+            raise ValueError(f"Workload out of bound when get_forecast_workload: {self._next_workload}")
+        return self._next_workload
+    
+    def get_next_workload(self):
+        if self._next_workload > 1 or self._next_workload < 0:
+            raise ValueError(f"Workload out of bound when get_forecast_workload: {self._next_workload}")
+        return self._next_workload
     
     def get_n_forecast_workload(self, n):
         if (self.time_step + n) >= len(self.cpu_smooth):
             return self.cpu_smooth[self.init_time_step + (self.time_step + (n-1) - len(self.cpu_smooth))]
         else:
-            return self.cpu_smooth[self.time_step+1:n+self.time_step+1]
+            return self.cpu_smooth[self.time_step+1:self.time_step+1+n]
+    
+    def get_n_next_workloads(self, n):
+        return self.cpu_smooth[self.time_step+1:self.time_step+1+n]
     
     def get_n_step_future_workload(self,n):
         if (self.time_step + n) >= len(self.cpu_smooth):
             return self.cpu_smooth[self.init_time_step + (self.time_step + (n-1) - len(self.cpu_smooth))]
         else:
-            return self.cpu_smooth[self.time_step + n - 1]
-        
+            return self.cpu_smooth[self.time_step + n]
+    
     def set_n_step_future_workload(self,n,workload):
         if (self.time_step + n) >= len(self.cpu_smooth):
             self.cpu_smooth[self.init_time_step + (self.time_step + (n-1) - len(self.cpu_smooth))] = workload
         else:
-            self.cpu_smooth[self.time_step + n - 1] = workload
-            
-    
+            self.cpu_smooth[self.time_step + n] = workload
+
     def set_current_workload(self, workload):
         if workload > 1 or workload < 0:
             raise ValueError(f"Workload out of bound when set_current_workload: {workload}")
@@ -409,7 +444,7 @@ class CI_Manager():
         self.time_step = 0
 
         # Initialize CoherentNoise process
-        self.coherent_noise = CoherentNoise(base=self.original_data[0], weight=weight, desired_std_dev=desired_std_dev)
+        self.coherent_noise = CoherentNoise(base=0, weight=weight, desired_std_dev=desired_std_dev)
         
         self.future_steps = future_steps
         
@@ -423,15 +458,20 @@ class CI_Manager():
         """
         return self.carbon_smooth[self.time_step:]
 
-    def reset(self):
-        """Reset CI_Manager
+    def reset(self, init_day=None, init_hour=None):
+        """Reset CI_Manager to a specific initial day and hour.
+
+        Args:
+            init_day (int, optional): Day to start from. If None, defaults to the initial day set during initialization.
+            init_hour (int, optional): Hour to start from. If None, defaults to 0.
 
         Returns:
-            float: Carbon intensity at current time step
-            float: Normalized carbon intensity at current time step and it's forecast
+            float: Carbon intensity at current time step.
+            float: Normalized carbon intensity at current time step and its forecast.
         """
-        self.time_step = self.init_day*self.time_steps_day
-        
+        self.time_step = (init_day if init_day is not None else self.init_day) * self.time_steps_day + (init_hour if init_hour is not None else 0) * self.timestep_per_hour
+        # print(f'I need to check if I need to add the timeshift here: {self.timezone_shift} in the self.time_step: {self.time_step}')
+
         # Add noise to the carbon data using the CoherentNoise
         self.carbon_smooth = self.original_data + self.coherent_noise.generate(len(self.original_data))
         
@@ -440,13 +480,23 @@ class CI_Manager():
         num_roll_days = np.random.randint(0, 14) # Random roll the workload some days. I can roll the carbon intensity up to 14 days.
         self.carbon_smooth =  np.roll(self.carbon_smooth, num_roll_days*self.timestep_per_hour*24)
 
-        self.min_ci = min(self.carbon_smooth)
-        self.max_ci = max(self.carbon_smooth)
-        self.norm_carbon = normalize(self.carbon_smooth, self.min_ci, self.max_ci)
+        # self.min_ci = min(self.carbon_smooth)
+        # self.max_ci = max(self.carbon_smooth)
+        # self.norm_carbon = normalize(self.carbon_smooth, self.min_ci, self.max_ci)
+        max_30_days = np.max(self.carbon_smooth[self.time_step:30*self.time_steps_day + self.time_step])
+        min_30_days = np.min(self.carbon_smooth[self.time_step:30*self.time_steps_day + self.time_step])
+        self.norm_carbon = (self.carbon_smooth - min_30_days) / (max_30_days - min_30_days)
         # self.norm_carbon = standarize(self.carbon_smooth)
         # self.norm_carbon = (np.clip(self.norm_carbon, -1, 1) + 1) * 0.5
+        
+        self._current_carbon_smooth = self.carbon_smooth[self.time_step]
+        self._next_carbon_smooth = self.carbon_smooth[self.time_step + 1]
+        
+        self._current_norm_carbon = self.norm_carbon[self.time_step]
+        self._next_norm_carbon = self.norm_carbon[self.time_step + 1]
+        self._forecast_norm_carbon = self.norm_carbon[(self.time_step+1):(self.time_step+1)+self.future_steps]
 
-        return self.carbon_smooth[self.time_step], self.norm_carbon[self.time_step:self.time_step+self.future_steps]
+        return self._current_norm_carbon, self._forecast_norm_carbon, self._current_carbon_smooth
     
     # Function to advance the time step and return the carbon intensity at the new time step
     def step(self):
@@ -459,32 +509,37 @@ class CI_Manager():
         self.time_step +=1
         
         # If it tries to read further, restart from the initial index
-        if self.time_step - 1 >= len(self.carbon_smooth):
+        if self.time_step >= len(self.carbon_smooth):
             self.time_step = self.init_day*self.time_steps_day
+            print(f'WARNING, the time_step is greater than the length of the carbon_smooth data. Restarting from the initial day: {self.init_day}')
             
-        # assert self.time_step < len(self.carbon_smooth), 'Eposide length is longer than the provide CI_data'
-        if self.time_step - 1 + self.future_steps > len(self.carbon_smooth):
-            data = self.norm_carbon[self.time_step-1]*np.ones(shape=(self.future_steps))
-        else:
-            data = self.norm_carbon[(self.time_step-1):self.time_step-1+self.future_steps]
+        # # assert self.time_step < len(self.carbon_smooth), 'Eposide length is longer than the provide CI_data'
+        # if self.time_step - 1 + self.future_steps > len(self.carbon_smooth):
+        #     data = self.norm_carbon[self.time_step-1]*np.ones(shape=(self.future_steps))
+        # else:
+        #     data = self.norm_carbon[(self.time_step-1):self.time_step-1+self.future_steps]
+        
+        
+        self._current_carbon_smooth = self.carbon_smooth[self.time_step]
+        self._current_norm_carbon = self.norm_carbon[self.time_step]
+        self._next_norm_carbon = self.norm_carbon[self.time_step + 1]
+        self._forecast_norm_carbon = self.norm_carbon[(self.time_step+1):(self.time_step+1)+self.future_steps]
 
-        return self.carbon_smooth[self.time_step-1], data
-    
+        return self._current_norm_carbon, self._forecast_norm_carbon, self._current_carbon_smooth
+
     def get_current_ci(self):
         # Normalize the carbon_smooth with min=250 and max=870
         min_ci = 600
         max_ci = 1000
-        return (self.carbon_smooth[self.time_step] - min_ci)/(max_ci - min_ci)
+        return (self._current_carbon_smooth - min_ci)/(max_ci - min_ci)
         # return self.carbon_smooth[self.time_step]
         # return self.norm_carbon[self.time_step]
 
-    def get_forecast_ci(self, steps=4):
-        if self.time_step + steps > len(self.carbon_smooth):
-            data = self.norm_carbon[self.time_step]*np.ones(shape=(steps))
-        else:
-            data = self.norm_carbon[self.time_step:self.time_step+steps]
-        return data
+    def get_forecast_ci(self):
+        return self._forecast_norm_carbon
     
+    def get_n_past_ci(self, n):
+        return self.norm_carbon[self.time_step-n:self.time_step]
         
 # Class to manage weather data
 # Where to obtain other weather files:
@@ -576,15 +631,20 @@ class Weather_Manager():
         return self.temperature_data[self.time_step:]
 
     # Function to reset the time step and return the weather at the first time step
-    def reset(self):
-        """Reset Weather_Manager
+    def reset(self, init_day=None, init_hour=None):
+        """Reset Weather_Manager to a specific initial day and hour.
+
+        Args:
+            init_day (int, optional): Day to start from. If None, defaults to the initial day set during initialization.
+            init_hour (int, optional): Hour to start from. If None, defaults to 0.
 
         Returns:
-            float: Temperature a current step
-            float: Normalized temperature a current step
+            tuple: Temperature at current step, normalized temperature at current step, wet bulb temperature at current step, normalized wet bulb temperature at current step.
         """
-        self.time_step = self.init_day*self.time_steps_day
-        
+
+        self.time_step = (init_day if init_day is not None else self.init_day) * self.time_steps_day + (init_hour if init_hour is not None else 0) * self.timestep_per_hour
+        # print(f'WARNING: I need to check if I need to add the timeshift here: {self.timezone_shift} in the self.time_step: {self.time_step}')
+
         # Add noise to the temperature data using the CoherentNoise
         coh_noise = self.coherent_noise.generate(len(self.original_temp_data))
         self.temperature_data = self.original_temp_data + coh_noise
@@ -595,14 +655,24 @@ class Weather_Manager():
         self.wet_bulb_data =  np.roll(self.wet_bulb_data, num_roll_days*self.timestep_per_hour*24)
 
         self.temperature_data = np.clip(self.temperature_data, self.min_temp, self.max_temp)
-        self.norm_temp_data = normalize(self.temperature_data, self.min_temp, self.max_temp)
+        max_30_days = np.max(self.temperature_data[self.time_step:30*self.time_steps_day + self.time_step])
+        min_30_days = np.min(self.temperature_data[self.time_step:30*self.time_steps_day + self.time_step])
+        self.norm_temp_data = (self.temperature_data - min_30_days) / (max_30_days - min_30_days)
         
         self.wet_bulb_data = np.clip(self.wet_bulb_data, self.min_wb_temp, self.max_wb_temp)
-        self.norm_wet_bulb_data = normalize(self.wet_bulb_data, self.min_wb_temp, self.max_wb_temp)
+        max_30_days = np.max(self.wet_bulb_data[self.time_step:30*self.time_steps_day + self.time_step])
+        min_30_days = np.min(self.wet_bulb_data[self.time_step:30*self.time_steps_day + self.time_step])
+        self.norm_wet_bulb_data = (self.wet_bulb_data - min_30_days) / (max_30_days - min_30_days)
 
+        self._current_temp = self.temperature_data[self.time_step]
+        self._next_temp = self.temperature_data[self.time_step + 1]
+        self._current_norm_temp = self.norm_temp_data[self.time_step]
+        self._next_norm_temp = self.norm_temp_data[self.time_step + 1]
+        self._current_wet_bulb = self.wet_bulb_data[self.time_step]
+        self._current_norm_wet_bulb = self.norm_wet_bulb_data[self.time_step]
+        
         # return self.temperature_data[self.time_step], self.norm_temp_data[self.time_step]
-        return (self.temperature_data[self.time_step], self.norm_temp_data[self.time_step],
-                self.wet_bulb_data[self.time_step], self.norm_wet_bulb_data[self.time_step])  # Added wet bulb temp
+        return self._current_temp, self._current_norm_temp, self._current_wet_bulb, self._current_norm_wet_bulb
     
     
     # Function to advance the time step and return the weather at the new time step
@@ -618,22 +688,41 @@ class Weather_Manager():
         # If it tries to read further, restart from the initial index
         if self.time_step - 1 >= len(self.temperature_data):
             self.time_step = self.init_day*self.time_steps_day
-            
+        
+        self._current_temp = self.temperature_data[self.time_step]
+        self._next_temp = self.temperature_data[self.time_step + 1]
+        self._current_norm_temp = self.norm_temp_data[self.time_step]
+        self._next_norm_temp = self.norm_temp_data[self.time_step + 1]
+        self._current_wet_bulb = self.wet_bulb_data[self.time_step]
+        self._current_norm_wet_bulb = self.norm_wet_bulb_data[self.time_step]
+        
         # assert self.time_step < len(self.temperature_data), 'Episode length is longer than the provide Temperature_data'
         # return self.temperature_data[self.time_step], self.norm_temp_data[self.time_step]
-        return (self.temperature_data[self.time_step - 1], self.norm_temp_data[self.time_step - 1],
-                self.wet_bulb_data[self.time_step - 1], self.norm_wet_bulb_data[self.time_step - 1])  # Added wet bulb temp
+        return self._current_temp, self._current_norm_temp, self._current_wet_bulb, self._current_norm_wet_bulb
+
         
     def get_current_weather(self):
         # return self.temperature_data[self.time_step]
-        return self.norm_temp_data[self.time_step]
+        return self._current_norm_temp
+    
+    def get_current_temperature(self):
+        return self._current_norm_temp
     
     def get_forecast_weather(self, steps=4):
         if self.time_step + steps > len(self.temperature_data):
             data = self.norm_temp_data[self.time_step]*np.ones(shape=(steps))
         else:
-            data = self.norm_temp_data[self.time_step:self.time_step+steps]
+            data = self.norm_temp_data[self.time_step+1:self.time_step+1+steps]
         return data
+    
+    def get_next_temperature(self):
+        return self._next_norm_temp
+    
+    def get_n_next_temperature(self, n):
+        return self.norm_temp_data[self.time_step+1:self.time_step+1+n]
+    
+    def get_current_wet_bulb(self):
+        return self._current_wet_bulb
 
 class GeoLag_Workload_Manager(Workload_Manager):
     def __init__(self, workload_filename='', init_day=0, future_steps=4, weight=0.01, desired_std_dev=0.025, timezone_shift=0, sustained_duration : int = 4):
