@@ -318,12 +318,11 @@ class HeirarchicalDCRL(gym.Env):
             self.low_level_rewards[env_id] = rewards
 
             # Update metrics for each environment
-            env_metrics = self.metrics[env_id]
-            env_metrics['bat_CO2_footprint'].append(info['agent_bat']['bat_CO2_footprint'])
-            env_metrics['bat_total_energy_with_battery_KWh'].append(info['agent_bat']['bat_total_energy_with_battery_KWh'])
-            env_metrics['ls_tasks_dropped'].append(info['agent_ls']['ls_tasks_dropped'])
-            env_metrics['dc_water_usage'].append(info['agent_dc']['dc_water_usage'])
-            env_metrics['workload'].append(info['agent_ls']['ls_shifted_workload'])
+            self.metrics[env_id]['bat_CO2_footprint'].append(info['agent_bat']['bat_CO2_footprint'])
+            self.metrics[env_id]['bat_total_energy_with_battery_KWh'].append(info['agent_bat']['bat_total_energy_with_battery_KWh'])
+            self.metrics[env_id]['ls_tasks_dropped'].append(info['agent_ls']['ls_tasks_dropped'])
+            self.metrics[env_id]['dc_water_usage'].append(info['agent_dc']['dc_water_usage'])
+            self.metrics[env_id]['workload'].append(info['agent_ls']['ls_shifted_workload'])
 
         done = any(self.all_done.values())
         return done
@@ -367,7 +366,7 @@ class HeirarchicalDCRL(gym.Env):
             'time_of_day_sin': dc.t_m.get_time_of_day()[0],
             'time_of_day_cos': dc.t_m.get_time_of_day()[1],
 
-            'predicted_ci': dc.ci_m.get_forecast_ci(),
+            'predicted_ci': dc.ci_m.get_forecast_ci()[0],
             'available_capacity': available_capacity
 
         }
