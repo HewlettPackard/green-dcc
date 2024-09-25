@@ -5,9 +5,9 @@ bat_dcload = []
 # bat_footprint is a dictionary that stores the CO2 footprint of each data center
 # The key is the data center location and the value is a list of CO2 footprints
 bat_footprint = {}
-norm_cfp_values = {'ny': {'mean': 53174, 'std': 14873},
-                   'ca': {'mean': 49973, 'std': 17429},
-                   'az': {'mean': 142121, 'std': 48681},
+norm_cfp_values = {'ny': {'mean': 40174, 'std': 13873},
+                   'ca': {'mean': 40973, 'std': 15429},
+                   'az': {'mean': 132121, 'std': 40681},
 }
 
 norm_energy_values = {'ny': {'mean': 173, 'std': 45},
@@ -40,12 +40,13 @@ def default_ls_reward(params: dict) -> float:
     # footprint_reward = -1.0 * (total_CFP - norm_values[location]['mean']) / norm_values[location]['std']  # Mean and std reward. Negate to maximize reward and minimize energy consumption
     
     # Overdue Tasks Penalty (scaled)
-    overdue_penalty_scale = 5.0  # Adjust this scaling factor as needed
-    overdue_penalty_bias = 1.0
+    overdue_penalty_scale = 0.2  # Adjust this scaling factor as needed
+    overdue_penalty_bias = 0.0
     # tasks_overdue_penalty = -overdue_penalty_scale * np.log(params['ls_overdue_penalty'] + 1) # +1 to avoid log(0) and be always negative
     tasks_overdue_penalty = -overdue_penalty_scale * np.sqrt(params['ls_overdue_penalty']) + overdue_penalty_bias # To have a +1 if the number of overdue tasks is 0, and a negative value otherwise
+    
     # Oldest Task Age Penalty
-    age_penalty_scale = 0.5  # Adjust this scaling factor as needed
+    age_penalty_scale = 0.2  # Adjust this scaling factor as needed
     tasks_age_penalty = -age_penalty_scale * params['ls_oldest_task_age']  # Assume normalized between 0 and 1
 
     # Total Reward

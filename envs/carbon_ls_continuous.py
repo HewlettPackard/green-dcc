@@ -44,7 +44,7 @@ class CarbonLoadEnv(gym.Env):
         
         # State: [Sin(h), Cos(h), Sin(day_of_year), Cos(day_of_year), self.ls_state, ci_i_future (n_vars_ci), var_to_LS_energy (n_vars_energy), batSoC (n_vars_battery)], 
         # self.ls_state = [current_workload, queue status]
-        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(26,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(19,), dtype=np.float32)
 
 
         self.global_total_steps = 0
@@ -60,6 +60,9 @@ class CarbonLoadEnv(gym.Env):
         self.queue_max_len = queue_max_len
         self.tasks_queue = deque(maxlen=self.queue_max_len)
         self.initialize_queue_at_reset = initialize_queue_at_reset
+        
+        # Initialize previous computed workload variable
+        self.previous_computed_workload = 0.0
 
     # Calculate task age histogram
     def get_task_age_histogram(self, tasks_queue, current_day, current_hour):
@@ -151,9 +154,14 @@ class CarbonLoadEnv(gym.Env):
                                 average_task_age/24,
                                 task_age_histogram])), dtype=np.float32)
         
+
+        # Initialize previous computed workload to 0 on reset
+        self.previous_computed_workload = 0.0
     
-        info = {"load": self.workload,
-                "action": 0,
+        info = {"ls_original_workload": self.workload,
+                "ls_shifted_workload": self.workload, 
+                "ls_previous_computed_workload": self.previous_computed_workload,
+                "ls_action": 0, 
                 "info_load_left": 0,
                 'ls_queue_max_len': self.queue_max_len,
                 "ls_tasks_dropped": 0,
@@ -285,8 +293,10 @@ class CarbonLoadEnv(gym.Env):
         
         task_age_histogram = self.get_task_age_histogram(self.tasks_queue, self.current_day, self.current_hour)
 
+
         info = {"ls_original_workload": original_workload,
                 "ls_shifted_workload": self.current_utilization, 
+                "ls_previous_computed_workload": self.previous_computed_workload,
                 "ls_action": action, 
                 "ls_norm_load_left": 0,
                 "ls_unasigned_day_load_left": 0,
@@ -304,7 +314,9 @@ class CarbonLoadEnv(gym.Env):
                 'ls_computed_tasks': int(self.current_utilization*100),
                 'ls_task_age_histogram': task_age_histogram,}
 
-
+        # Update the previous computed workload
+        self.previous_computed_workload = self.current_utilization  # This stores the previous timestep's workload
+        
         #Done and truncated are managed by the main class, implement individual function if needed
         truncated = False
         done = False

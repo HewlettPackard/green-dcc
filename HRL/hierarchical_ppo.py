@@ -37,7 +37,6 @@ class HierarchicalPPO:
         self.ll_policy_ids = ll_policy_ids
         
     def select_action(self,state):
-        
         actions = {}
         
         # high level actions
@@ -45,7 +44,7 @@ class HierarchicalPPO:
             self.goal = self.high_policy.select_action(state['high_level_obs'])
         self.action_counter += 1
         
-        actions['high_level_action'] = np.clip(self.goal,-1.0,1.0)
+        actions['high_level_action'] = np.clip(self.goal, -1.0, 1.0)
         
         # mapping the actions from top level policy to the low level policy goal states
         goal_list = []
@@ -55,8 +54,8 @@ class HierarchicalPPO:
         # generating the low level actions
         for i,j,policy in zip(self.ll_policy_ids,goal_list,self.low_policies):
             state_ll = np.concatenate([state['low_level_obs_' + i], j])
-            actions['low_level_action_' + i] = np.clip(policy.select_action(state_ll),-1.0,1.0)
-            
+            actions['low_level_action_' + i] = np.clip(policy.select_action(state_ll), -1.0, 1.0)
+             
         return actions
     
     def decay_action_std(self, action_std_decay_rate, min_action_std):

@@ -135,21 +135,20 @@ class HeirarchicalDCRL(gym.Env):
         self.max_episode_steps  = 4 * 24 * DEFAULT_CONFIG['config1']['days_per_episode']
 
 
-        # Define observation and action space
-        # List of observations that we get from each DC
-        Make the hour unique, not repeated for the 3 DCs
-        'time_of_day_sin',
-        'time_of_day_cos',
+        # Define observation and action space        
+        self.common_observations = [
+            'time_of_day_sin',
+            'time_of_day_cos'
+        ]
         
-        self.observations = [
-            'normalized_ocupacity for the last period',
+        self.unique_observations = [
+            'normalized_ocupacity_last_period',
             'curr_workload',
             'predicted_workload',  # New variable
             'weather',
             'predicted_weather',
             'ci',
             'predicted_ci'
-            # 'available_capacity'
         ]
 
         
@@ -159,7 +158,7 @@ class HeirarchicalDCRL(gym.Env):
         self.max_util = config.get('max_util', 1.0)
 
         # Each observation component has a shape of (1,) so we need to multiply by the number of observations and datacenters
-        observation_dim = len(self.observations) * num_dcs
+        observation_dim = len(self.common_observations) + len(self.unique_observations) * num_dcs
 
         # Define continuous observation space for the flattened observation array
         self.observation_space = Box(
@@ -193,6 +192,7 @@ class HeirarchicalDCRL(gym.Env):
         random_init_day  = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1])) # self.init_day 
         random_init_hour = random.randint(0, 23)
         
+        
         # Reset environments and store initial observations and infos
         for env_id, env in self.datacenters.items():
             obs, info, _ = env.reset(random_init_day, random_init_hour)
@@ -201,6 +201,9 @@ class HeirarchicalDCRL(gym.Env):
             
             self.heir_obs[env_id] = self.get_dc_variables(env_id)
         
+        # Get common variables after reset (the time manager has internally the hour variable)
+        self.heir_obs['__common__'] = self.get_common_variables()
+
         self.start_index_manager = env.workload_m.time_step
         self.simulated_days = env.days_per_episode
         self.total_computed_workload = 0
@@ -229,9 +232,9 @@ class HeirarchicalDCRL(gym.Env):
         # actions[2] -> transfer between DC2 and DC3
 
         # Calculate workload to transfer based on action magnitude and direction
-        transfer_DC1_DC2 = actions[0]
-        transfer_DC1_DC3 = actions[1]
-        transfer_DC2_DC3 = actions[2]
+        transfer_DC1_DC2 = np.clip(actions[0], self.action_space.low[0], self.action_space.high[0])
+        transfer_DC1_DC3 = np.clip(actions[1], self.action_space.low[0], self.action_space.high[0])
+        transfer_DC2_DC3 = np.clip(actions[2], self.action_space.low[0], self.action_space.high[0])
         
         # The transfer is a dictionary of dictionaries with the following structure:
         # 'transfer_0': {'receiver': 1/0, 'sender': 0/1, 'workload_to_move': array([actions[0]])
@@ -283,6 +286,9 @@ class HeirarchicalDCRL(gym.Env):
             for env_id in self.datacenters:
                 self.heir_obs[env_id] = self.get_dc_variables(env_id)
 
+        # Get common variables after reset (the time manager has internally the hour variable)
+        self.heir_obs['__common__'] = self.get_common_variables()
+        
         return self.flatten_observation(self.heir_obs), self.calc_reward(), False, done, {}
 
     def low_level_step(self, actions: dict = {}):
@@ -340,6 +346,15 @@ class HeirarchicalDCRL(gym.Env):
 
         flattened_obs = []
 
+        # First add the common variables
+        for key in self.heir_obs['__common__']:
+            value = self.heir_obs['__common__'][key]
+            if np.isscalar(value):
+                flattened_obs.append(value)
+            else:
+                flattened_obs.extend(np.asarray(value).flatten())
+                
+        # Then add the variables for each datacenter
         for dc_id in sorted(self.datacenters.keys()):  # Ensure consistent order
             dc_obs = observation[dc_id]
             for key in sorted(dc_obs.keys()):  # Ensure consistent order of variables
@@ -349,13 +364,24 @@ class HeirarchicalDCRL(gym.Env):
                 else:
                     flattened_obs.extend(np.asarray(value).flatten())  # Convert to array and flatten
 
-        self.flat_obs = np.array(flattened_obs, dtype=np.float32)
+        self.flat_obs = np.array(flattened_obs, dtype=np.float16)
         return self.flat_obs
     
+    def get_common_variables(self):
+        """
+        Returns the common variables for all datacenters.
+        """
+        time_of_day = self.datacenters['DC1'].t_m.get_time_of_day()
+        return {
+            'time_of_day_sin': time_of_day[0],
+            'time_of_day_cos': time_of_day[1]
+        }
+        
     def get_dc_variables(self, dc_id: str) -> np.ndarray:
         dc = self.datacenters[dc_id]
 
         available_capacity = dc.datacenter_capacity_mw - dc.workload_m.get_current_workload()
+        normalized_ocupacity_last_period = dc.ls_info['ls_previous_computed_workload'] / dc.datacenter_capacity_mw
 
         # TODO: check if the variables are normalized with the same values or with min_max values
         obs = {
@@ -365,19 +391,14 @@ class HeirarchicalDCRL(gym.Env):
             'total_power_kw': self.low_level_infos[dc_id]['agent_dc'].get('dc_total_power_kW', 0),
             'ci': dc.ci_m.get_current_ci(),
             'predicted_workload': dc.workload_m.get_forecast_workload(),
-            # 'predicted_weather': dc.weather_m.get_forecast_weather(steps=1),
-            'time_of_day_sin': dc.t_m.get_time_of_day()[0],
-            'time_of_day_cos': dc.t_m.get_time_of_day()[1],
-
+            'predicted_weather': dc.weather_m.get_forecast_weather(steps=1),
             'predicted_ci': dc.ci_m.get_forecast_ci()[0],
-            'available_capacity': available_capacity
-            'previous workload': dc.workload_m.get_previous_workload()
+            'available_capacity': available_capacity,
+            'normalized_ocupacity_last_period': normalized_ocupacity_last_period
         }
-        
-        obs = {key: np.asarray([val]) for (key, val) in obs.items() if key in self.observations}
-        
-        Remove the time of day
-        Also include the lower level observations
+
+        obs = {key: np.asarray([val]) for (key, val) in obs.items() if key in self.unique_observations}
+
         return obs
 
     def get_original_observation(self) -> dict:
@@ -493,19 +514,19 @@ class HeirarchicalDCRL(gym.Env):
         for dc in self.low_level_infos:
             carbon_footprint = self.low_level_infos[dc]['agent_bat']['bat_CO2_footprint']
             # water_usage = self.low_level_infos[dc]['agent_dc']['dc_water_usage']
-            # self.energy_stats.append(water_usage)
+            # self.energy_stats.append(carbon_footprint)
             # normalized_energy_consumption = self.normalize_energy_consumption(energy_consumption)
-            standarized_energy_consumption = self.standarize_energy_consumption(carbon_footprint)
+            standarized_energy_consumption = self.standarize_carbon_footprint(carbon_footprint)
             # standarized_water_usage = -1.0 * ((water_usage - 782) / 578)
             
             reward += standarized_energy_consumption #+  0*standarized_water_usage
         return reward
 
 
-    def standarize_energy_consumption(self, energy_consumption: float) -> float:
+    def standarize_carbon_footprint(self, carbon_footprint: float) -> float:
         # Negative values to encourage energy saving
-        standard_energy = -1.0 * ((energy_consumption - 190000) / 154173)
-        return standard_energy
+        standard_carbon_footprint = -1.0 * ((carbon_footprint - 95000) / 50000)
+        return standard_carbon_footprint
 
     def normalize_energy_consumption(self, energy_consumption: float) -> float:
         # if energy_consumption < self.min_energy_consumption:

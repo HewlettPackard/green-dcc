@@ -46,25 +46,25 @@ CONFIG = (
         policies={
             "high_level_policy": (
                 None,
-                Box(-100.0, 100.0, (45,)),
+                Box(-100.0, 100.0, (23,)),
                 hdcrl_env.action_space,
                 PPOConfig().training(gamma=0.9)  # High-level policy gamma
             ),
             "DC1_ls_policy": (
                 None,
-                Box(-100.0, 100.0, (26,)),
+                Box(-100.0, 100.0, (19,)),
                 Box(low=-1.0, high=1.0, shape=(1,)),
                 PPOConfig().training(gamma=0.99)  # DC1_ls_policy gamma
             ),
             "DC2_ls_policy": (
                 None,
-                Box(-100.0, 100.0, (26,)),
+                Box(-100.0, 100.0, (19,)),
                 Box(low=-1.0, high=1.0, shape=(1,)),
                 PPOConfig().training(gamma=0.99)  # DC2_ls_policy gamma
             ),
             "DC3_ls_policy": (
                 None,
-                Box(-100.0, 100.0, (26,)),
+                Box(-100.0, 100.0, (19,)),
                 Box(low=-1.0, high=1.0, shape=(1,)),
                 PPOConfig().training(gamma=0.99)  # DC3_ls_policy gamma
             ),

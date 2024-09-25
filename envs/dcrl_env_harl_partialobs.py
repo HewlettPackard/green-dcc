@@ -137,7 +137,7 @@ class DCRL(gym.Env):
         self.bat_reward_method = reward_creator.get_reward_method(bat_reward_method)
         
         n_vars_energy, n_vars_battery = 0, 0  # for partial observability (for p.o.)
-        n_vars_ci = 8
+        n_vars_ci = 32
         self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, flexible_workload_ratio=self.flexible_load,
                                   n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=10000, initialize_queue_at_reset=self.initialize_queue_at_reset)
         self.dc_env, _ = make_dc_pyeplus_env(month=self.month + 1, location=ci_loc, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
@@ -246,8 +246,8 @@ class DCRL(gym.Env):
         # Assemble features
         ci_features = np.array([
                                 ci_mean,
-                                ci_std,
-                                ci_percentile,
+                                # ci_std,
+                                # ci_percentile,
                                 time_to_next_peak/len(ci_values),
                                 time_to_next_valley/len(ci_values),
                             ])
@@ -262,7 +262,7 @@ class DCRL(gym.Env):
             np.ndarray: State of the load shifting environment.
         """
         hour_sin_cos = t_i[:2]
-
+        
         # CI Trend analysis
         trend_smoothing_window = 4
         smoothed_ci_future = np.convolve(np.hstack((current_ci, ci_future[:16])), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
@@ -275,7 +275,7 @@ class DCRL(gym.Env):
         # Extract features for future and past CI
         ci_future_features = self.extract_ci_features(ci_future, current_ci)
         # ci_past_features = self.extract_ci_features(ci_past, current_ci)
-
+        ci_future = [ci_future[3], ci_future[15], ci_future[31]]
         # Assemble CI features
         ci_features = np.hstack([
                         ci_future_slope, ci_past_slope,
@@ -288,26 +288,35 @@ class DCRL(gym.Env):
         # Extract features for the future temperature
         temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
         
+        mean_forecast_temperature = np.mean(next_n_out_temperature) # [mean of next 4 intervals]
         # Assemble temperature features
         temperature_features = np.hstack([
                                         temperature_slope, temperature_features
                                     ])
         
+        temperature_future = [next_n_out_temperature[3], next_n_out_temperature[15], next_n_out_temperature[31]]
+        
+        #workload divided by the capacity
+        workload_capacity = current_workload / self.datacenter_capacity_mw
+        
+        # Previous computed workload
+        previous_computed_workload = self.ls_info['ls_previous_computed_workload']
+        
         # Combine all features into the state
-        ls_state = np.float32(np.hstack((
+        ls_state = np.float16(np.hstack((
                                         hour_sin_cos,
                                         current_ci,
-                                        ci_features,
-                                        oldest_task_age,
-                                        average_task_age,
+                                        ci_future,
                                         queue_status,
                                         current_workload,
-                                        current_out_temperature,
-                                        temperature_features,
-                                        ls_task_age_histogram
-                                    )))
-        if len(ls_state) != 26:
-            print(f'Error: {len(ls_state)}')
+                                        next_workload,
+                                        mean_forecast_temperature, 
+                                        temperature_future,
+                                        ls_task_age_histogram,
+                                        previous_computed_workload
+                                        )))
+        # if len(ls_state) != 26:
+            # print(f'Error: {len(ls_state)}')
             
         # Raise an error if there is a nan in the state
         if np.isnan(ls_state).any():
@@ -415,7 +424,7 @@ class DCRL(gym.Env):
         
         current_out_temperature = self.weather_m.get_current_temperature()
         next_out_temperature = self.weather_m.get_next_temperature()
-        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=16)
+        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=32)
         
         # ls_state -> [time (sine/cosine enconded), original ls observation, current+future normalized CI]
         queue_status = self.ls_info['ls_norm_tasks_in_queue']
@@ -511,7 +520,7 @@ class DCRL(gym.Env):
         average_task_age = self.ls_info['ls_average_task_age']
         ls_task_age_histogram = self.ls_info['ls_task_age_histogram']
         
-        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=16)
+        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=32)
 
         
         self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, norm_temp, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram)
