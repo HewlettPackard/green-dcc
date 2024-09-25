@@ -22,3 +22,6 @@ workload_evaluation.png
 logs_hdcrl/
 logs_single/
 actions.pkl
+HRL_*_logs
+HRL_*_preTrained
+HRL_runs

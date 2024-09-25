@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 import os
-
+from itertools import combinations
 file_path = os.path.abspath(__file__)
 PATH = os.path.split(os.path.dirname(file_path))[0]
 
@@ -75,3 +75,29 @@ def get_init_day(start_month=0):
     
     # Return the day number (0-based)
     return int(init_day/24)
+
+def generate_node_connections(N, E):
+    if len(E) != (len(N) * (len(N) - 1)) // 2:
+        raise ValueError("The number of edges doesn't match the number of node pairs")
+
+    # Dictionary to hold the connections for each node
+    node_connections = {node: [] for node in N}
+
+    # Generate all combinations of node pairs
+    node_pairs = list(combinations(N, 2))
+
+    # Iterate over edges and populate the dictionary
+    for idx, (n1, n2) in enumerate(node_pairs):
+        # Add the edge weight to the corresponding nodes
+        node_connections[n1].append((n2, E[idx]))
+        node_connections[n2].append((n1, E[idx]))
+
+    return node_connections
+        
+
+if __name__ == "__main__":
+    node_connections = generate_node_connections([1, 2, 3],[0.5, -0.6, 0.8])
+    print(node_connections)
+    
+    node_connections = generate_node_connections([1, 2, 3, 4],[0.5, -0.6, 0.8, 1.2, -0.4, 0.9])
+    print(node_connections)
