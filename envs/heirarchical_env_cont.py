@@ -132,14 +132,17 @@ class HeirarchicalDCRL(gym.Env):
 
         # Set max episode steps
         self._max_episode_steps = 4 * 24 * DEFAULT_CONFIG['config1']['days_per_episode']
-        self.max_episode_steps = 4 * 24 * DEFAULT_CONFIG['config1']['days_per_episode']
+        self.max_episode_steps  = 4 * 24 * DEFAULT_CONFIG['config1']['days_per_episode']
 
 
         # Define observation and action space
         # List of observations that we get from each DC
+        Make the hour unique, not repeated for the 3 DCs
+        'time_of_day_sin',
+        'time_of_day_cos',
+        
         self.observations = [
-            'time_of_day_sin',
-            'time_of_day_cos',
+            'normalized_ocupacity for the last period',
             'curr_workload',
             'predicted_workload',  # New variable
             'weather',
@@ -363,17 +366,19 @@ class HeirarchicalDCRL(gym.Env):
             'total_power_kw': self.low_level_infos[dc_id]['agent_dc'].get('dc_total_power_kW', 0),
             'ci': dc.ci_m.get_current_ci(),
             'predicted_workload': dc.workload_m.get_forecast_workload(),
-            'predicted_weather': dc.weather_m.get_forecast_weather(steps=1),
+            # 'predicted_weather': dc.weather_m.get_forecast_weather(steps=1),
             'time_of_day_sin': dc.t_m.get_time_of_day()[0],
             'time_of_day_cos': dc.t_m.get_time_of_day()[1],
 
             'predicted_ci': dc.ci_m.get_forecast_ci(),
             'available_capacity': available_capacity
-
+            'previous workload': dc.workload_m.get_previous_workload()
         }
         
         obs = {key: np.asarray([val]) for (key, val) in obs.items() if key in self.observations}
         
+        Remove the time of day
+        Also include the lower level observations
         return obs
 
     def get_original_observation(self) -> dict:
