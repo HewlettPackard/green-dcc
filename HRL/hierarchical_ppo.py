@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 import numpy as np
 
 file_dir = os.path.dirname(__file__)
@@ -63,13 +64,31 @@ class HierarchicalPPO:
         for policy in self.low_policies:
             policy.decay_action_std(action_std_decay_rate, min_action_std)
             
-    def update(self):
+    # def update(self):
+    #     loss = []
+    #     loss.append(self.high_policy.update())  # do I reduce the update frequency of the high policy? 
+    #     # loss.append(self.high_policy.update()[0])
+    #     # IndexError: too many indices for array: array is 0-dimensional, but 1 were indexed
+    #     for policy in self.low_policies:
+    #         loss.append(policy.update())
+    #     return loss
+    
+    async def async_update(self, policy):
+        result = policy.update()  # Call the original method
+        return result
+    
+    async def update(self):
         loss = []
-        loss.append(self.high_policy.update())  # do I reduce the update frequency of the high policy? 
-        # loss.append(self.high_policy.update()[0])
-        # IndexError: too many indices for array: array is 0-dimensional, but 1 were indexed
-        for policy in self.low_policies:
-            loss.append(policy.update())
+
+        # Create tasks for asynchronous updates
+        high_policy_task = asyncio.create_task(self.async_update(self.high_policy))
+        low_policy_tasks = [asyncio.create_task(self.async_update(policy)) for policy in self.low_policies]
+        # Wait for all tasks to complete
+        await asyncio.gather(high_policy_task, *low_policy_tasks)
+        # Append results to loss list
+        loss.append(high_policy_task.result())
+        loss.extend(task.result() for task in low_policy_tasks)
+        
         return loss
     
     def save(self, hl_checkpoint_path, ll_checkpoint_path):
