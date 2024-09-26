@@ -2,6 +2,7 @@ import os
 import sys
 from datetime import datetime
 import socket
+import asyncio
 import torch
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
@@ -13,7 +14,7 @@ from HRL.hierarchical_ppo import HierarchicalPPO as HRLPPO  # pylint: disable=C0
 from HRL.greendcc_env import GreenDCC_Env  # pylint: disable=C0413
 
 # pylint: disable=C0301,C0303,C0103,C0209
-def main():
+async  def main():
     
     print("============================================================================================")
 
@@ -245,7 +246,8 @@ def main():
                 
             # update PPO agent(s)
             if time_step % update_timestep == 0:
-                ppo_loss = ppo_agent.update()
+                ppo_loss_coroutine   = ppo_agent.update()
+                ppo_loss = await ppo_loss_coroutine
                 writer.add_scalar('high_level_policy_loss', ppo_loss[0], time_step)
                 for i in range(num_ll_policies):
                     writer.add_scalar(f'low_level_policy_{i+1}_loss', ppo_loss[i+1], time_step)
@@ -335,4 +337,4 @@ def main():
 
 if __name__ == '__main__':
 
-    main()
+    asyncio.run(main())
