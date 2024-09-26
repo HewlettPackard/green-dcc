@@ -8,8 +8,13 @@ from envs.heirarchical_env_cont import HeirarchicalDCRL as HierarchicalDCRL # py
 # initialize HierarchicalDCRL with specific modifications from truly_heirarchical_env.py
 class GreenDCC_Env(HierarchicalDCRL):
 
-    def __init__(self,):
-        HierarchicalDCRL.__init__(self)
+    def __init__(self,default_config=None):
+        
+        # update default config where initialize_queue_at_reset is set to False
+        if default_config is not None:
+            HierarchicalDCRL.__init__(self, config=default_config)
+        else:
+            HierarchicalDCRL.__init__(self)
         
         # top level agent obs space is defined inside heirarchical_env_cont.py around L162
         # top level agent action space is defined inside heirarchical_env_cont.py around L168
@@ -61,9 +66,18 @@ class GreenDCC_Env(HierarchicalDCRL):
             obs['low_level_obs_' + dc] = self.low_level_observations[dc]['agent_ls']
             rewards['low_level_rewards_' + dc] = self.low_level_rewards[dc]['agent_ls']
             dones['low_level_done_' + dc] = done
-            infos['low_level_info_' + dc] = {'CO2_footprint_per_step' : self.metrics[dc]['bat_CO2_footprint'],
-                                             'bat_total_energy_with_battery_KWh' : self.metrics[dc]['bat_total_energy_with_battery_KWh'],
-                                             'ls_tasks_dropped': self.metrics[dc]['ls_tasks_dropped'],}
+            infos['low_level_info_' + dc] = {'CO2_footprint_per_step' : self.metrics[dc]['bat_CO2_footprint'][0],
+                                             'bat_total_energy_with_battery_KWh' : self.metrics[dc]['bat_total_energy_with_battery_KWh'][0],
+                                             'Carbon Intensity' : self.datacenters[dc].infos['agent_bat']['bat_avg_CI'],
+                                             'External Temperature' : self.datacenters[dc].infos['agent_dc']['dc_exterior_ambient_temp'],
+                                             'Original Workload' : self.datacenters[dc].infos['agent_ls']['ls_original_workload'],
+                                             'Spatial Shifted Workload' : self.datacenters[dc].infos['agent_ls']['ls_shifted_workload'],
+                                             'Temporal Shifted Workload' : self.datacenters[dc].infos['agent_ls']['ls_shifted_workload'],  # TODO check if this is correct
+                                             'Water Consumption' : self.metrics[dc]['dc_water_usage'][0],
+                                             'Queue Tasks' : self.datacenters[dc].infos['agent_ls']['ls_tasks_in_queue'],
+                                             'Avg Age Task in Queue' : self.datacenters[dc].infos['agent_ls']['ls_average_task_age'],
+                                             'ls_tasks_dropped':self.metrics[dc]['ls_tasks_dropped'][0]
+                                             }
             
         return obs, rewards, dones, infos
         
