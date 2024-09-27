@@ -64,19 +64,21 @@ class GreenDCC_Env(HierarchicalDCRL):
         
         for dc in self.datacenter_ids:
             obs['low_level_obs_' + dc] = self.low_level_observations[dc]['agent_ls']
+            obs['dc_obs_' + dc] = self.low_level_observations[dc]['agent_dc']
             rewards['low_level_rewards_' + dc] = self.low_level_rewards[dc]['agent_ls']
+            rewards['dc_rewards_' + dc] = self.low_level_rewards[dc]['agent_dc']
             dones['low_level_done_' + dc] = done
-            infos['low_level_info_' + dc] = {'CO2_footprint_per_step' : self.metrics[dc]['bat_CO2_footprint'][0],
-                                             'bat_total_energy_with_battery_KWh' : self.metrics[dc]['bat_total_energy_with_battery_KWh'][0],
+            infos['low_level_info_' + dc] = {'CO2_footprint_per_step' : self.datacenters[dc].infos['agent_bat']['bat_CO2_footprint'],
+                                             'bat_total_energy_with_battery_KWh' : self.datacenters[dc].infos['agent_bat']['bat_total_energy_with_battery_KWh'],
                                              'Carbon Intensity' : self.datacenters[dc].infos['agent_bat']['bat_avg_CI'],
                                              'External Temperature' : self.datacenters[dc].infos['agent_dc']['dc_exterior_ambient_temp'],
-                                             'Original Workload' : self.datacenters[dc].infos['agent_ls']['ls_original_workload'],
-                                             'Spatial Shifted Workload' : self.datacenters[dc].infos['agent_ls']['ls_shifted_workload'],
-                                             'Temporal Shifted Workload' : self.datacenters[dc].infos['agent_ls']['ls_shifted_workload'],  # TODO check if this is correct
-                                             'Water Consumption' : self.metrics[dc]['dc_water_usage'][0],
+                                             'Spatial Shifted Workload' : self.datacenters[dc].infos['agent_ls']['ls_original_workload'],
+                                             'Temporal Shifted Workload' : self.datacenters[dc].infos['agent_ls']['ls_shifted_workload'],
+                                             'Water Consumption' : self.datacenters[dc].infos['agent_dc']['dc_water_usage'],
                                              'Queue Tasks' : self.datacenters[dc].infos['agent_ls']['ls_tasks_in_queue'],
                                              'Avg Age Task in Queue' : self.datacenters[dc].infos['agent_ls']['ls_average_task_age'],
-                                             'ls_tasks_dropped':self.metrics[dc]['ls_tasks_dropped'][0]
+                                             'ls_tasks_dropped': self.datacenters[dc].infos['agent_ls']['ls_tasks_dropped'],
+                                             'ls_overdue_penalty':self.datacenters[dc].infos['agent_ls']['ls_overdue_penalty']
                                              }
             
         return obs, rewards, dones, infos
