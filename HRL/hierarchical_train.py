@@ -24,7 +24,7 @@ async  def main():
     hl_has_continuous_action_space = True  # continuous action space
     ll_has_continuous_action_space = True  # continuous action space
 
-    max_ep_len = 1000                   # max timesteps in one episode
+    max_ep_len = 96*30                   # max timesteps in one episode
     max_training_timesteps = int(3e6)   # break training loop if timeteps > max_training_timesteps
 
     print_freq = max_ep_len * 10        # print avg reward in the interval (in num timesteps)
@@ -42,7 +42,7 @@ async  def main():
     ## Note : print/log frequencies should be > than max_ep_len
 
     ################ Hierarchical PPO hyperparameters ################
-    update_timestep = max_ep_len * 4      # update policy every n timesteps
+    update_timestep = max_ep_len // 4      # update policy every n timesteps
     # pylint : disable=C0103
     hl_K_epochs = 50               # update policy for K epochs in one PPO update for high level network
     ll_K_epochs = 50               # update policy for K epochs in one PPO update for low level network
@@ -299,7 +299,13 @@ async  def main():
             ls_tasks_dropped_per_step.append([info[f'low_level_info_{i}']['ls_tasks_dropped'] for i in env.datacenter_ids])
             
             # break; if the episode is over
+            done = done['high_level_done']
             if done:
+                # Calculate the time needed to complete this episode
+                end_time = datetime.now().replace(microsecond=0)
+                
+                print(f'Episode {i_episode} done at timestep {time_step} after {end_time - start_time}')
+                start_time = end_time
                 break
             
         writer.add_scalar('HL Policy Episode Reward', hl_current_ep_reward, i_episode) 
