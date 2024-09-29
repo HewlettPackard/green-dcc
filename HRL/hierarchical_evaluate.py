@@ -199,7 +199,7 @@ def evaluate():  # pylint: disable=missing-function-docstring
             pbar.update(1)
             
             # break; if the episode is over
-            if done:
+            if  done['high_level_done']:
                 env.reset()
         
         i_episode += 1

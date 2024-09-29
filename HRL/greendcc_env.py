@@ -64,9 +64,9 @@ class GreenDCC_Env(HierarchicalDCRL):
         
         for dc in self.datacenter_ids:
             obs['low_level_obs_' + dc] = self.low_level_observations[dc]['agent_ls']
-            obs['dc_obs_' + dc] = self.low_level_observations[dc]['agent_dc']
+            # obs['dc_obs_' + dc] = self.low_level_observations[dc]['agent_dc']
             rewards['low_level_rewards_' + dc] = self.low_level_rewards[dc]['agent_ls']
-            rewards['dc_rewards_' + dc] = self.low_level_rewards[dc]['agent_dc']
+            # rewards['dc_rewards_' + dc] = self.low_level_rewards[dc]['agent_dc']
             dones['low_level_done_' + dc] = done
             infos['low_level_info_' + dc] = {'CO2_footprint_per_step' : self.datacenters[dc].infos['agent_bat']['bat_CO2_footprint'],
                                              'bat_total_energy_with_battery_KWh' : self.datacenters[dc].infos['agent_bat']['bat_total_energy_with_battery_KWh'],
