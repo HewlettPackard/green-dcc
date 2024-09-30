@@ -29,7 +29,7 @@ async  def main():
 
     print_freq = max_ep_len * 10        # print avg reward in the interval (in num timesteps)
     log_freq = max_ep_len * 5           # log avg reward in the interval (in num timesteps)
-    save_model_freq = int(1e4)          # save model frequency (in num timesteps)
+    save_model_freq = print_freq  # int(1e4)          # save model frequency (in num timesteps)
     # best_reward = float('-inf')       # initialize best reward as negative infinity
     print_avg_reward = 0                # initialize average reward
 
@@ -275,8 +275,7 @@ async  def main():
             ls_tasks_dropped_per_step.append([info[f'low_level_info_{i}']['ls_overdue_penalty'] for i in env.datacenter_ids])
 
             # break; if the episode is over
-            done = done['high_level_done']
-            if done:
+            if done['high_level_done']:
                 # Calculate the time needed to complete this episode
                 end_time = datetime.now().replace(microsecond=0)
                 
