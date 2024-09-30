@@ -40,8 +40,8 @@ def default_ls_reward(params: dict) -> float:
     # footprint_reward = -1.0 * (total_CFP - norm_values[location]['mean']) / norm_values[location]['std']  # Mean and std reward. Negate to maximize reward and minimize energy consumption
     
     # Overdue Tasks Penalty (scaled)
-    overdue_penalty_scale = 0.2  # Adjust this scaling factor as needed
-    overdue_penalty_bias = 0.0
+    overdue_penalty_scale = 1.0  # Adjust this scaling factor as needed
+    overdue_penalty_bias = 0.25
     # tasks_overdue_penalty = -overdue_penalty_scale * np.log(params['ls_overdue_penalty'] + 1) # +1 to avoid log(0) and be always negative
     tasks_overdue_penalty = -overdue_penalty_scale * np.sqrt(params['ls_overdue_penalty']) + overdue_penalty_bias # To have a +1 if the number of overdue tasks is 0, and a negative value otherwise
     
