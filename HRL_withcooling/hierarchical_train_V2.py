@@ -2,20 +2,20 @@ import os
 import sys
 from datetime import datetime
 import socket
-import asyncio
 import torch
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
+import torch.multiprocessing as mp
 
 file_dir = os.path.dirname(__file__)
 # append one level upper directory to python path
 sys.path.append(file_dir + '/..')
-from HRL.hierarchical_ppo import HierarchicalPPO as HRLPPO  # pylint: disable=C0413,E0611,E0001
-from HRL.greendcc_env import GreenDCC_Env  # pylint: disable=C0413
+from HRL_withcooling.hierarchical_ppo import HierarchicalPPO as HRLPPO  # pylint: disable=C0413,E0611,E0001
+from HRL_withcooling.greendcc_env import GreenDCC_Env  # pylint: disable=C0413
 
 # pylint: disable=C0301,C0303,C0103,C0209
-async  def main():
-    
+def main():
+
     print("============================================================================================")
 
     ####### initialize environment hyperparameters ######
@@ -23,53 +23,56 @@ async  def main():
 
     hl_has_continuous_action_space = True  # continuous action space
     ll_has_continuous_action_space = True  # continuous action space
+    dc_has_continuous_action_space = False  # discrete action space
 
     max_ep_len = 96*30                   # max timesteps in one episode
     max_training_timesteps = int(3e6)   # break training loop if timeteps > max_training_timesteps
 
-    print_freq = max_ep_len * 10        # print avg reward in the interval (in num timesteps)
-    log_freq = max_ep_len * 5           # log avg reward in the interval (in num timesteps)
-    save_model_freq = int(1e4)          # save model frequency (in num timesteps)
-    # best_reward = float('-inf')       # initialize best reward as negative infinity
-    print_avg_reward = 0                # initialize average reward
-
     action_std = 0.6                    # starting std for action distribution (Multivariate Normal)
     action_std_decay_rate = 0.05        # linearly decay action_std (action_std = action_std - action_std_decay_rate)
-    min_action_std = 0.01                # minimum action_std (stop decay after action_std <= min_action_std)
+    min_action_std = 0.001                # minimum action_std (stop decay after action_std <= min_action_std)
     action_std_decay_freq = int(2.5e5)  # action_std decay frequency (in num timesteps)
     #####################################################
 
-    ## Note : print/log frequencies should be > than max_ep_len
-
     ################ Hierarchical PPO hyperparameters ################
     update_timestep = max_ep_len      # update policy every n timesteps
-    # pylint : disable=C0103
     hl_K_epochs = 5               # update policy for K epochs in one PPO update for high level network
     ll_K_epochs = 5               # update policy for K epochs in one PPO update for low level network
+    dc_K_epochs = 5               # update policy for K epochs in one PPO update for DC network
 
-    eps_clip = 0.2             # clip parameter for PPO
+    eps_clip = 0.25             # clip parameter for PPO
     hl_gamma = 0.90            # discount factor for high level network
     ll_gamma = 0.99            # discount factor for low level network
+    dc_gamma = 0.99            # discount factor for DC network
 
     hl_lr_actor = 0.00003       # learning rate for high level actor network
     hl_lr_critic = 0.0001       # learning rate for high level critic network
     ll_lr_actor = 0.00003       # learning rate for low level actor network(s)
     ll_lr_critic = 0.0001       # learning rate for low level critic network(s)
+    dc_lr_actor = 0.00003       # learning rate for DC actor network(s)
+    dc_lr_critic = 0.0001       # learning rate for DC critic network(s)
 
-    random_seed = 42         # set random seed if required (0 = no random seed)
+    random_seed = 43         # set random seed if required (0 = no random seed)
     #####################################################
 
     print("training environment name : " + env_name)
     env = GreenDCC_Env()
-    
+
+    # Include the HL agent 
     obs_space_hl = env.observation_space_hl
     action_space_hl = env.action_space_hl
+
+    # Include the LL agent
     obs_space_ll = env.observation_space_ll
     action_space_ll = env.action_space_ll
     goal_dim_ll = env.goal_dimension_ll
-    
     num_ll_policies = len(action_space_ll)
 
+    # Include the DC agent
+    obs_space_dc = env.observation_space_dc
+    action_space_dc = env.action_space_dc
+    goal_dim_dc = env.goal_dimension_dc
+    num_dc_policies = len(action_space_dc)
     ###################### logging ######################
 
     #### log files for multiple runs are NOT overwritten
@@ -80,9 +83,9 @@ async  def main():
     log_dir = log_dir + '/' + env_name + '/'
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-
+    # check action randomness
     #### get number of log files in log directory
-    run_num = 0
+    run_num = 10
     current_num_files = next(os.walk(log_dir))[2]
     run_num = len(current_num_files)
 
@@ -107,26 +110,29 @@ async  def main():
     # Add current datetime to checkpoint paths
     current_time_str = datetime.now().strftime('%Y%m%d_%H%M%S')
 
+    # Update the checkpoint paths to include the timestamp
     hl_checkpoint_path = directory + f"HL_PPO_{env_name}_{random_seed}_{run_num_pretrained}_{current_time_str}.pth"
     ll_checkpoint_path = directory + f"LL_PPO_{env_name}_{random_seed}_{run_num_pretrained}_{current_time_str}.pth"
+    dc_checkpoint_path = directory + f"DC_PPO_{env_name}_{random_seed}_{run_num_pretrained}_{current_time_str}.pth"
 
-    print("top level policy save checkpoint path : " + hl_checkpoint_path)
-    print("low level policy save checkpoint path (partial) : " + ll_checkpoint_path)
+    print(f"top level policy save checkpoint path : {hl_checkpoint_path}")
+    print(f"low level policy save checkpoint path (partial) : {ll_checkpoint_path}")
+    print(f"dc policy save checkpoint path (partial) : {dc_checkpoint_path}")
     #####################################################
-    
+
     ############# print all hyperparameters #############
     print("--------------------------------------------------------------------------------------------")
     print("max training timesteps : ", max_training_timesteps)
     print("max timesteps per episode : ", max_ep_len)
-    print("model saving frequency : " + str(save_model_freq) + " timesteps")
-    print("log frequency : " + str(log_freq) + " timesteps")
-    print("printing average reward over episodes in last : " + str(print_freq) + " timesteps")
     print("--------------------------------------------------------------------------------------------")
     print("state space dimension hl policy: ", obs_space_hl)
     print("state space dimension ll policy: ", obs_space_ll)
-    print("goal dimension : ", goal_dim_ll)
+    print("state space dimension dc policy: ", obs_space_dc)
+    print("goal dimension ll: ", goal_dim_ll)
+    print("goal dimension dc: ", goal_dim_dc)
     print("action space dimension hl policy: ", action_space_hl)
     print("action space dimension ll policy: ", action_space_ll)
+    print("action space dimension dc policy: ", action_space_dc)
     print("--------------------------------------------------------------------------------------------")
     if hl_has_continuous_action_space:
         print("Initializing a continuous action space policy for top level agent")
@@ -146,16 +152,23 @@ async  def main():
         print("decay frequency of std of action distribution : " + str(action_std_decay_freq) + " timesteps")
     else:
         print("Initializing a discrete action space Low Level policy/policies")
+    if dc_has_continuous_action_space:
+        print("Initializing a continuous action space policy for DC agent(s)")
+    else:
+        print("Initializing a discrete action space DC agent(s)")
     print("--------------------------------------------------------------------------------------------")
     print("PPO update frequency : " + str(update_timestep) + " timesteps")
     print("PPO K epochs top level : ", hl_K_epochs)
     print("PPO K epochs low level : ", ll_K_epochs)
+    print("PPO K epochs dc : ", dc_K_epochs)
     print("PPO epsilon clip : ", eps_clip)
     print("discount factor (gamma) top level: ", hl_gamma)
     print("discount factor (gamma) low level: ", ll_gamma)
+    print("discount factor (gamma) dc: ", dc_gamma)
     print("--------------------------------------------------------------------------------------------")
-    print("optimizer learning rate actor : ", hl_lr_actor, ll_lr_actor)
-    print("optimizer learning rate critic : ",hl_lr_critic, ll_lr_critic)
+    print("optimizer learning rate actor : ", hl_lr_actor, ll_lr_actor, dc_lr_actor)
+    print("optimizer learning rate critic : ",hl_lr_critic, ll_lr_critic, dc_lr_critic)
+
     if random_seed:
         print("--------------------------------------------------------------------------------------------")
         print("setting random seed to ", random_seed)
@@ -165,23 +178,41 @@ async  def main():
     #####################################################
 
     print("============================================================================================")
-    
+
     ################# training procedure ################
 
-    # initialize a PPO agent
-    ppo_agent = HRLPPO(num_ll_policies=num_ll_policies, 
-                       obs_dim_hl=obs_space_hl.shape[0], obs_dim_ll=[i.shape[0] for i in obs_space_ll],
-                       action_dim_hl=action_space_hl.shape[0], action_dim_ll=[i.shape[0] for i in action_space_ll],
-                       goal_dim_ll=[i for i in goal_dim_ll],
-                       hl_lr_actor=hl_lr_actor, hl_lr_critic=hl_lr_critic, ll_lr_actor=ll_lr_actor, ll_lr_critic=ll_lr_critic,
-                       hl_gamma=hl_gamma, ll_gamma=ll_gamma, hl_K_epochs=hl_K_epochs, ll_K_epochs=ll_K_epochs,
-                       eps_clip=eps_clip,
-                       hl_has_continuous_action_space=hl_has_continuous_action_space, ll_has_continuous_action_space=ll_has_continuous_action_space,
-                       action_std_init=action_std,
-                       high_policy_action_freq = 1,
-                       ll_policy_ids=env.datacenter_ids)
-    
-
+    # initialize a PPO agents
+    ppo_agent = HRLPPO(
+        num_ll_policies=num_ll_policies,
+        num_dc_policies=num_dc_policies,
+        obs_dim_hl=obs_space_hl.shape[0],
+        obs_dim_ll=[i.shape[0] for i in obs_space_ll],
+        obs_dim_dc=[i.shape[0] for i in obs_space_dc],
+        action_dim_hl=action_space_hl.shape[0],
+        action_dim_ll=[i.shape[0] for i in action_space_ll],
+        action_dim_dc=[i.n for i in action_space_dc],  # Use .n for discrete action spaces
+        goal_dim_ll=[i for i in goal_dim_ll],
+        goal_dim_dc=[i for i in goal_dim_dc],
+        hl_lr_actor=hl_lr_actor,
+        hl_lr_critic=hl_lr_critic,
+        ll_lr_actor=ll_lr_actor,
+        ll_lr_critic=ll_lr_critic,
+        dc_lr_actor=dc_lr_actor,
+        dc_lr_critic=dc_lr_critic,
+        hl_gamma=hl_gamma,
+        ll_gamma=ll_gamma,
+        dc_gamma=dc_gamma,
+        hl_K_epochs=hl_K_epochs,
+        ll_K_epochs=ll_K_epochs,
+        dc_K_epochs=dc_K_epochs,
+        eps_clip=eps_clip,
+        hl_has_continuous_action_space=hl_has_continuous_action_space,
+        ll_has_continuous_action_space=ll_has_continuous_action_space,
+        dc_has_continuous_action_space=dc_has_continuous_action_space,
+        action_std_init=action_std,
+        high_policy_action_freq=1,
+        ll_policy_ids=env.datacenter_ids
+    )
 
     # track total training time
     start_time = datetime.now().replace(microsecond=0)
@@ -194,32 +225,27 @@ async  def main():
     hostname = socket.gethostname()
     log_dir = f'HRL_runs/{current_time_str}_{hostname}'
     writer = SummaryWriter(log_dir)
-    
+
     print("============================================================================================")
-    
+
     # logging file
     log_f = open(log_f_name,"w+")
     log_f.write('episode,timestep,total_reward\n')
-    
-    # printing and logging variables
-    print_running_reward = [0 for i in range(1 + num_ll_policies)]
-    print_running_episodes = 0
 
-    log_running_reward = [0 for i in range(1 + num_ll_policies)]
-    log_running_episodes = 0
-
-    time_step = 0
-    i_episode = 0
-    
+    # Initialize variables for tracking best reward
     best_total_reward = float('-inf')
     total_rewards = []
     num_episodes_for_checkpoint = 10  # Number of episodes to consider for checkpointing
-    
+
+    time_step = 0
+    i_episode = 0
+
     # hierarchical training loop
     while time_step <= max_training_timesteps:
         state = env.reset()
         hl_current_ep_reward = 0
         ll_current_ep_reward = [0 for _ in range(num_ll_policies)]
+        dc_current_ep_reward = [0 for _ in range(num_dc_policies)]
 
         # env specific traces for each episode
         CO2_footprint_per_step = []
@@ -243,18 +269,23 @@ async  def main():
                 ppo_agent.low_policies[i].buffer.rewards.append(reward[f'low_level_rewards_DC{i+1}'])
                 ppo_agent.low_policies[i].buffer.is_terminals.append(done)
 
+            # DC agent policies
+            for i in range(num_dc_policies):
+                ppo_agent.dc_policies[i].buffer.rewards.append(reward[f'dc_rewards_DC{i+1}'])
+                ppo_agent.dc_policies[i].buffer.is_terminals.append(done)
+
             # Update rewards
             hl_current_ep_reward += reward['high_level_rewards']
             for i in range(num_ll_policies):
                 ll_current_ep_reward[i] += reward[f'low_level_rewards_DC{i+1}']
-
+            for i in range(num_dc_policies):
+                dc_current_ep_reward[i] += reward[f'dc_rewards_DC{i+1}']
 
             time_step +=1
 
             # update PPO agent(s)
             if time_step % update_timestep == 0:
-                ppo_loss_coroutine   = ppo_agent.update()
-                ppo_loss = await ppo_loss_coroutine
+                ppo_loss = ppo_agent.update()
 
                 # Group the high level policy loss under 'Loss/HighLevelPolicy'
                 writer.add_scalar('Loss/HighLevelPolicy', ppo_loss[0], time_step)
@@ -263,6 +294,9 @@ async  def main():
                 for i in range(num_ll_policies):
                     writer.add_scalar(f'Loss/LowLevelPolicy/DC_{i+1}', ppo_loss[i+1], time_step)
 
+                # Group the data center policy losses under 'Loss/DcPolicy'
+                for i in range(num_dc_policies):
+                    writer.add_scalar(f'Loss/DcPolicy/DC_{i+1}', ppo_loss[num_ll_policies+i+1], time_step)
 
 
             # if continuous action space; then decay action std of output action distribution
@@ -288,7 +322,7 @@ async  def main():
         i_episode += 1
 
         # Compute total rewards
-        total_episode_reward = hl_current_ep_reward + sum(ll_current_ep_reward)
+        total_episode_reward = hl_current_ep_reward + sum(ll_current_ep_reward) + sum(dc_current_ep_reward)
         total_rewards.append(total_episode_reward)
 
         # Log to file
@@ -299,6 +333,9 @@ async  def main():
         writer.add_scalar('Rewards/HighLevelPolicy', hl_current_ep_reward, i_episode)
         for i in range(num_ll_policies):
             writer.add_scalar(f'Rewards/LowLevelPolicy/DC_{i+1}', ll_current_ep_reward[i], i_episode)
+
+        for i in range(num_dc_policies):
+            writer.add_scalar(f'Rewards/DcPolicy/DC_{i+1}', dc_current_ep_reward[i], i_episode)
 
         writer.add_scalar('Rewards/TotalEpisodeReward', total_episode_reward, i_episode)
 
@@ -322,8 +359,8 @@ async  def main():
             if accumulated_reward > best_total_reward:
                 print("--------------------------------------------------------------------------------------------")
                 print("New best accumulated reward over last {} episodes: {:.2f}".format(num_episodes_for_checkpoint, accumulated_reward))
-                print(f"Saving models to checkpoints: {hl_checkpoint_path}, {ll_checkpoint_path}")
-                ppo_agent.save(hl_checkpoint_path, ll_checkpoint_path)
+                print(f"Saving models to checkpoints: {hl_checkpoint_path}, {ll_checkpoint_path}, {dc_checkpoint_path}")
+                ppo_agent.save(hl_checkpoint_path, ll_checkpoint_path, dc_checkpoint_path)
                 print("Models saved")
                 print("Elapsed Time  : ", datetime.now().replace(microsecond=0) - start_time)
                 print("--------------------------------------------------------------------------------------------")
@@ -341,7 +378,8 @@ async  def main():
     print("============================================================================================")
 
 
-
 if __name__ == '__main__':
-
-    asyncio.run(main())
+    # Set the start method to 'spawn' to prevent CUDA re-initialization issues
+    # mp.set_start_method('spawn', force=True)
+    
+    main()

@@ -586,8 +586,8 @@ class Weather_Manager():
         self.max_wb_temp = 40
 
         self.debug = debug
-        if self.debug:
-            temperature_data = np.ones_like(temperature_data) + 29
+        # if self.debug:
+        temperature_data = np.ones_like(temperature_data) + 29
         self.init_day = init_day
         # One year data=24*365=8760
         x = range(0, len(temperature_data))

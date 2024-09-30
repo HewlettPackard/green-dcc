@@ -44,7 +44,8 @@ class CarbonLoadEnv(gym.Env):
         
         # State: [Sin(h), Cos(h), Sin(day_of_year), Cos(day_of_year), self.ls_state, ci_i_future (n_vars_ci), var_to_LS_energy (n_vars_energy), batSoC (n_vars_battery)], 
         # self.ls_state = [current_workload, queue status]
-        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(19,), dtype=np.float32)
+        # self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(19,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(22,), dtype=np.float32)
 
 
         self.global_total_steps = 0
@@ -314,6 +315,13 @@ class CarbonLoadEnv(gym.Env):
                 'ls_computed_tasks': int(self.current_utilization*100),
                 'ls_task_age_histogram': task_age_histogram,}
 
+        if info['ls_shifted_workload'] > 1 or info['ls_shifted_workload'] < 0:
+            # Launch an exception
+            raise ValueError("The utilization should be between 0 and 1")
+
+        # if overdue_penalty > 0:
+            # print(f'Overdue penalty: {overdue_penalty}; Tasks processed: {actual_tasks_processed}; Task in queue: {tasks_in_queue}; Oldest task age: {oldest_task_age}; Average task age: {average_task_age:.2f}')
+            
         # Update the previous computed workload
         self.previous_computed_workload = self.current_utilization  # This stores the previous timestep's workload
         

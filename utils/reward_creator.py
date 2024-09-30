@@ -8,11 +8,13 @@ bat_footprint = {}
 norm_cfp_values = {'ny': {'mean': 40174, 'std': 13873},
                    'ca': {'mean': 40973, 'std': 15429},
                    'az': {'mean': 132121, 'std': 40681},
+                   'va': {'mean': 40973, 'std': 15429},
 }
 
 norm_energy_values = {'ny': {'mean': 173, 'std': 45},
                       'ca': {'mean': 170, 'std': 49},
                       'az': {'mean': 234, 'std': 78},
+                      'va': {'mean': 170, 'std': 49}
     }
 def default_ls_reward(params: dict) -> float:
     """
@@ -39,14 +41,16 @@ def default_ls_reward(params: dict) -> float:
     footprint_reward = -1.0 * (norm_ci * norm_total_energy / 0.50)  # Mean and std reward. Negate to maximize reward and minimize energy consumption
     # footprint_reward = -1.0 * (total_CFP - norm_values[location]['mean']) / norm_values[location]['std']  # Mean and std reward. Negate to maximize reward and minimize energy consumption
     
+    footprint_reward_normalized = footprint_reward / (params['ls_shifted_workload'] + 1e-9) # Normalize the reward by the amount of computation
+    
     # Overdue Tasks Penalty (scaled)
-    overdue_penalty_scale = 0.2  # Adjust this scaling factor as needed
-    overdue_penalty_bias = 0.0
+    overdue_penalty_scale = 5.0  # Adjust this scaling factor as needed
+    overdue_penalty_bias = 1.0
     # tasks_overdue_penalty = -overdue_penalty_scale * np.log(params['ls_overdue_penalty'] + 1) # +1 to avoid log(0) and be always negative
     tasks_overdue_penalty = -overdue_penalty_scale * np.sqrt(params['ls_overdue_penalty']) + overdue_penalty_bias # To have a +1 if the number of overdue tasks is 0, and a negative value otherwise
     
     # Oldest Task Age Penalty
-    age_penalty_scale = 0.2  # Adjust this scaling factor as needed
+    age_penalty_scale = 1.0  # Adjust this scaling factor as needed
     tasks_age_penalty = -age_penalty_scale * params['ls_oldest_task_age']  # Assume normalized between 0 and 1
 
     # Total Reward

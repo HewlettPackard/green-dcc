@@ -11,13 +11,13 @@ import torch.utils.data as data
 print("============================================================================================")
 # set device to cpu or cuda
 device = torch.device('cpu')
-if(torch.cuda.is_available()):  # pylint disable=C0325
-    device = torch.device('cuda:0') 
-    torch.cuda.empty_cache()
-    print("Device set to : " + str(torch.cuda.get_device_name(device)))
-else:
-    print("Device set to : cpu")
-print("============================================================================================")
+# if(torch.cuda.is_available()):  # pylint disable=C0325
+#     device = torch.device('cuda:0') 
+#     torch.cuda.empty_cache()
+#     print("Device set to : " + str(torch.cuda.get_device_name(device)))
+# else:
+#     print("Device set to : cpu")
+# print("============================================================================================")
 
 
 ################################## PPO Policy ##################################
@@ -42,6 +42,7 @@ def normalize_values(values):
     mean = values.mean()
     std = values.std()
     return (values - mean) / (std + 1e-8)
+
 
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim, has_continuous_action_space, action_std_init):
@@ -81,7 +82,7 @@ class ActorCritic(nn.Module):
                         nn.Tanh(),
                         nn.Linear(64, 1)
                     )
-        
+    
         # Apply orthogonal initialization with custom gain
         self.apply_orthogonal_initialization()
 
@@ -164,9 +165,9 @@ class RolloutDataset(data.Dataset):
         return (self.states[idx], self.actions[idx], self.logprobs[idx], 
                 self.rewards[idx], self.advantages[idx])
         
+        
 class PPO:
-    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs,
-                 eps_clip, has_continuous_action_space, action_std_init=0.6, batch_size=256):
+    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6):
 
         self.has_continuous_action_space = has_continuous_action_space
 
@@ -176,7 +177,6 @@ class PPO:
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
-        self.batch_size = batch_size
         
         self.buffer = RolloutBuffer()
 
@@ -190,6 +190,7 @@ class PPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()
+        self.batch_size = 256
 
     def set_action_std(self, new_action_std):
         if self.has_continuous_action_space:
@@ -251,28 +252,31 @@ class PPO:
             advantages.insert(0, advantage)
         return advantages
 
+
     def update(self):
         # Monte Carlo estimate of returns
-        rewards = []
-        discounted_reward = 0
-        for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
-            if is_terminal:  # Reset discounted_reward when the episode ends
-                discounted_reward = 0
-            discounted_reward = reward + (self.gamma * discounted_reward)
-            rewards.insert(0, discounted_reward)
-
-        # Normalizing the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
-        # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
+        # rewards = []
+        # discounted_reward = 0
+        # for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+        #     if is_terminal:
+        #         discounted_reward = 0
+        #     discounted_reward = reward + (self.gamma * discounted_reward)
+        #     rewards.insert(0, discounted_reward)
+            
+        # # Normalizing the rewards
+        # rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+        # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # convert list to tensor
         old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(device)
+        old_rewards = torch.tensor(self.buffer.rewards, dtype=torch.float32).detach().to(device)
+
 
         # calculate advantages using GAE
-        advantages = self.compute_gae(self.buffer.rewards, old_state_values, self.gamma, lam=0.95)
+        advantages = self.compute_gae(old_rewards, old_state_values, self.gamma, lam=0.95)
         advantages = torch.tensor(advantages, dtype=torch.float32).to(device)
         
         # Normalize the advantages
@@ -280,7 +284,7 @@ class PPO:
         advantages = torch.clamp(advantages, min=-10, max=10)
 
         # Create a dataset and DataLoader
-        dataset = RolloutDataset(old_states, old_actions, old_logprobs, rewards, advantages)
+        dataset = RolloutDataset(old_states, old_actions, old_logprobs, old_rewards, advantages)
         loader = data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
         # Optimize policy for K epochs
@@ -314,7 +318,6 @@ class PPO:
 
         # return loss for tensorboard logging
         return loss.mean().detach().cpu().numpy()
-
     
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)

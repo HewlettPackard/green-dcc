@@ -263,6 +263,59 @@ class DCRL(gym.Env):
         """
         hour_sin_cos = t_i[:2]
         
+        # # CI Trend analysis
+        # trend_smoothing_window = 4
+        # smoothed_ci_future = np.convolve(np.hstack((current_ci, ci_future[:16])), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
+        # smoothed_ci_past = np.convolve(np.hstack((ci_past, current_ci)), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
+        
+        # # Slope the next 4 hours of CI and the previous 1 hour of CI
+        # ci_future_slope = np.polyfit(range(len(smoothed_ci_future)), smoothed_ci_future, 1)[0]
+        # ci_past_slope = np.polyfit(range(len(smoothed_ci_past)), smoothed_ci_past, 1)[0]
+
+        # # Extract features for future and past CI
+        # ci_future_features = self.extract_ci_features(ci_future, current_ci)
+        # # ci_past_features = self.extract_ci_features(ci_past, current_ci)
+        # ci_future = [ci_future[3], ci_future[15], ci_future[31]]
+        # # Assemble CI features
+        # ci_features = np.hstack([
+        #                 ci_future_slope, ci_past_slope,
+        #                 ci_future_features
+        #             ])
+
+        # # Weather trend analysis
+        # temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
+        
+        # # Extract features for the future temperature
+        # temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
+        
+        # mean_forecast_temperature = np.mean(next_n_out_temperature) # [mean of next 4 intervals]
+        # # Assemble temperature features
+        # temperature_features = np.hstack([
+        #                                 temperature_slope, temperature_features
+        #                             ])
+        
+        # temperature_future = [next_n_out_temperature[3], next_n_out_temperature[15], next_n_out_temperature[31]]
+        
+        # #workload divided by the capacity
+        # workload_capacity = current_workload / self.datacenter_capacity_mw
+        
+        # # Previous computed workload
+        # previous_computed_workload = self.ls_info['ls_previous_computed_workload']
+        
+        # # Combine all features into the state
+        # ls_state = np.float32(np.hstack((
+        #                                 hour_sin_cos,
+        #                                 current_ci,
+        #                                 ci_future,
+        #                                 queue_status,
+        #                                 current_workload,
+        #                                 next_workload,
+        #                                 mean_forecast_temperature, 
+        #                                 temperature_future,
+        #                                 ls_task_age_histogram,
+        #                                 previous_computed_workload
+        #                                 )))
+
         # CI Trend analysis
         trend_smoothing_window = 4
         smoothed_ci_future = np.convolve(np.hstack((current_ci, ci_future[:16])), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
@@ -275,7 +328,7 @@ class DCRL(gym.Env):
         # Extract features for future and past CI
         ci_future_features = self.extract_ci_features(ci_future, current_ci)
         # ci_past_features = self.extract_ci_features(ci_past, current_ci)
-        ci_future = [ci_future[3], ci_future[15], ci_future[31]]
+
         # Assemble CI features
         ci_features = np.hstack([
                         ci_future_slope, ci_past_slope,
@@ -288,33 +341,25 @@ class DCRL(gym.Env):
         # Extract features for the future temperature
         temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
         
-        mean_forecast_temperature = np.mean(next_n_out_temperature) # [mean of next 4 intervals]
         # Assemble temperature features
         temperature_features = np.hstack([
                                         temperature_slope, temperature_features
                                     ])
         
-        temperature_future = [next_n_out_temperature[3], next_n_out_temperature[15], next_n_out_temperature[31]]
-        
-        #workload divided by the capacity
-        workload_capacity = current_workload / self.datacenter_capacity_mw
-        
-        # Previous computed workload
-        previous_computed_workload = self.ls_info['ls_previous_computed_workload']
-        
         # Combine all features into the state
-        ls_state = np.float16(np.hstack((
+        ls_state = np.float32(np.hstack((
                                         hour_sin_cos,
                                         current_ci,
-                                        ci_future,
+                                        ci_features,
+                                        oldest_task_age,
+                                        average_task_age,
                                         queue_status,
                                         current_workload,
-                                        next_workload,
-                                        mean_forecast_temperature, 
-                                        temperature_future,
-                                        ls_task_age_histogram,
-                                        previous_computed_workload
-                                        )))
+                                        current_out_temperature,
+                                        temperature_features,
+                                        ls_task_age_histogram
+                                    )))
+        
         # if len(ls_state) != 26:
             # print(f'Error: {len(ls_state)}')
             

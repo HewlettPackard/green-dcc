@@ -8,7 +8,7 @@ file_dir = os.path.dirname(__file__)
 # append one level upper directory to python path
 sys.path.append(file_dir + '/..')
 # pylint: disable=C0301,C0303,C0103,C0209,C0116,C0413
-import HRL_withcooling.ppo as ppo_class
+import HRL_withcooling_mp.ppo as ppo_class
 from utils.utils_cf import generate_node_connections
 
 class HierarchicalPPO:

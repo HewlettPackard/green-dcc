@@ -38,10 +38,6 @@ class RolloutBuffer:
         del self.state_values[:]
         del self.is_terminals[:]
 
-def normalize_values(values):
-    mean = values.mean()
-    std = values.std()
-    return (values - mean) / (std + 1e-8)
 
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim, has_continuous_action_space, action_std_init):
@@ -49,8 +45,6 @@ class ActorCritic(nn.Module):
 
         self.has_continuous_action_space = has_continuous_action_space
         
-        self.layer_norm = nn.LayerNorm(state_dim)
-
         if has_continuous_action_space:
             self.action_dim = action_dim
             self.action_var = torch.full((action_dim,), action_std_init * action_std_init).to(device)
@@ -82,25 +76,6 @@ class ActorCritic(nn.Module):
                         nn.Linear(64, 1)
                     )
         
-        # Apply orthogonal initialization with custom gain
-        self.apply_orthogonal_initialization()
-
-    def apply_orthogonal_initialization(self):
-        for layer in self.modules():
-            if isinstance(layer, nn.Linear):
-                # Apply a very small gain (0.0001) for the output layer
-                if self.has_continuous_action_space:
-                    if layer in self.actor and layer.out_features == self.action_dim:
-                        gain = 0.0001
-                    else:
-                        gain = torch.nn.init.calculate_gain('tanh')  # Default for hidden layers
-                else:
-                    gain = torch.nn.init.calculate_gain('tanh')  # Default for hidden layers
-
-                torch.nn.init.orthogonal_(layer.weight, gain=gain)
-                if layer.bias is not None:
-                    torch.nn.init.constant_(layer.bias, 0.0)
-                    
     def set_action_std(self, new_action_std):
         if self.has_continuous_action_space:
             self.action_var = torch.full((self.action_dim,), new_action_std * new_action_std).to(device)
@@ -113,7 +88,7 @@ class ActorCritic(nn.Module):
         raise NotImplementedError
     
     def act(self, state):
-        state = self.layer_norm(state)
+
         if self.has_continuous_action_space:
             action_mean = self.actor(state)
             cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
@@ -129,7 +104,7 @@ class ActorCritic(nn.Module):
         return action.detach(), action_logprob.detach(), state_val.detach()
     
     def evaluate(self, state, action):
-        state = self.layer_norm(state)
+
         if self.has_continuous_action_space:
             action_mean = self.actor(state)
             
@@ -166,7 +141,7 @@ class RolloutDataset(data.Dataset):
         
 class PPO:
     def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs,
-                 eps_clip, has_continuous_action_space, action_std_init=0.6, batch_size=256):
+                 eps_clip, has_continuous_action_space, action_std_init=0.6, batch_size=128):
 
         self.has_continuous_action_space = has_continuous_action_space
 
@@ -242,28 +217,20 @@ class PPO:
 
             return action.item()
 
-    def compute_gae(self, rewards, state_values, gamma, lam):
-        advantages = []
-        advantage = 0
-        for t in reversed(range(len(rewards))):
-            delta = rewards[t] - state_values[t] + gamma * state_values[t + 1] if t < len(rewards) - 1 else rewards[t]
-            advantage = delta + gamma * lam * advantage
-            advantages.insert(0, advantage)
-        return advantages
-
     def update(self):
+        # print('Updating the Policies')
         # Monte Carlo estimate of returns
         rewards = []
         discounted_reward = 0
         for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
-            if is_terminal:  # Reset discounted_reward when the episode ends
+            if is_terminal:
                 discounted_reward = 0
             discounted_reward = reward + (self.gamma * discounted_reward)
             rewards.insert(0, discounted_reward)
-
+            
         # Normalizing the rewards
         rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
-        # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
+        # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # convert list to tensor
         old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
@@ -271,22 +238,20 @@ class PPO:
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(device)
 
-        # calculate advantages using GAE
-        advantages = self.compute_gae(self.buffer.rewards, old_state_values, self.gamma, lam=0.95)
-        advantages = torch.tensor(advantages, dtype=torch.float32).to(device)
+        # calculate advantages
+        advantages = rewards.detach() - old_state_values.detach()
         
-        # Normalize the advantages
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-        advantages = torch.clamp(advantages, min=-10, max=10)
-
         # Create a dataset and DataLoader
         dataset = RolloutDataset(old_states, old_actions, old_logprobs, rewards, advantages)
         loader = data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
+
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
             for batch in loader:
+                # Create mini-batches
                 batch_states, batch_actions, batch_logprobs, batch_rewards, batch_advantages = batch
+
 
                 # Evaluate actions and compute loss
                 logprobs, state_values, dist_entropy = self.policy.evaluate(batch_states, batch_actions)
@@ -295,7 +260,7 @@ class PPO:
                 ratios = torch.exp(logprobs - batch_logprobs)
                 surr1 = ratios * batch_advantages
                 surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * batch_advantages
-                
+
                 loss = (-torch.min(surr1, surr2)
                         + 0.5 * self.MseLoss(state_values, batch_rewards)
                         - 0.01 * dist_entropy)
@@ -303,18 +268,17 @@ class PPO:
                 # Update policy
                 self.optimizer.zero_grad()
                 loss.mean().backward()
-                torch.nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=2.0)
                 self.optimizer.step()
-
+            
         # Copy new weights into old policy
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         # clear buffer
         self.buffer.clear()
-
+        
+        # print('Policies Updated')
         # return loss for tensorboard logging
         return loss.mean().detach().cpu().numpy()
-
     
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)

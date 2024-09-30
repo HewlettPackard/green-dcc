@@ -37,7 +37,7 @@ class GreenDCC_Env(HierarchicalDCRL):
             obs['low_level_obs_' + dc] = self.low_level_observations[dc]['agent_ls']
             obs['dc_obs_' + dc] = self.low_level_observations[dc]['agent_dc']
         # observations are already in scaled range from internal evnironments. No need to scale them further
-        return obs
+        return obs, {}
     
     def seed(self, seed=None):  # pylint: disable=arguments-differ
         pass
@@ -90,7 +90,7 @@ class GreenDCC_Env(HierarchicalDCRL):
                                              'Original Workload':original_workload[dc],
                                              }
             
-        return obs, rewards, dones, infos
+        return obs, rewards, dones, False, infos
         
 if __name__ == "__main__":
     env = GreenDCC_Env()

@@ -117,14 +117,7 @@ def make_dc_pyeplus_env(month : int = 1,
         # TODO: Will add sum of IT POWER  and HVAC Power Here if AGP wants it
         'Facility Total Building Electricity Demand Rate(Whole Building)'  #  'IT POWER'
     ]
-    if add_cpu_usage:    
-        observation_space = spaces.Box(low=np.float32(0.0*np.ones(len(observation_variables)+num_sin_cos_vars+int(3*float(add_cpu_usage)))),
-                                        high=np.float32(1.0*np.ones(len(observation_variables)+num_sin_cos_vars+int(3*float(add_cpu_usage)))),
-                                        )
-    else:
-        observation_space = spaces.Box(low=np.float32(0.0*np.ones(len(observation_variables)+num_sin_cos_vars+1)),  # p.o.
-                                        high=np.float32(1.0*np.ones(len(observation_variables)+num_sin_cos_vars+1)),  # p.o. here we add 1 to only include current CI
-                                        )
+    observation_space = spaces.Box(low=-2.0, high=2.0, shape=(4,), dtype=np.float32)
     
     ################################################################################
     ########################## Action Variables ####################################

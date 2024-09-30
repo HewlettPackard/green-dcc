@@ -26,12 +26,12 @@ DEFAULT_CONFIG = {
         'cintensity_file': 'NY_NG_&_avgCI.csv',
         'weather_file': 'USA_NY_New.York-LaGuardia.epw',
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
-        'dc_config_file': 'dc_config_dc3.json',
+        'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
         'flexible_load': 0.6,
         'timezone_shift': 8,
         'month': 7,
-        'days_per_episode': 30,
+        'days_per_episode': 7,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
@@ -43,8 +43,8 @@ DEFAULT_CONFIG = {
 
     # DC2
     'config2' : {
-        'location': 'az',
-        'cintensity_file': 'AZ_NG_&_avgCI.csv',
+        'location': 'va',
+        'cintensity_file': 'VA_NG_&_avgCI.csv',
         'weather_file': 'USA_AZ_Phoenix-Sky.Harbor.epw',
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
@@ -52,7 +52,7 @@ DEFAULT_CONFIG = {
         'flexible_load': 0.6,
         'timezone_shift': 0,
         'month': 7,
-        'days_per_episode': 30,
+        'days_per_episode': 7,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
@@ -74,7 +74,7 @@ DEFAULT_CONFIG = {
         'flexible_load': 0.6,
         'timezone_shift': 16,
         'month': 7,
-        'days_per_episode': 30,
+        'days_per_episode': 7,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
@@ -214,6 +214,7 @@ class HeirarchicalDCRL(gym.Env):
                 'bat_CO2_footprint': [],
                 'bat_total_energy_with_battery_KWh': [],
                 'ls_tasks_dropped': [],
+                'ls_overdue_penalty': [],
                 'dc_water_usage': [],
                 'workload': [],
                 'reward': []
@@ -275,7 +276,7 @@ class HeirarchicalDCRL(gym.Env):
         # Move workload between DCs
         
         # TODO: Add the carbon intensity in the action to sort the action in funtion of the reducction in the CI
-        self.overassigned_workload = self.safety_enforcement(actions)
+        self.original_workload, self.overassigned_workload = self.safety_enforcement(actions)
 
         # Step through the low-level agents in each DC
         done = self.low_level_step()
@@ -332,6 +333,7 @@ class HeirarchicalDCRL(gym.Env):
             self.metrics[env_id]['ls_tasks_dropped'].append(info['agent_ls']['ls_tasks_dropped'])
             self.metrics[env_id]['dc_water_usage'].append(info['agent_dc']['dc_water_usage'])
             self.metrics[env_id]['workload'].append(info['agent_ls']['ls_shifted_workload'])
+            self.metrics[env_id]['ls_overdue_penalty'].append(info['agent_ls']['ls_overdue_penalty'])
 
         done = any(self.all_done.values())
         return done
@@ -446,6 +448,11 @@ class HeirarchicalDCRL(gym.Env):
         actions = dict(
             sorted(actions.items(), key=lambda x: x[1]['workload_to_move'], reverse=True))
 
+        # Save the original workload before any changes (this is the initial state)
+        original_workload = {
+            dc: self.datacenters[dc].workload_m.get_current_workload() for dc in self.datacenters
+        }
+    
         # base_workload_on_next_step for all dcs
         self.base_workload_on_curr_step = {dc : self.datacenters[dc].workload_m.get_current_workload() for dc in self.datacenters}
         self.base_workload_on_next_step = {dc : self.datacenters[dc].workload_m.get_forecast_workload() for dc in self.datacenters}
@@ -499,7 +506,7 @@ class HeirarchicalDCRL(gym.Env):
         # Keep track of the computed workload
         self.total_computed_workload += sum([workload for workload in self.base_workload_on_curr_step.values()])
 
-        return overassigned_workload
+        return original_workload, overassigned_workload
     
     def set_hysterisis(self, mwh_to_move: float, sender: str, receiver: str):
         PENALTY = self.penalty
