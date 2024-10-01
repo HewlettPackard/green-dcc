@@ -540,6 +540,9 @@ class CI_Manager():
     
     def get_n_past_ci(self, n):
         return self.norm_carbon[self.time_step-n:self.time_step]
+    
+    def get_n_future_ci(self, n):
+        return self.norm_carbon[self.time_step+1:self.time_step+1+n]
         
 # Class to manage weather data
 # Where to obtain other weather files:

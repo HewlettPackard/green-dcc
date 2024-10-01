@@ -16,7 +16,7 @@ from HRL_multiple_rollouts.greendcc_env import GreenDCC_Env  # pylint: disable=C
 import multiprocessing as mp
 from utils.utils_cf import generate_node_connections
 
-def worker_process(worker_id, child_conn, env_config, ppo_agent_params, num_cores_per_worker):
+def worker_process(worker_id, child_conn, env_config, ppo_agent_params, num_cores_per_worker, experience_per_worker):
     import os
     import torch
     import numpy as np
@@ -37,18 +37,20 @@ def worker_process(worker_id, child_conn, env_config, ppo_agent_params, num_core
     os.environ['NUMEXPR_NUM_THREADS'] = str(num_cores_per_worker)
 
     # Set random seed for this worker
-    seed = env_config['random_seed'] + worker_id
+    seed = 50 + env_config['random_seed'] + worker_id
     torch.manual_seed(seed)
     np.random.seed(seed)
 
     # Initialize environment and PPO agent
     env = GreenDCC_Env()
     ppo_agent = HRLPPO(**ppo_agent_params)
+    
+    state = env.reset(seed=seed)
 
     while True:
         command = child_conn.recv()
         if command == 'collect_experience':
-            experiences, stats = collect_experience(env, ppo_agent, env_config)
+            experiences, stats, state = collect_experience(env, ppo_agent, env_config, state, experience_per_worker)
             child_conn.send((experiences, stats))
         elif command == 'update_policy':
             policy_params = child_conn.recv()
@@ -58,7 +60,7 @@ def worker_process(worker_id, child_conn, env_config, ppo_agent_params, num_core
             break
 
 
-def collect_experience(env, ppo_agent, env_config):
+def collect_experience(env, ppo_agent, env_config, state, experience_per_worker):
     experiences = {
         'high_policy': {
             'states': [],
@@ -80,7 +82,7 @@ def collect_experience(env, ppo_agent, env_config):
         ]
     }
 
-    state = env.reset()
+    # state = env.reset()
     dones = {'high_level_done': False,
             'low_level_done_DC1': False,
             'low_level_done_DC2': False,
@@ -89,8 +91,14 @@ def collect_experience(env, ppo_agent, env_config):
     hl_current_ep_reward = 0
     ll_current_ep_reward = [0 for _ in range(env_config['num_ll_policies'])]
     episode_length = 0
+    experience_counter = 0
 
-    while not dones['high_level_done']:
+    # Initialize lists to collect metrics
+    CO2_footprint_per_step = []
+    bat_total_energy_with_battery_KWh_per_step = []
+    ls_tasks_dropped_per_step = []
+    
+    while experience_counter < experience_per_worker:
         # High-level action selection
         if ppo_agent.action_counter % ppo_agent.high_policy_action_freq == 0:
             high_level_action = ppo_agent.high_policy.select_action(state['high_level_obs'])
@@ -146,19 +154,33 @@ def collect_experience(env, ppo_agent, env_config):
             experiences['low_policies'][idx]['rewards'].append(ll_reward)
             experiences['low_policies'][idx]['is_terminals'][-1] = dones[f'low_level_done_DC{idx+1}']
 
-        state = next_state
+        # Collect environmental metrics from the 'info' dictionary
+        CO2_footprint_per_step.append([info[f'low_level_info_{i}']['CO2_footprint_per_step'] for i in env.datacenter_ids])
+        bat_total_energy_with_battery_KWh_per_step.append([info[f'low_level_info_{i}']['bat_total_energy_with_battery_KWh'] for i in env.datacenter_ids])
+        ls_tasks_dropped_per_step.append([info[f'low_level_info_{i}']['ls_overdue_penalty'] for i in env.datacenter_ids])
 
+        # Check if the episode ended. If so, reset the environment.
         if dones['high_level_done']:
-            print(f'Worker completed an episode after {episode_length} timesteps')
-            break
+            state = env.reset()
+        else:
+            state = next_state
+
+        experience_counter += 1
+        # Stop collecting experiences if the target is reached
+        # if experience_counter >= experience_count:
+    # print(f'Worker completed an episode after {episode_length} timesteps')
+            # break
+        
+        # if dones['high_level_done']:
+        #     break
 
     # Calculate discounted rewards for high-level policy
     discounted_hl_rewards = []
     hl_discounted_reward = 0
     for reward, is_terminal in zip(reversed(experiences['high_policy']['rewards']),
                                    reversed(experiences['high_policy']['is_terminals'])):
-        if is_terminal:
-            hl_discounted_reward = 0
+        # if is_terminal:
+            # hl_discounted_reward = 0
         hl_discounted_reward = reward + (ppo_agent.high_policy.gamma * hl_discounted_reward)
         discounted_hl_rewards.insert(0, hl_discounted_reward)
     experiences['high_policy']['rewards'] = discounted_hl_rewards
@@ -169,111 +191,30 @@ def collect_experience(env, ppo_agent, env_config):
         ll_discounted_reward = 0
         for reward, is_terminal in zip(reversed(experiences['low_policies'][i]['rewards']),
                                        reversed(experiences['low_policies'][i]['is_terminals'])):
-            if is_terminal:
-                ll_discounted_reward = 0
+            # if is_terminal:
+                # ll_discounted_reward = 0
             ll_discounted_reward = reward + (ppo_agent.low_policies[i].gamma * ll_discounted_reward)
             discounted_ll_rewards.insert(0, ll_discounted_reward)
         experiences['low_policies'][i]['rewards'] = discounted_ll_rewards
 
+    # Calculate per-DC metrics
+    CO2_footprint_per_DC = np.sum(np.array(CO2_footprint_per_step), axis=0)
+    bat_total_energy_with_battery_KWh_per_DC = np.sum(np.array(bat_total_energy_with_battery_KWh_per_step), axis=0)
+    ls_tasks_dropped_per_DC = np.sum(np.array(ls_tasks_dropped_per_step), axis=0)
+
+    # Include metrics in stats
     stats = {
         'hl_current_ep_reward': hl_current_ep_reward,
         'll_current_ep_reward': ll_current_ep_reward,
         'total_episode_reward': hl_current_ep_reward + sum(ll_current_ep_reward),
-        'episode_length': episode_length
+        'episode_length': episode_length,
+        'CO2_footprint_per_DC': CO2_footprint_per_DC,
+        'bat_total_energy_with_battery_KWh_per_DC': bat_total_energy_with_battery_KWh_per_DC,
+        'ls_tasks_dropped_per_DC': ls_tasks_dropped_per_DC
     }
 
-    return experiences, stats
-    # # Collect stats for logging
-    # stats = {
-    #     'hl_current_ep_reward': hl_current_ep_reward,
-    #     'll_current_ep_reward': ll_current_ep_reward,
-    #     'total_episode_reward': hl_current_ep_reward + sum(ll_current_ep_reward),
-    #     'episode_length': episode_length
-    # }
+    return experiences, stats, state
 
-    # return experiences, stats
-
-
-# def collect_experience(env, ppo_agent, env_config):
-#     experiences = {
-#         'high_policy': {
-#             'states': [],
-#             'actions': [],
-#             'logprobs': [],
-#             'rewards': [],
-#             'state_values': [],
-#             'is_terminals': []
-#         },
-#         'low_policies': [
-#             {
-#                 'states': [],
-#                 'actions': [],
-#                 'logprobs': [],
-#                 'rewards': [],
-#                 'state_values': [],
-#                 'is_terminals': []
-#             } for _ in range(env_config['num_ll_policies'])
-#         ]
-#     }
-
-#     # Initialize stats
-#     hl_current_ep_reward = 0
-#     ll_current_ep_reward = [0 for _ in range(env_config['num_ll_policies'])]
-#     total_episode_reward = 0
-#     episode_length = 0
-    
-#     state = env.reset()
-#     done = False
-
-#     while not done:
-#         action = ppo_agent.select_action(state)
-#         next_state, reward, dones, info = env.step(action)
-
-#         # High-level policy
-#         if (ppo_agent.action_counter - 1) % ppo_agent.high_policy_action_freq == 0:
-#             ppo_agent.high_policy.buffer.rewards.append(reward['high_level_rewards'])
-#             ppo_agent.high_policy.buffer.is_terminals.append(dones['high_level_done'])
-#             # Collect experiences
-#             experiences['high_policy']['states'].append(state['high_level_obs'].tolist())
-#             experiences['high_policy']['actions'].append(ppo_agent.high_policy.buffer.actions[-1].tolist())
-#             experiences['high_policy']['logprobs'].append(ppo_agent.high_policy.buffer.logprobs[-1].item())
-#             experiences['high_policy']['rewards'].append(reward['high_level_rewards'])
-#             experiences['high_policy']['state_values'].append(ppo_agent.high_policy.buffer.state_values[-1].item())
-#             experiences['high_policy']['is_terminals'].append(dones['high_level_done'])
-            
-#             hl_current_ep_reward += reward['high_level_rewards']
-#             total_episode_reward += reward['high_level_rewards']
-
-#         # Low-level LS policies
-#         for i in range(env_config['num_ll_policies']):
-#             ppo_agent.low_policies[i].buffer.rewards.append(reward[f'low_level_rewards_DC{i+1}'])
-#             ppo_agent.low_policies[i].buffer.is_terminals.append(dones[f'low_level_done_DC{i+1}'])
-#             # Collect experiences
-#             experiences['low_policies'][i]['states'].append(state[f'low_level_obs_DC{i+1}'].tolist())
-#             experiences['low_policies'][i]['actions'].append(ppo_agent.low_policies[i].buffer.actions[-1].tolist())
-#             experiences['low_policies'][i]['logprobs'].append(ppo_agent.low_policies[i].buffer.logprobs[-1].item())
-#             experiences['low_policies'][i]['rewards'].append(reward[f'low_level_rewards_DC{i+1}'])
-#             experiences['low_policies'][i]['state_values'].append(ppo_agent.low_policies[i].buffer.state_values[-1].item())
-#             experiences['low_policies'][i]['is_terminals'].append(dones[f'low_level_done_DC{i+1}'])
-
-#             ll_current_ep_reward[i] += reward[f'low_level_rewards_DC{i+1}']
-#             total_episode_reward += reward[f'low_level_rewards_DC{i+1}']
-            
-#         state = next_state
-#         done = dones['high_level_done']
-#         episode_length += 1
-#         if done:
-#             print(f'Worker completed an episode after {episode_length} timesteps')
-#             break
-    
-#     stats = {
-#         'hl_current_ep_reward': hl_current_ep_reward,
-#         'll_current_ep_reward': ll_current_ep_reward,
-#         'total_episode_reward': total_episode_reward,
-#         'episode_length': episode_length
-#     }
-        
-#     return experiences, stats
 
 def aggregate_experiences(all_experiences):
     aggregated = {
@@ -321,7 +262,7 @@ def main():
     ll_has_continuous_action_space = True  # continuous action space
 
     max_ep_len = 96*7                   # max timesteps in one episode
-    max_training_timesteps = int(3e6)   # break training loop if timeteps > max_training_timesteps
+    max_training_timesteps = int(10e6)   # break training loop if timeteps > max_training_timesteps
 
     print_freq = max_ep_len * 10        # print avg reward in the interval (in num timesteps)
     log_freq = max_ep_len * 5           # log avg reward in the interval (in num timesteps)
@@ -344,7 +285,7 @@ def main():
     ll_K_epochs = 5               # update policy for K epochs in one PPO update for low level network
 
     eps_clip = 0.2             # clip parameter for PPO
-    hl_gamma = 0.90            # discount factor for high level network
+    hl_gamma = 0.50            # discount factor for high level network
     ll_gamma = 0.99            # discount factor for low level network
 
     hl_lr_actor = 0.00003       # learning rate for high level actor network
@@ -352,7 +293,7 @@ def main():
     ll_lr_actor = 0.00003       # learning rate for low level actor network(s)
     ll_lr_critic = 0.0001       # learning rate for low level critic network(s)
 
-    random_seed = 42         # set random seed if required (0 = no random seed)
+    random_seed = 45         # set random seed if required (0 = no random seed)
     #####################################################
 
     print("training environment name : " + env_name)
@@ -496,8 +437,17 @@ def main():
     }
 
     total_cores = os.cpu_count()
-    num_workers = 8  # Example: you can adjust this dynamically
-    num_cores_per_worker = 8  # Set how many cores each worker should use
+    num_workers = 4  # Example: you can adjust this dynamically
+    num_cores_per_worker = 4  # Set how many cores each worker should use
+
+    experience_per_worker = 128  # Experiences per worker
+    experience_per_worker = max(96, experience_per_worker) # The experices per worker should be at least of 96 time steps (1 day)
+    
+    total_experiences = experience_per_worker * num_workers # The total number of experiences to collect
+    
+    print(f'Num workers: {num_workers}, Num cores per worker: {num_cores_per_worker}, Total cores: {total_cores}')
+    print(f'Experiences per worker: {experience_per_worker}, Total experiences: {total_experiences}')
+
 
     workers = []
     parent_conns = []
@@ -505,7 +455,7 @@ def main():
     # Create worker processes
     for worker_id in range(num_workers):
         parent_conn, child_conn = mp.Pipe()
-        worker = mp.Process(target=worker_process, args=(worker_id, child_conn, env_config, ppo_agent_params, num_cores_per_worker))
+        worker = mp.Process(target=worker_process, args=(worker_id, child_conn, env_config, ppo_agent_params, num_cores_per_worker, experience_per_worker))
         worker.start()
         workers.append(worker)
         parent_conns.append(parent_conn)
@@ -559,12 +509,40 @@ def main():
         # for stats in stats_list:
         #     print(stats.keys())
 
+         # Aggregate metrics
+        CO2_footprint_per_DC_all_workers = []
+        bat_total_energy_with_battery_KWh_per_DC_all_workers = []
+        ls_tasks_dropped_per_DC_all_workers = []
+        
+        for stats in stats_list:
+            CO2_footprint_per_DC_all_workers.append(stats['CO2_footprint_per_DC'])
+            bat_total_energy_with_battery_KWh_per_DC_all_workers.append(stats['bat_total_energy_with_battery_KWh_per_DC'])
+            ls_tasks_dropped_per_DC_all_workers.append(stats['ls_tasks_dropped_per_DC'])
+
+        # Convert lists to numpy arrays for aggregation
+        CO2_footprint_per_DC_all_workers = np.array(CO2_footprint_per_DC_all_workers)
+        bat_total_energy_with_battery_KWh_per_DC_all_workers = np.array(bat_total_energy_with_battery_KWh_per_DC_all_workers)
+        ls_tasks_dropped_per_DC_all_workers = np.array(ls_tasks_dropped_per_DC_all_workers)
+
+        # Aggregate metrics across all workers
+        total_CO2_footprint_per_DC = np.sum(CO2_footprint_per_DC_all_workers, axis=0)
+        total_bat_total_energy_with_battery_KWh_per_DC = np.sum(bat_total_energy_with_battery_KWh_per_DC_all_workers, axis=0)
+        total_ls_tasks_dropped_per_DC = np.sum(ls_tasks_dropped_per_DC_all_workers, axis=0)
+
+        # Log metrics to TensorBoard
+        for idx, dc_id in enumerate(env.datacenter_ids):
+            writer.add_scalar(f'Environment/CO2_Footprint/DC_{idx+1}', total_CO2_footprint_per_DC[idx], i_episode)
+            writer.add_scalar(f'Environment/TotalEnergy/DC_{idx+1}', total_bat_total_energy_with_battery_KWh_per_DC[idx], i_episode)
+            writer.add_scalar(f'Environment/TasksOverdue/DC_{idx+1}', total_ls_tasks_dropped_per_DC[idx], i_episode)
 
         # Aggregate experiences
         aggregated_experiences = aggregate_experiences(all_experiences)
 
         # Update global PPO agent with aggregated experiences
+        # Calculate the time requiere to update the global PPO agent
+        # curr_time = datetime.now().replace(microsecond=0)
         ppo_loss = global_ppo_agent.update_with_experiences(aggregated_experiences)
+        # print("Time taken to update the global PPO agent: ", datetime.now().replace(microsecond=0) - curr_time)
 
         # Log losses and rewards
         # Compute total rewards from stats
@@ -605,21 +583,20 @@ def main():
         # Save models periodically
         if len(total_rewards) >= num_episodes_for_checkpoint * num_workers:
             average_total_reward = np.mean(total_rewards[-num_episodes_for_checkpoint * num_workers:])
-            print("Episode : {} \t Timestep : {} \t Average Total Reward over last {} episodes: {:.2f}".format(
-                i_episode, total_timesteps, num_episodes_for_checkpoint * num_workers, average_total_reward))
+            
+            print(f'Episode: {i_episode}, Timestep: {total_timesteps}, Average Total Reward over last {num_episodes_for_checkpoint * num_workers} episodes: {average_total_reward:.2f}, Best Total Reward: {best_total_reward:.2f}')
 
             # Checkpoint saving logic
-            accumulated_reward = sum(total_rewards[-num_episodes_for_checkpoint * num_workers:])
-            if accumulated_reward > best_total_reward:
+            if average_total_reward > best_total_reward:
                 print("--------------------------------------------------------------------------------------------")
-                print("New best accumulated reward over last {} episodes: {:.2f}".format(num_episodes_for_checkpoint * num_workers, accumulated_reward))
+                print("New best average reward over last {} episodes: {:.2f}".format(num_episodes_for_checkpoint * num_workers, average_total_reward))
                 print(f"Saving models to checkpoints: {hl_checkpoint_path}, {ll_checkpoint_path}")
                 global_ppo_agent.save(hl_checkpoint_path, ll_checkpoint_path)
                 print("Models saved")
                 elapsed_time = datetime.now().replace(microsecond=0) - start_time
                 print("Elapsed Time  : ", elapsed_time)
                 print("--------------------------------------------------------------------------------------------")
-                best_total_reward = accumulated_reward
+                best_total_reward = average_total_reward
 
     # Close worker processes
     for conn in parent_conns:

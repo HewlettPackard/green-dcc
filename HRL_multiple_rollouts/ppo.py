@@ -190,7 +190,7 @@ class PPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()
-        self.batch_size = 256
+        self.batch_size = 128
 
     def set_action_std(self, new_action_std):
         if self.has_continuous_action_space:

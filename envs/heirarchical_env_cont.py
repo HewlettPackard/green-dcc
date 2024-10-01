@@ -43,8 +43,8 @@ DEFAULT_CONFIG = {
 
     # DC2
     'config2' : {
-        'location': 'va',
-        'cintensity_file': 'VA_NG_&_avgCI.csv',
+        'location': 'ca',
+        'cintensity_file': 'CA_NG_&_avgCI.csv',
         'weather_file': 'USA_AZ_Phoenix-Sky.Harbor.epw',
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
@@ -137,18 +137,11 @@ class HeirarchicalDCRL(gym.Env):
 
         # Define observation and action space        
         self.common_observations = [
-            'time_of_day_sin',
-            'time_of_day_cos'
         ]
         
         self.unique_observations = [
-            'normalized_ocupacity_last_period',
             'curr_workload',
-            'predicted_workload',  # New variable
-            'weather',
-            'predicted_weather',
-            'ci',
-            'predicted_ci'
+            'ci'
         ]
 
         
@@ -202,7 +195,7 @@ class HeirarchicalDCRL(gym.Env):
             self.heir_obs[env_id] = self.get_dc_variables(env_id)
         
         # Get common variables after reset (the time manager has internally the hour variable)
-        self.heir_obs['__common__'] = self.get_common_variables()
+        self.heir_obs['__common__'] = self.get_common_variables() if len(self.common_observations) > 0 else {}
 
         self.start_index_manager = env.workload_m.time_step
         self.simulated_days = env.days_per_episode
@@ -288,7 +281,7 @@ class HeirarchicalDCRL(gym.Env):
                 self.heir_obs[env_id] = self.get_dc_variables(env_id)
 
         # Get common variables after reset (the time manager has internally the hour variable)
-        self.heir_obs['__common__'] = self.get_common_variables()
+        self.heir_obs['__common__'] = self.get_common_variables() if len(self.common_observations) > 0 else {}
         
         return self.flatten_observation(self.heir_obs), self.calc_reward(), False, done, {}
 
@@ -366,7 +359,7 @@ class HeirarchicalDCRL(gym.Env):
                 else:
                     flattened_obs.extend(np.asarray(value).flatten())  # Convert to array and flatten
 
-        self.flat_obs = np.array(flattened_obs, dtype=np.float16)
+        self.flat_obs = np.array(flattened_obs, dtype=np.float32)
         return self.flat_obs
     
     def get_common_variables(self):
