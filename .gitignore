@@ -26,3 +26,4 @@ HRL_*_logs
 HRL_*_preTrained
 HRL_runs
 results.csv
+heuristics/
