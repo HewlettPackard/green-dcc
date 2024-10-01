@@ -47,7 +47,7 @@ class GreenDCC_Env(HierarchicalDCRL):
         
         # Move workload across DCs (high level policy)
         actions['high_level_action'] = self.transform_actions(actions['high_level_action'])
-        _ = self.safety_enforcement(actions['high_level_action'])  # overassigned_workload
+        original_workload, _ = self.safety_enforcement(actions['high_level_action'])  # overassigned_workload
         # Move workload within DCs (low level policy)
         low_level_actions = {dc: {'agent_ls': actions['low_level_action_' + dc]} for dc in self.datacenter_ids}
         done = self.low_level_step(low_level_actions)
@@ -60,8 +60,9 @@ class GreenDCC_Env(HierarchicalDCRL):
         obs['high_level_obs'] = self.flat_obs
         rewards['high_level_rewards'] = self.calc_reward()
         dones['high_level_done'] = done
-        infos['high_level_info'] = {}
-        
+        # infos['high_level_info'] = {}
+        infos['high_level_info'] = {'hl_original_workload': original_workload}
+
         for dc in self.datacenter_ids:
             obs['low_level_obs_' + dc] = self.low_level_observations[dc]['agent_ls']
             # obs['dc_obs_' + dc] = self.low_level_observations[dc]['agent_dc']
@@ -78,7 +79,8 @@ class GreenDCC_Env(HierarchicalDCRL):
                                              'Queue Tasks' : self.datacenters[dc].infos['agent_ls']['ls_tasks_in_queue'],
                                              'Avg Age Task in Queue' : self.datacenters[dc].infos['agent_ls']['ls_average_task_age'],
                                              'ls_tasks_dropped': self.datacenters[dc].infos['agent_ls']['ls_tasks_dropped'],
-                                             'ls_overdue_penalty':self.datacenters[dc].infos['agent_ls']['ls_overdue_penalty']
+                                             'ls_overdue_penalty':self.datacenters[dc].infos['agent_ls']['ls_overdue_penalty'],
+                                             'Original Workload':original_workload[dc],
                                              }
             
         return obs, rewards, dones, infos

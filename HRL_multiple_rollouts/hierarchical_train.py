@@ -37,7 +37,7 @@ def worker_process(worker_id, child_conn, env_config, ppo_agent_params, num_core
     os.environ['NUMEXPR_NUM_THREADS'] = str(num_cores_per_worker)
 
     # Set random seed for this worker
-    seed = 50 + env_config['random_seed'] + worker_id
+    seed = env_config['random_seed'] + worker_id
     torch.manual_seed(seed)
     np.random.seed(seed)
 
@@ -270,7 +270,7 @@ def main():
     # best_reward = float('-inf')       # initialize best reward as negative infinity
     print_avg_reward = 0                # initialize average reward
 
-    action_std = 0.6                    # starting std for action distribution (Multivariate Normal)
+    action_std = 0.1                    # starting std for action distribution (Multivariate Normal)
     action_std_decay_rate = 0.05        # linearly decay action_std (action_std = action_std - action_std_decay_rate)
     min_action_std = 0.01                # minimum action_std (stop decay after action_std <= min_action_std)
     action_std_decay_freq = int(2.5e5)  # action_std decay frequency (in num timesteps)
@@ -288,10 +288,10 @@ def main():
     hl_gamma = 0.50            # discount factor for high level network
     ll_gamma = 0.99            # discount factor for low level network
 
-    hl_lr_actor = 0.00003       # learning rate for high level actor network
-    hl_lr_critic = 0.0001       # learning rate for high level critic network
-    ll_lr_actor = 0.00003       # learning rate for low level actor network(s)
-    ll_lr_critic = 0.0001       # learning rate for low level critic network(s)
+    hl_lr_actor = 0.0003       # learning rate for high level actor network
+    hl_lr_critic = 0.001       # learning rate for high level critic network
+    ll_lr_actor = 0.0003       # learning rate for low level actor network(s)
+    ll_lr_critic = 0.001       # learning rate for low level critic network(s)
 
     random_seed = 45         # set random seed if required (0 = no random seed)
     #####################################################
@@ -393,12 +393,12 @@ def main():
     print("--------------------------------------------------------------------------------------------")
     print("optimizer learning rate actor : ", hl_lr_actor, ll_lr_actor)
     print("optimizer learning rate critic : ",hl_lr_critic, ll_lr_critic)
-    if random_seed:
-        print("--------------------------------------------------------------------------------------------")
-        print("setting random seed to ", random_seed)
-        torch.manual_seed(random_seed)
-        env.seed(random_seed)  # pylint: disable=no-member
-        np.random.seed(random_seed)
+    # if random_seed:
+    #     print("--------------------------------------------------------------------------------------------")
+    #     print("setting random seed to ", random_seed)
+    #     torch.manual_seed(random_seed)
+    #     env.seed(random_seed)  # pylint: disable=no-member
+    #     np.random.seed(random_seed)
     #####################################################
 
     print("============================================================================================")
@@ -437,10 +437,10 @@ def main():
     }
 
     total_cores = os.cpu_count()
-    num_workers = 4  # Example: you can adjust this dynamically
-    num_cores_per_worker = 4  # Set how many cores each worker should use
+    num_workers = 8  # Example: you can adjust this dynamically
+    num_cores_per_worker = 8  # Set how many cores each worker should use
 
-    experience_per_worker = 128  # Experiences per worker
+    experience_per_worker = 96*3  # Experiences per worker
     experience_per_worker = max(96, experience_per_worker) # The experices per worker should be at least of 96 time steps (1 day)
     
     total_experiences = experience_per_worker * num_workers # The total number of experiences to collect

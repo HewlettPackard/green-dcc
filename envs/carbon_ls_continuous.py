@@ -198,7 +198,7 @@ class CarbonLoadEnv(gym.Env):
         assert self.action_space.contains(action), f"Action {action} is not in the action space {self.action_space}"
 
         enforced = False
-
+        # print(f'Executing temporal load shifting action: {action[0]:.3f} with the current workload: {self.workload:.3f}')
         non_shiftable_tasks = int(math.ceil(self.workload * self.non_shiftable_tasks_percentage * 100))
         shiftable_tasks     = int(math.floor(self.workload * self.shiftable_tasks_percentage * 100))
         tasks_dropped = 0  # Track the number of dropped tasks
