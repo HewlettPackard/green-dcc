@@ -45,7 +45,7 @@ class CarbonLoadEnv(gym.Env):
         # State: [Sin(h), Cos(h), Sin(day_of_year), Cos(day_of_year), self.ls_state, ci_i_future (n_vars_ci), var_to_LS_energy (n_vars_energy), batSoC (n_vars_battery)], 
         # self.ls_state = [current_workload, queue status]
         # self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(19,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(22,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(5,), dtype=np.float32)
 
 
         self.global_total_steps = 0
@@ -198,7 +198,7 @@ class CarbonLoadEnv(gym.Env):
         assert self.action_space.contains(action), f"Action {action} is not in the action space {self.action_space}"
 
         enforced = False
-
+        # print(f'Executing temporal load shifting action: {action[0]:.3f} with the current workload: {self.workload:.3f}')
         non_shiftable_tasks = int(math.ceil(self.workload * self.non_shiftable_tasks_percentage * 100))
         shiftable_tasks     = int(math.floor(self.workload * self.shiftable_tasks_percentage * 100))
         tasks_dropped = 0  # Track the number of dropped tasks
@@ -298,7 +298,7 @@ class CarbonLoadEnv(gym.Env):
         info = {"ls_original_workload": original_workload,
                 "ls_shifted_workload": self.current_utilization, 
                 "ls_previous_computed_workload": self.previous_computed_workload,
-                "ls_action": action, 
+                "ls_action": action_value, 
                 "ls_norm_load_left": 0,
                 "ls_unasigned_day_load_left": 0,
                 "ls_penalty_flag": 0,

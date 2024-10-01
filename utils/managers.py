@@ -378,11 +378,13 @@ class Workload_Manager():
         if workload > 1 or workload < 0:
             raise ValueError(f"Workload out of bound when set_current_workload: {workload}")
         self.cpu_smooth[self.time_step] = workload
+        self._current_workload = workload
     
     def set_future_workload(self, workload):
         if workload > 1 or workload < 0:
             raise ValueError(f"Workload out of bound when set_future_workload: {workload}")
         self.cpu_smooth[self.time_step+1] = workload
+        self._next_workload = workload
 
 
 # Class to manage carbon intensity data

@@ -137,18 +137,11 @@ class HeirarchicalDCRL(gym.Env):
 
         # Define observation and action space        
         self.common_observations = [
-            'time_of_day_sin',
-            'time_of_day_cos'
         ]
         
         self.unique_observations = [
-            'normalized_ocupacity_last_period',
             'curr_workload',
-            'predicted_workload',  # New variable
-            'weather',
-            'predicted_weather',
-            'ci',
-            'predicted_ci'
+            'ci'
         ]
 
         
@@ -202,7 +195,7 @@ class HeirarchicalDCRL(gym.Env):
             self.heir_obs[env_id] = self.get_dc_variables(env_id)
         
         # Get common variables after reset (the time manager has internally the hour variable)
-        self.heir_obs['__common__'] = self.get_common_variables()
+        self.heir_obs['__common__'] = self.get_common_variables() if len(self.common_observations) > 0 else {}
 
         self.start_index_manager = env.workload_m.time_step
         self.simulated_days = env.days_per_episode
@@ -288,7 +281,7 @@ class HeirarchicalDCRL(gym.Env):
                 self.heir_obs[env_id] = self.get_dc_variables(env_id)
 
         # Get common variables after reset (the time manager has internally the hour variable)
-        self.heir_obs['__common__'] = self.get_common_variables()
+        self.heir_obs['__common__'] = self.get_common_variables() if len(self.common_observations) > 0 else {}
         
         return self.flatten_observation(self.heir_obs), self.calc_reward(), False, done, {}
 
@@ -301,6 +294,9 @@ class HeirarchicalDCRL(gym.Env):
             # print(f'Current workload for {datacenter_id}: {curr_workload}')
             # On agent_ls, the workload is the 5th element of the array (sine/cos hour day, workload, queue, etc)
             self.low_level_observations[datacenter_id]['agent_ls'][4] = curr_workload
+            
+            # Update the workload in the environment
+            self.datacenters[datacenter_id].ls_env.update_workload(curr_workload)
         
         # Compute actions for each dc_id in each environment
         low_level_actions = {}
@@ -319,7 +315,7 @@ class HeirarchicalDCRL(gym.Env):
         for env_id in self.datacenters:
             if self.all_done[env_id]:
                 continue
-
+            
             new_obs, rewards, terminated, truncated, info = self.datacenters[env_id].step(low_level_actions[env_id])
             self.low_level_observations[env_id] = new_obs
             self.all_done[env_id] = terminated['__all__'] or truncated['__all__']
@@ -371,7 +367,7 @@ class HeirarchicalDCRL(gym.Env):
                 else:
                     flattened_obs.extend(np.asarray(value).flatten())  # Convert to array and flatten
 
-        self.flat_obs = np.array(flattened_obs, dtype=np.float16)
+        self.flat_obs = np.array(flattened_obs, dtype=np.float32)
         return self.flat_obs
     
     def get_common_variables(self):
@@ -467,6 +463,10 @@ class HeirarchicalDCRL(gym.Env):
         # for _, base_workload in self.base_workload_on_curr_step.items():
         #     assert (base_workload >= 0) & (base_workload <= 1), "base_workload curr_step should be positive and a fraction"
 
+        # Initialize the net transfer for each datacenter
+        current_datacenter_workload = original_workload.copy()  # This will be dynamically updated
+        net_transfer = {dc: 0.0 for dc in self.datacenters}
+    
         overassigned_workload = []
         for _, action in actions.items():
             sender = self.datacenter_ids[action['sender']]
@@ -476,18 +476,24 @@ class HeirarchicalDCRL(gym.Env):
             sender_capacity = self.datacenters[sender].datacenter_capacity_mw
             receiver_capacity = self.datacenters[receiver].datacenter_capacity_mw
 
-            # determine the effective workload to be moved and update 
-            workload_to_move_mwh = workload_to_move * self.base_workload_on_curr_step[sender] * sender_capacity
-            receiver_available_mwh = (self.max_util - self.base_workload_on_next_step[receiver]) * receiver_capacity
+            # Determine the effective workload to be moved from sender to receiver
+            workload_to_move_mwh = workload_to_move * current_datacenter_workload[sender] * sender_capacity
+            receiver_available_mwh = (self.max_util - current_datacenter_workload[receiver]) * receiver_capacity
+            
+            # The effective movement is the minimum between the workload to move and available capacity in the receiver
             effective_movement_mwh = min(workload_to_move_mwh, receiver_available_mwh)
-            
-            self.base_workload_on_curr_step[sender] -= effective_movement_mwh / sender_capacity
-            self.base_workload_on_next_step[receiver] += effective_movement_mwh / receiver_capacity
 
-            # set hysterisis
-            #self.set_hysterisis(effective_movement_mwh, sender, receiver)
-            
-            # keep track of overassigned workload
+            # Update net transfer for sender (workload is leaving) and receiver (workload is incoming)
+            net_transfer[sender] -= effective_movement_mwh / sender_capacity  # outgoing workload
+            net_transfer[receiver] += effective_movement_mwh / receiver_capacity  # incoming workload
+
+            # Dynamically update current workloads after each transfer
+            current_datacenter_workload[sender] -= effective_movement_mwh / sender_capacity
+            current_datacenter_workload[receiver] += effective_movement_mwh / receiver_capacity
+
+            # print(f'Effective movement: {effective_movement_mwh:.3f} MWh from {sender} to {receiver}')
+
+            # Track overassigned workload if the transfer was partially completed
             overassigned_workload.append(
                 (
                     sender, 
@@ -495,18 +501,30 @@ class HeirarchicalDCRL(gym.Env):
                     (workload_to_move_mwh - effective_movement_mwh) / receiver_capacity
                 )
             )
-        
-        # update individual datacenters with the base_workload_on_curr_step
-        for dc, base_workload in self.base_workload_on_curr_step.items():
-            if base_workload < 0 or base_workload > 1:
-                raise ValueError(f"base_workload on curr_step should be > 0 and < 1, got {base_workload}")
-            self.datacenters[dc].workload_m.set_current_workload(base_workload)
+        # Apply the final net transfers to update the current workloads of each datacenter
+        for dc, transfer in net_transfer.items():
+            new_workload = original_workload[dc] + transfer
+            if new_workload < 0 or new_workload > 1:
+                raise ValueError(f"Workload for {dc} should be between 0 and 1 after transfer, got {new_workload:.3f}")
+            self.datacenters[dc].workload_m.set_current_workload(new_workload)
+            # print(f'Updating {dc} from {original_workload[dc]:.3f} to {new_workload:.3f} after net transfer')
 
-        # update individual datacenters with the base_workload_on_next_step
-        for dc, base_workload in self.base_workload_on_next_step.items():
-            if base_workload < 0 or base_workload > 1:
-                raise ValueError(f"base_workload on curr_step should be > 0 and < 1, got {base_workload}")
-            self.datacenters[dc].workload_m.set_future_workload(base_workload)
+            # print(f'Updating {dc} from {original_workload[dc]:.3f} to {new_workload:.3f} after net transfer')
+
+
+        # update individual datacenters with the base_workload_on_curr_step
+        # for dc, base_workload in self.base_workload_on_curr_step.items():
+        #     if base_workload < 0 or base_workload > 1:
+        #         raise ValueError(f"base_workload on curr_step should be > 0 and < 1, got {base_workload}")
+        #     self.datacenters[dc].workload_m.set_current_workload(base_workload)
+        #     print(f'Updating {dc} from {original_workload[dc]:.3f} with {base_workload:.3f} for this time step')
+
+        # # update individual datacenters with the base_workload_on_next_step
+        # for dc, base_workload in self.base_workload_on_next_step.items():
+        #     if base_workload < 0 or base_workload > 1:
+        #         raise ValueError(f"base_workload on curr_step should be > 0 and < 1, got {base_workload}")
+        #     self.datacenters[dc].workload_m.set_future_workload(base_workload)
+        #     print(f'Updating {dc} with {base_workload:.3f} for the next time step')
         
         # Keep track of the computed workload
         self.total_computed_workload += sum([workload for workload in self.base_workload_on_curr_step.values()])

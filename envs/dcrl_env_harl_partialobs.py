@@ -139,7 +139,7 @@ class DCRL(gym.Env):
         n_vars_energy, n_vars_battery = 0, 0  # for partial observability (for p.o.)
         n_vars_ci = 32
         self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, flexible_workload_ratio=self.flexible_load,
-                                  n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=10000, initialize_queue_at_reset=self.initialize_queue_at_reset)
+                                  n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=2000, initialize_queue_at_reset=self.initialize_queue_at_reset)
         self.dc_env, _ = make_dc_pyeplus_env(month=self.month + 1, location=ci_loc, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
                                              datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file, add_cpu_usage=False)
         self.bat_env = make_bat_fwd_env(month=self.month, max_bat_cap_Mwh=self.dc_env.ranges['max_battery_energy_Mwh'], 
@@ -316,50 +316,56 @@ class DCRL(gym.Env):
         #                                 previous_computed_workload
         #                                 )))
 
-        # CI Trend analysis
+        # # CI Trend analysis
         trend_smoothing_window = 4
         smoothed_ci_future = np.convolve(np.hstack((current_ci, ci_future[:16])), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
-        smoothed_ci_past = np.convolve(np.hstack((ci_past, current_ci)), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
+        # smoothed_ci_past = np.convolve(np.hstack((ci_past, current_ci)), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
         
-        # Slope the next 4 hours of CI and the previous 1 hour of CI
+        # # Slope the next 4 hours of CI and the previous 1 hour of CI
         ci_future_slope = np.polyfit(range(len(smoothed_ci_future)), smoothed_ci_future, 1)[0]
-        ci_past_slope = np.polyfit(range(len(smoothed_ci_past)), smoothed_ci_past, 1)[0]
+        # ci_past_slope = np.polyfit(range(len(smoothed_ci_past)), smoothed_ci_past, 1)[0]
 
-        # Extract features for future and past CI
-        ci_future_features = self.extract_ci_features(ci_future, current_ci)
-        # ci_past_features = self.extract_ci_features(ci_past, current_ci)
+        # # Extract features for future and past CI
+        # ci_future_features = self.extract_ci_features(ci_future, current_ci)
+        # # ci_past_features = self.extract_ci_features(ci_past, current_ci)
 
-        # Assemble CI features
-        ci_features = np.hstack([
-                        ci_future_slope, ci_past_slope,
-                        ci_future_features
-                    ])
+        # # Assemble CI features
+        # ci_features = np.hstack([
+        #                 ci_future_slope, ci_past_slope,
+        #                 ci_future_features
+        #             ])
 
-        # Weather trend analysis
-        temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
+        # # Weather trend analysis
+        # temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
         
-        # Extract features for the future temperature
-        temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
+        # # Extract features for the future temperature
+        # temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
         
-        # Assemble temperature features
-        temperature_features = np.hstack([
-                                        temperature_slope, temperature_features
-                                    ])
+        # # Assemble temperature features
+        # temperature_features = np.hstack([
+        #                                 temperature_slope, temperature_features
+        #                             ])
         
-        # Combine all features into the state
-        ls_state = np.float32(np.hstack((
-                                        hour_sin_cos,
-                                        current_ci,
-                                        ci_features,
-                                        oldest_task_age,
-                                        average_task_age,
-                                        queue_status,
-                                        current_workload,
-                                        current_out_temperature,
-                                        temperature_features,
-                                        ls_task_age_histogram
+        # # Combine all features into the state
+        # ls_state = np.float32(np.hstack((
+        #                                 hour_sin_cos,
+        #                                 current_ci,
+        #                                 ci_features,
+        #                                 oldest_task_age,
+        #                                 average_task_age,
+        #                                 queue_status,
+        #                                 current_workload,
+        #                                 current_out_temperature,
+        #                                 temperature_features,
+        #                                 ls_task_age_histogram
+        #                             )))
+        ls_state = np.float32(np.hstack((current_ci,
+                                         ci_future_slope,
+                                         current_workload,
+                                         oldest_task_age,
+                                         queue_status
+            
                                     )))
-        
         # if len(ls_state) != 26:
             # print(f'Error: {len(ls_state)}')
             
@@ -577,7 +583,8 @@ class DCRL(gym.Env):
 
         # Calculate rewards for all agents based on the updated state
         location = self.location
-        reward_params = self._calculate_reward_params(workload, temp, ci_i, ci_i_future, day, hour, terminal, location)
+        ci_i_12_hours = self.ci_m.get_n_future_ci(n=4*12)
+        reward_params = self._calculate_reward_params(workload, temp, ci_i, ci_i_future, day, hour, terminal, location, ci_i_12_hours)
         self.ls_reward, self.dc_reward, self.bat_reward = self.calculate_reward(reward_params)
 
         # Update rewards, terminations, and truncations for each agent
@@ -662,13 +669,14 @@ class DCRL(gym.Env):
         return obs
 
 
-    def _calculate_reward_params(self, workload, temp, ci_i, ci_i_future, day, hour, terminal, location=None):
+    def _calculate_reward_params(self, workload, temp, ci_i, ci_i_future, day, hour, terminal, location=None, ci_i_12_hours=None):
         """Create the parameters needed to calculate rewards."""
         return {
             **self.bat_info, **self.ls_info, **self.dc_info,
             "outside_temp": temp, "day": day, "hour": hour,
             "norm_CI": ci_i_future[0], "forecast_CI": ci_i_future,
-            "isterminal": terminal, "location": location
+            "isterminal": terminal, "location": location, 
+            "ci_i_12_hours": ci_i_12_hours
         }
 
 

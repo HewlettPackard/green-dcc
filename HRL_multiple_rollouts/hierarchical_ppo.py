@@ -10,6 +10,8 @@ sys.path.append(file_dir + '/..')
 # pylint: disable=C0301,C0303,C0103,C0209,C0116,C0413
 import HRL_multiple_rollouts.ppo as ppo_class
 from utils.utils_cf import generate_node_connections
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 class HierarchicalPPO:
     
@@ -105,32 +107,58 @@ class HierarchicalPPO:
     #     for policy in self.low_policies:
     #         loss.append(policy.update())
     #     return loss
-    
     def update_with_experiences(self, aggregated_experiences):
-        # Update high-level policy
-        self.high_policy.buffer.states = [torch.tensor(s, dtype=torch.float32) for s in aggregated_experiences['high_policy']['states']]
-        self.high_policy.buffer.actions = [torch.tensor(a, dtype=torch.float32) for a in aggregated_experiences['high_policy']['actions']]
-        self.high_policy.buffer.logprobs = [torch.tensor(lp, dtype=torch.float32) for lp in aggregated_experiences['high_policy']['logprobs']]
-        self.high_policy.buffer.rewards = [r for r in aggregated_experiences['high_policy']['rewards']]  # rewards can remain as a list of floats
-        self.high_policy.buffer.state_values = [torch.tensor(v, dtype=torch.float32) for v in aggregated_experiences['high_policy']['state_values']]
-        self.high_policy.buffer.is_terminals = [it for it in aggregated_experiences['high_policy']['is_terminals']]  # list of booleans
-
-        high_policy_loss = self.high_policy.update()
-
-        # Update low-level policies
-        low_policy_losses = []
-        for i, policy in enumerate(self.low_policies):
-            experiences = aggregated_experiences['low_policies'][i]
+        def update_policy(policy, experiences):
+            # Convert experiences to tensors and update the policy
             policy.buffer.states = [torch.tensor(s, dtype=torch.float32) for s in experiences['states']]
             policy.buffer.actions = [torch.tensor(a, dtype=torch.float32) for a in experiences['actions']]
             policy.buffer.logprobs = [torch.tensor(lp, dtype=torch.float32) for lp in experiences['logprobs']]
             policy.buffer.rewards = [r for r in experiences['rewards']]  # rewards can remain as a list of floats
             policy.buffer.state_values = [torch.tensor(v, dtype=torch.float32) for v in experiences['state_values']]
             policy.buffer.is_terminals = [it for it in experiences['is_terminals']]  # list of booleans
-            loss = policy.update()
-            low_policy_losses.append(loss)
+            return policy.update()
+
+        # Update high-level policy concurrently with the low-level policies
+        with ThreadPoolExecutor() as executor:
+            # Submit high-level policy update
+            high_policy_future = executor.submit(update_policy, self.high_policy, aggregated_experiences['high_policy'])
+
+            # Submit low-level policy updates in parallel
+            low_policy_futures = [
+                executor.submit(update_policy, policy, aggregated_experiences['low_policies'][i])
+                for i, policy in enumerate(self.low_policies)
+            ]
+
+            # Wait for all futures to complete and get results
+            high_policy_loss = high_policy_future.result()
+            low_policy_losses = [future.result() for future in low_policy_futures]
 
         return [high_policy_loss] + low_policy_losses
+    # def update_with_experiences(self, aggregated_experiences):
+    #     # Update high-level policy
+    #     self.high_policy.buffer.states = [torch.tensor(s, dtype=torch.float32) for s in aggregated_experiences['high_policy']['states']]
+    #     self.high_policy.buffer.actions = [torch.tensor(a, dtype=torch.float32) for a in aggregated_experiences['high_policy']['actions']]
+    #     self.high_policy.buffer.logprobs = [torch.tensor(lp, dtype=torch.float32) for lp in aggregated_experiences['high_policy']['logprobs']]
+    #     self.high_policy.buffer.rewards = [r for r in aggregated_experiences['high_policy']['rewards']]  # rewards can remain as a list of floats
+    #     self.high_policy.buffer.state_values = [torch.tensor(v, dtype=torch.float32) for v in aggregated_experiences['high_policy']['state_values']]
+    #     self.high_policy.buffer.is_terminals = [it for it in aggregated_experiences['high_policy']['is_terminals']]  # list of booleans
+
+    #     high_policy_loss = self.high_policy.update()
+
+    #     # Update low-level policies
+    #     low_policy_losses = []
+    #     for i, policy in enumerate(self.low_policies):
+    #         experiences = aggregated_experiences['low_policies'][i]
+    #         policy.buffer.states = [torch.tensor(s, dtype=torch.float32) for s in experiences['states']]
+    #         policy.buffer.actions = [torch.tensor(a, dtype=torch.float32) for a in experiences['actions']]
+    #         policy.buffer.logprobs = [torch.tensor(lp, dtype=torch.float32) for lp in experiences['logprobs']]
+    #         policy.buffer.rewards = [r for r in experiences['rewards']]  # rewards can remain as a list of floats
+    #         policy.buffer.state_values = [torch.tensor(v, dtype=torch.float32) for v in experiences['state_values']]
+    #         policy.buffer.is_terminals = [it for it in experiences['is_terminals']]  # list of booleans
+    #         loss = policy.update()
+    #         low_policy_losses.append(loss)
+
+    #     return [high_policy_loss] + low_policy_losses
 
 
     # async def async_update(self, policy):

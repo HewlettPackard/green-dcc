@@ -62,8 +62,8 @@ class ActorCritic(nn.Module):
                             nn.Tanh(),
                             nn.Linear(64, 64),
                             nn.Tanh(),
-                            nn.Linear(64, action_dim),
-                            nn.Tanh()
+                            nn.Linear(64, action_dim)
+                            # nn.Tanh()
                         )
         else:
             self.actor = nn.Sequential(
@@ -190,7 +190,7 @@ class PPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()
-        self.batch_size = 256
+        self.batch_size = 128
 
     def set_action_std(self, new_action_std):
         if self.has_continuous_action_space:
@@ -218,30 +218,35 @@ class PPO:
             print("WARNING : Calling PPO::decay_action_std() on discrete action space policy")
         print("--------------------------------------------------------------------------------------------")
 
-    def select_action(self, state):
+    def select_action(self, state, evaluate=False):
+        """
+        Select action based on the current state.
+        If evaluate is True, choose the action with the highest probability (greedy action).
+        """
+        with torch.no_grad():
+            state = torch.FloatTensor(state).to(device)
+            action, action_logprob, state_val = self.policy_old.act(state)
+
+        # Save state, action, log probability, and state value for training (if not evaluating)
+        if not evaluate:
+            self.buffer.states.append(state)
+            self.buffer.actions.append(action)
+            self.buffer.logprobs.append(action_logprob)
+            self.buffer.state_values.append(state_val)
 
         if self.has_continuous_action_space:
-            with torch.no_grad():
-                state = torch.FloatTensor(state).to(device)
-                action, action_logprob, state_val = self.policy_old.act(state)
-
-            self.buffer.states.append(state)
-            self.buffer.actions.append(action)
-            self.buffer.logprobs.append(action_logprob)
-            self.buffer.state_values.append(state_val)
-
-            return action.detach().cpu().numpy().flatten()
+            if evaluate:
+                # In evaluation mode, return the mean action (i.e., deterministic action)
+                return action.cpu().numpy().flatten()
+            else:
+                # During training, sample the action
+                return action.detach().cpu().numpy().flatten()
         else:
-            with torch.no_grad():
-                state = torch.FloatTensor(state).to(device)
-                action, action_logprob, state_val = self.policy_old.act(state)
-            
-            self.buffer.states.append(state)
-            self.buffer.actions.append(action)
-            self.buffer.logprobs.append(action_logprob)
-            self.buffer.state_values.append(state_val)
-
-            return action.item()
+            if evaluate:
+                # For discrete actions, choose the action with the highest probability
+                return torch.argmax(action).item()
+            else:
+                return action.item()
 
     def compute_gae(self, rewards, state_values, gamma, lam):
         advantages = []

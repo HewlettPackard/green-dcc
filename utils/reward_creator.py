@@ -41,7 +41,7 @@ def default_ls_reward(params: dict) -> float:
     footprint_reward = -1.0 * (norm_ci * norm_total_energy / 0.50)  # Mean and std reward. Negate to maximize reward and minimize energy consumption
     # footprint_reward = -1.0 * (total_CFP - norm_values[location]['mean']) / norm_values[location]['std']  # Mean and std reward. Negate to maximize reward and minimize energy consumption
     
-    footprint_reward_normalized = footprint_reward / (params['ls_shifted_workload'] + 1e-9) # Normalize the reward by the amount of computation
+    footprint_reward_normalized = footprint_reward # / (params['ls_shifted_workload'] + 1e-9) # Normalize the reward by the amount of computation
     
     # Overdue Tasks Penalty (scaled)
     overdue_penalty_scale = 5.0  # Adjust this scaling factor as needed
@@ -53,9 +53,32 @@ def default_ls_reward(params: dict) -> float:
     age_penalty_scale = 1.0  # Adjust this scaling factor as needed
     tasks_age_penalty = -age_penalty_scale * params['ls_oldest_task_age']  # Assume normalized between 0 and 1
 
-    # Total Reward
-    total_reward = footprint_reward + tasks_overdue_penalty + tasks_age_penalty
 
+    # Optimal behavior of greedy:
+    # if the current ci is lower than the average ci for the next 12h, then the agent should compute the tasks that are stored in the queue
+    # if the current ci is higher than the average ci for the next 12h, then the agent should store the tasks in the queue
+    # This is the logic. Let's translate it into a reward function
+    
+    norm_ci_12h = np.mean(params['ci_i_12_hours'])
+    action_ls = params['ls_action']
+    greedy_component = 0.0
+    if norm_ci < norm_ci_12h:
+        # The agent should bring tasks from the queue to the computation
+        if action_ls > 0.25:
+            greedy_component += 1.0
+        elif action_ls < 0.25:
+            greedy_component -= 1.0
+    else:
+        # The agent should store tasks in the queue
+        if action_ls < -0.25:
+            greedy_component += 1.0
+        elif action_ls > -0.25:
+            greedy_component -= 1.0
+            
+    # Total Reward
+    greedy_gamma = 0.25  # Adjust this scaling factor as needed
+    total_reward = footprint_reward + tasks_age_penalty + tasks_overdue_penalty + greedy_gamma * greedy_component
+    
     return total_reward
 
 
