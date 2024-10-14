@@ -12,18 +12,18 @@ norm_cfp_values = {'ny': {'mean': 40174, 'std': 13873},
 }
 
 norm_energy_values = {'ny': {'mean': 173, 'std': 45},
-                      'ca': {'mean': 170, 'std': 49},
+                      'ca': {'mean': 270, 'std': 200},
                       'az': {'mean': 234, 'std': 78},
                       'va': {'mean': 170, 'std': 49}
     }
 def default_ls_reward(params: dict) -> float:
     """
-    Calculates a reward value based on normalized load shifting.
+    Calculates a simplified reward value for load shifting.
 
     Args:
         params (dict): Dictionary containing parameters:
             norm_load_left (float): Normalized load left.
-            out_of_time (bool): Indicator (alarm) whether the agent is in the last hour of the day.
+            out_of_time (bool): Indicator whether the agent is in the last hour of the day.
             penalty (float): Penalty value.
 
     Returns:
@@ -33,53 +33,96 @@ def default_ls_reward(params: dict) -> float:
     total_energy = params['bat_total_energy_with_battery_KWh']
     norm_total_energy = (total_energy - norm_energy_values[location]['mean']) / norm_energy_values[location]['std']
     
+    # Calculate energy footprint reward
     norm_ci = params['norm_CI']
-    # if location not in bat_footprint:
-        # bat_footprint[location] = []
-    # bat_footprint[location].append(total_energy)
+    footprint_reward = -0.5 * norm_ci * norm_total_energy  # Reduced scaling to make the reward less aggressive
+
+    # Penalty for overdue tasks (simplified to make it less harsh)
+    overdue_penalty = -1.0 * params['ls_overdue_penalty']  # Smoother penalty, allowing positive reward for fewer overdue tasks
+    overdue_penalty = np.clip(overdue_penalty, -10.0, 0.0)  # Capped to avoid extreme negative values
+
+    # Penalty for dropped tasks (kept simpler and smaller in magnitude)
+    dropped_tasks_penalty = -0.5 * params['ls_tasks_dropped']
+    dropped_tasks_penalty = np.clip(dropped_tasks_penalty, -2.0, 0.0)  # Cap the penalty to avoid large negative values
+
+    # Reward for minimizing energy consumption
+    # energy_consumption_reward = -0.2 * norm_total_energy  # Encourage minimizing energy but at a reduced scale
+
+    # Total reward
+    total_reward = footprint_reward + overdue_penalty + dropped_tasks_penalty
+
+    # Add a base reward to avoid all negative rewards, which helps with learning
+    base_reward = 1.0
+
+    return total_reward + base_reward
+# def default_ls_reward(params: dict) -> float:
+#     """
+#     Calculates a reward value based on normalized load shifting.
+
+#     Args:
+#         params (dict): Dictionary containing parameters:
+#             norm_load_left (float): Normalized load left.
+#             out_of_time (bool): Indicator (alarm) whether the agent is in the last hour of the day.
+#             penalty (float): Penalty value.
+
+#     Returns:
+#         float: Reward value.
+#     """
+#     location = params['location']
+#     total_energy = params['bat_total_energy_with_battery_KWh']
+#     norm_total_energy = (total_energy - norm_energy_values[location]['mean']) / norm_energy_values[location]['std']
     
-    footprint_reward = -1.0 * (norm_ci * norm_total_energy / 0.50)  # Mean and std reward. Negate to maximize reward and minimize energy consumption
-    # footprint_reward = -1.0 * (total_CFP - norm_values[location]['mean']) / norm_values[location]['std']  # Mean and std reward. Negate to maximize reward and minimize energy consumption
+#     norm_ci = params['norm_CI']
+#     # if location not in bat_footprint:
+#         # bat_footprint[location] = []
+#     # bat_footprint[location].append(total_energy)
     
-    footprint_reward_normalized = footprint_reward # / (params['ls_shifted_workload'] + 1e-9) # Normalize the reward by the amount of computation
+#     footprint_reward = -1.0 * (norm_ci * norm_total_energy / 0.50)  # Mean and std reward. Negate to maximize reward and minimize energy consumption
+#     # footprint_reward = -1.0 * (total_CFP - norm_values[location]['mean']) / norm_values[location]['std']  # Mean and std reward. Negate to maximize reward and minimize energy consumption
     
-    # Overdue Tasks Penalty (scaled)
-    overdue_penalty_scale = 5.0  # Adjust this scaling factor as needed
-    overdue_penalty_bias = 1.0
-    # tasks_overdue_penalty = -overdue_penalty_scale * np.log(params['ls_overdue_penalty'] + 1) # +1 to avoid log(0) and be always negative
-    tasks_overdue_penalty = -overdue_penalty_scale * np.sqrt(params['ls_overdue_penalty']) + overdue_penalty_bias # To have a +1 if the number of overdue tasks is 0, and a negative value otherwise
+#     footprint_reward_normalized = footprint_reward # / (params['ls_shifted_workload'] + 1e-9) # Normalize the reward by the amount of computation
     
-    # Oldest Task Age Penalty
-    age_penalty_scale = 1.0  # Adjust this scaling factor as needed
-    tasks_age_penalty = -age_penalty_scale * params['ls_oldest_task_age']  # Assume normalized between 0 and 1
+#     # Overdue Tasks Penalty (scaled)
+#     overdue_penalty_scale = .5  # Adjust this scaling factor as needed
+#     overdue_penalty_bias = 1.0
+#     # tasks_overdue_penalty = -overdue_penalty_scale * np.log(params['ls_overdue_penalty'] + 1) # +1 to avoid log(0) and be always negative
+#     tasks_overdue_penalty = -overdue_penalty_scale * np.sqrt(params['ls_overdue_penalty']) + overdue_penalty_bias # To have a +1 if the number of overdue tasks is 0, and a negative value otherwise
+#     tasks_overdue_penalty = np.maximum(tasks_overdue_penalty, -5.0)  # Cap the penalty to -5.0
+    
+#     # Oldest Task Age Penalty
+#     age_penalty_scale = 0.2  # Adjust this scaling factor as needed
+#     tasks_age_penalty = -age_penalty_scale * params['ls_oldest_task_age']  # Assume normalized between 0 and 1
+    
+#     dropped_tasks_penalty = -1.0 * params['ls_tasks_dropped']
+#     dropped_tasks_penalty = np.maximum(dropped_tasks_penalty, -1.0)  # Cap the penalty to -1.0
 
 
-    # Optimal behavior of greedy:
-    # if the current ci is lower than the average ci for the next 12h, then the agent should compute the tasks that are stored in the queue
-    # if the current ci is higher than the average ci for the next 12h, then the agent should store the tasks in the queue
-    # This is the logic. Let's translate it into a reward function
+#     # Optimal behavior of greedy:
+#     # if the current ci is lower than the average ci for the next 12h, then the agent should compute the tasks that are stored in the queue
+#     # if the current ci is higher than the average ci for the next 12h, then the agent should store the tasks in the queue
+#     # This is the logic. Let's translate it into a reward function
     
-    norm_ci_12h = np.mean(params['ci_i_12_hours'])
-    action_ls = params['ls_action']
-    greedy_component = 0.0
-    if norm_ci < norm_ci_12h:
-        # The agent should bring tasks from the queue to the computation
-        if action_ls > 0.25:
-            greedy_component += 1.0
-        elif action_ls < 0.25:
-            greedy_component -= 1.0
-    else:
-        # The agent should store tasks in the queue
-        if action_ls < -0.25:
-            greedy_component += 1.0
-        elif action_ls > -0.25:
-            greedy_component -= 1.0
+#     # norm_ci_12h = np.mean(params['ci_i_12_hours'])
+#     # action_ls = params['ls_action']
+#     # greedy_component = 0.0
+#     # if norm_ci < norm_ci_12h:
+#     #     # The agent should bring tasks from the queue to the computation
+#     #     if action_ls > 0.25:
+#     #         greedy_component += 1.0
+#     #     elif action_ls < 0.25:
+#     #         greedy_component -= 1.0
+#     # else:
+#     #     # The agent should store tasks in the queue
+#     #     if action_ls < -0.25:
+#     #         greedy_component += 1.0
+#     #     elif action_ls > -0.25:
+#     #         greedy_component -= 1.0
             
-    # Total Reward
-    greedy_gamma = 0.25  # Adjust this scaling factor as needed
-    total_reward = footprint_reward + tasks_age_penalty + tasks_overdue_penalty + greedy_gamma * greedy_component
+#     # # Total Reward
+#     # greedy_gamma = 0.0  # Adjust this scaling factor as needed
+#     total_reward = footprint_reward + tasks_age_penalty + tasks_overdue_penalty + dropped_tasks_penalty
     
-    return total_reward
+#     return total_reward
 
 
 def default_dc_reward(params: dict) -> float:

@@ -42,7 +42,7 @@ class BaseHVACAgent:
         self.parameters = parameters
         self.do_nothing_action_value = np.int64(1)
         # Add a warning message to inform the user to check if the do nothing action is the '1' action.
-        print(f"Warning: Please check if the do nothing action for HVAC is the '{self.do_nothing_action_value}' action.")
+        # print(f"Warning: Please check if the do nothing action for HVAC is the '{self.do_nothing_action_value}' action.")
         
     def do_nothing_action(self):
         """

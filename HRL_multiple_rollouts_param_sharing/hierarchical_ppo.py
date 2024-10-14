@@ -8,7 +8,8 @@ file_dir = os.path.dirname(__file__)
 # append one level upper directory to python path
 sys.path.append(file_dir + '/..')
 # pylint: disable=C0301,C0303,C0103,C0209,C0116,C0413
-import HRL_multiple_rollouts.ppo as ppo_class
+import HRL_multiple_rollouts_param_sharing.ppo as ppo_class
+import HRL_multiple_rollouts_param_sharing.ppo_shared as ppo_shared_class
 from utils.utils_cf import generate_node_connections
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures import ThreadPoolExecutor
@@ -28,6 +29,7 @@ class HierarchicalPPO:
                  ll_policy_ids = None):
         
         self.ll_policy_ids = sorted(ll_policy_ids)
+        device = torch.device('cpu')
 
         self.high_policy = ppo_class.PPO(obs_dim_hl, action_dim_hl,
                                         hl_lr_actor, hl_lr_critic, hl_gamma, hl_K_epochs, eps_clip, hl_has_continuous_action_space, action_std_init)
@@ -36,8 +38,31 @@ class HierarchicalPPO:
                                         # ll_lr_actor, ll_lr_critic, ll_gamma, ll_K_epochs, eps_clip, ll_has_continuous_action_space, action_std_init)
                             # for state_dim,goal_dim,action_dim in zip(obs_dim_ll, goal_dim_ll, action_dim_ll)]
                             
-        self.low_policies = {policy_id: ppo_class.PPO(state_dim + goal_dim, action_dim, ll_lr_actor, ll_lr_critic, ll_gamma, ll_K_epochs, eps_clip, ll_has_continuous_action_space, action_std_init)
-                             for policy_id, state_dim, goal_dim, action_dim in zip(self.ll_policy_ids, obs_dim_ll, goal_dim_ll, action_dim_ll)}
+        # self.low_policies = {policy_id: ppo_class.PPO(state_dim + goal_dim, action_dim, ll_lr_actor, ll_lr_critic, ll_gamma, ll_K_epochs, eps_clip, ll_has_continuous_action_space, action_std_init)
+                            #  for policy_id, state_dim, goal_dim, action_dim in zip(self.ll_policy_ids, obs_dim_ll, goal_dim_ll, action_dim_ll)}
+                # Initialize shared feature extractor for low-level agents
+        
+        
+        self.shared_feature_extractor = ppo_shared_class.SharedFeatureExtractor(
+            input_dim=obs_dim_ll[0] + goal_dim_ll[0],  # Assuming all obs_dim_ll and goal_dim_ll are the same
+            shared_hidden_dim=64  # Set your desired hidden dimension
+        ).to(device)
+
+        # Initialize low-level policies with shared feature extractor
+        self.low_policies = {}
+        for policy_id, state_dim, goal_dim, action_dim in zip(self.ll_policy_ids, obs_dim_ll, goal_dim_ll, action_dim_ll):
+            self.low_policies[policy_id] = ppo_shared_class.PPO(
+                state_dim + goal_dim,
+                action_dim,
+                ll_lr_actor,
+                ll_lr_critic,
+                ll_gamma,
+                ll_K_epochs,
+                eps_clip,
+                ll_has_continuous_action_space,
+                action_std_init,
+                shared_feature_extractor=self.shared_feature_extractor
+            )
         
         self.high_policy_action_freq = high_policy_action_freq  # number of selected actions before choosing the goal using the high policy
         self.action_counter = 0
@@ -144,22 +169,35 @@ class HierarchicalPPO:
             policy.buffer.is_terminals = [it for it in experiences['is_terminals']]  # list of booleans
             return policy.update()
 
-        # Update high-level policy
-        with ThreadPoolExecutor() as executor:
-            high_policy_future = executor.submit(update_policy, self.high_policy, aggregated_experiences['high_policy'])
+        # # Update high-level policy
+        # with ThreadPoolExecutor() as executor:
+        #     high_policy_future = executor.submit(update_policy, self.high_policy, aggregated_experiences['high_policy'])
 
-            # Update low-level policies
-            low_policy_futures = {
-                dc_id: executor.submit(update_policy, self.low_policies[dc_id], aggregated_experiences['low_policies'][dc_id])
-                for dc_id in self.ll_policy_ids
-            }
+        #     # Update low-level policies
+        #     low_policy_futures = {
+        #         dc_id: executor.submit(update_policy, self.low_policies[dc_id], aggregated_experiences['low_policies'][dc_id])
+        #         for dc_id in self.ll_policy_ids
+        #     }
 
-            # Collect the results (both actor and critic losses)
-            high_policy_loss = high_policy_future.result()  # (actor_loss, critic_loss)
-            low_policy_losses = {dc_id: future.result() for dc_id, future in low_policy_futures.items()}
+        #     # Collect the results (both actor and critic losses)
+        #     high_policy_loss = high_policy_future.result()  # (actor_loss, critic_loss)
+        #     low_policy_losses = {dc_id: future.result() for dc_id, future in low_policy_futures.items()}
+
+        # # Return both actor and critic losses for the high-level and low-level policies
+        # return high_policy_loss, low_policy_losses
+        # Update high-level policy sequentially
+        high_policy_loss = update_policy(self.high_policy, aggregated_experiences['high_policy'])
+
+        # Update low-level policies sequentially
+        low_policy_losses = {}
+        for dc_id in self.ll_policy_ids:
+            policy = self.low_policies[dc_id]
+            experiences = aggregated_experiences['low_policies'][dc_id]
+            low_policy_losses[dc_id] = update_policy(policy, experiences)
 
         # Return both actor and critic losses for the high-level and low-level policies
         return high_policy_loss, low_policy_losses
+
     # def update_with_experiences(self, aggregated_experiences):
     #     # Update high-level policy
     #     self.high_policy.buffer.states = [torch.tensor(s, dtype=torch.float32) for s in aggregated_experiences['high_policy']['states']]

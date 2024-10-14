@@ -8,7 +8,9 @@ import pandas as pd
 
 from envs.bat_env_fwd_view import BatteryEnvFwd as battery_env_fwd
 # from envs.carbon_ls_discrete import CarbonLoadEnv
-from envs.carbon_ls_continuous import CarbonLoadEnv
+# from envs.carbon_ls_continuous import CarbonLoadEnv
+# from envs.carbon_ls_continuous_v2 import CarbonLoadEnv
+from envs.carbon_ls_discrete_v2 import CarbonLoadEnv
 # from envs.carbon_ls_multidiscrete import CarbonLoadEnv
 from envs.dc_gym import dc_gymenv
 from utils.utils_cf import get_init_day
@@ -156,7 +158,7 @@ def make_dc_pyeplus_env(month : int = 1,
     elif 'WA'.lower() in location.lower():
         max_amb_temperature = 20.0
     else:
-        print('WARNING, using default values for chiller sizing...')
+        # print('WARNING, using default values for chiller sizing...')
         max_amb_temperature = 40.0
         
     ctafr, ct_rated_load = DataCenter.chiller_sizing(dc_config, min_CRAC_setpoint=min_temp, max_CRAC_setpoint=max_temp, max_ambient_temp=max_amb_temperature)

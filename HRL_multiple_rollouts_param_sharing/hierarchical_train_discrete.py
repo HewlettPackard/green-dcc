@@ -16,11 +16,15 @@ from collections import defaultdict
 file_dir = os.path.dirname(__file__)
 # append one level upper directory to python path
 sys.path.append(file_dir + '/..')
-from HRL_multiple_rollouts.hierarchical_ppo import HierarchicalPPO as HRLPPO  # pylint: disable=C0413,E0611,E0001
-from HRL_multiple_rollouts.greendcc_env import GreenDCC_Env  # pylint: disable=C0413
+from HRL_multiple_rollouts_param_sharing.hierarchical_ppo import HierarchicalPPO as HRLPPO  # pylint: disable=C0413,E0611,E0001
+from HRL_multiple_rollouts_param_sharing.greendcc_env import GreenDCC_Env  # pylint: disable=C0413
 
 import multiprocessing as mp
 from utils.utils_cf import generate_node_connections
+from tqdm import tqdm
+import traceback
+
+torch.autograd.set_detect_anomaly(True)
 
 
 def parse_lscpu_p():
@@ -112,9 +116,8 @@ def worker_process(worker_id, child_conn, env_config, ppo_agent_params, num_core
     import random
     import torch
     import numpy as np
-    from HRL_multiple_rollouts.hierarchical_ppo import HierarchicalPPO as HRLPPO
-    from HRL_multiple_rollouts.greendcc_env import GreenDCC_Env
-
+    from HRL_multiple_rollouts_param_sharing.hierarchical_ppo import HierarchicalPPO as HRLPPO  # pylint: disable=C0413,E0611,E0001
+    from HRL_multiple_rollouts_param_sharing.greendcc_env import GreenDCC_Env  # pylint: disable=C0413
     # # Get the available CPU cores and assign only a specific number per worker
     # total_cores = os.cpu_count()
     # available_cores = list(range(total_cores))
@@ -243,14 +246,14 @@ def collect_experience(env, ppo_agent, env_config, state, experience_per_worker)
 
             # Select action
             low_level_action, low_level_logprobs, low_level_state_values = policy.select_action(state_ll)
-            low_level_action = np.clip(low_level_action, -1.0, 1.0)
+            # low_level_action = np.clip(low_level_action, -1.0, 1.0)
             # Replace the low-level action with 1.0 to test the environment
             # low_level_action = np.array([1.0])
             actions['low_level_action_' + dc_id] = low_level_action
 
             # Store experiences
             experiences['low_policies'][dc_id]['states'].append(state_ll.tolist())
-            experiences['low_policies'][dc_id]['actions'].append([low_level_action.tolist()])
+            experiences['low_policies'][dc_id]['actions'].append([low_level_action])
             experiences['low_policies'][dc_id]['logprobs'].append(low_level_logprobs)
             experiences['low_policies'][dc_id]['state_values'].append(low_level_state_values)
             experiences['low_policies'][dc_id]['is_terminals'].append(False)
@@ -370,6 +373,90 @@ def aggregate_experiences(all_experiences):
     return aggregated
 
 
+def evaluate_policy(env_config, ppo_agent, num_episodes=10, writer=None, total_timesteps=0):
+    # Initialize the evaluation environment
+    eval_env = GreenDCC_Env()
+    state = eval_env.reset(seed=env_config['random_seed'])
+    total_rewards = []
+    # Initialize lists to collect metrics
+    CO2_footprint_per_DC = []
+    bat_total_energy_with_battery_KWh_per_DC = []
+    ls_tasks_overdued_per_DC = []
+    ls_tasks_dropped_per_DC = []
+
+    for episode in range(num_episodes):
+        done = False
+        episode_reward = 0
+        episode_CO2_footprint = []
+        episode_bat_total_energy = []
+        episode_tasks_overdued = []
+        episode_tasks_dropped = []
+        state = eval_env.reset()
+
+        while not done:
+            # High-level action selection (evaluation mode)
+            high_level_action = ppo_agent.high_policy.select_action(state['high_level_obs'], evaluate=True)
+            ppo_agent.goal = high_level_action
+
+            # Prepare low-level goals from high-level action
+            node_connections = generate_node_connections(N=ppo_agent.ll_policy_ids, E=ppo_agent.goal)
+            goal_mapping = {dc_id: [edge[1] for edge in edges] for dc_id, edges in node_connections.items()}
+
+            actions = {'high_level_action': np.clip(ppo_agent.goal, -1.0, 1.0)}
+
+            # Low-level action selection (evaluation mode)
+            for dc_id in ppo_agent.ll_policy_ids:
+                policy = ppo_agent.low_policies[dc_id]
+                goal = goal_mapping[dc_id]
+                state_ll = np.concatenate([state['low_level_obs_' + dc_id], goal])
+                low_level_action = policy.select_action(state_ll, evaluate=True)
+                actions['low_level_action_' + dc_id] = low_level_action
+
+            # Step the environment
+            next_state, reward, dones, info = eval_env.step(actions)
+            episode_reward += reward['high_level_rewards']
+            episode_reward += sum(reward[f'low_level_rewards_{dc_id}'] for dc_id in ppo_agent.ll_policy_ids)
+
+            # Collect metrics
+            episode_CO2_footprint.append([info[f'low_level_info_{dc_id}']['CO2_footprint_per_step'] for dc_id in ppo_agent.ll_policy_ids])
+            episode_bat_total_energy.append([info[f'low_level_info_{dc_id}']['bat_total_energy_with_battery_KWh'] for dc_id in ppo_agent.ll_policy_ids])
+            episode_tasks_overdued.append([info[f'low_level_info_{dc_id}']['ls_overdue_penalty'] for dc_id in ppo_agent.ll_policy_ids])
+            episode_tasks_dropped.append([info[f'low_level_info_{dc_id}']['ls_tasks_dropped'] for dc_id in ppo_agent.ll_policy_ids])
+
+            if dones['high_level_done']:
+                done = True
+                # print(f'Evaluation episode {episode + 1} done. Total reward: {episode_reward}')
+            else:
+                state = next_state
+
+        total_rewards.append(episode_reward)
+        # Aggregate per-episode metrics
+        CO2_footprint_per_DC.append(np.sum(np.array(episode_CO2_footprint), axis=0))
+        bat_total_energy_with_battery_KWh_per_DC.append(np.sum(np.array(episode_bat_total_energy), axis=0))
+        ls_tasks_overdued_per_DC.append(np.sum(np.array(episode_tasks_overdued), axis=0))
+        ls_tasks_dropped_per_DC.append(np.sum(np.array(episode_tasks_dropped), axis=0))
+
+    eval_env.close()
+    # Compute average reward
+    avg_reward = np.mean(total_rewards)
+
+    # Log metrics if a writer is provided
+    if writer is not None:
+        writer.add_scalar('Evaluation/AverageReward', avg_reward, total_timesteps)
+        for idx, dc_id in enumerate(ppo_agent.ll_policy_ids):
+            avg_CO2 = np.mean([metrics[idx] for metrics in CO2_footprint_per_DC])
+            avg_bat_energy = np.mean([metrics[idx] for metrics in bat_total_energy_with_battery_KWh_per_DC])
+            avg_tasks_overdued = np.mean([metrics[idx] for metrics in ls_tasks_overdued_per_DC])
+            avg_tasks_dropped = np.mean([metrics[idx] for metrics in ls_tasks_dropped_per_DC])
+
+            writer.add_scalar(f'Evaluation/CO2_Footprint/DC_{idx+1}', avg_CO2, total_timesteps)
+            writer.add_scalar(f'Evaluation/TotalEnergy/DC_{idx+1}', avg_bat_energy, total_timesteps)
+            writer.add_scalar(f'Evaluation/TasksOverdue/DC_{idx+1}', avg_tasks_overdued, total_timesteps)
+            writer.add_scalar(f'Evaluation/TasksDropped/DC_{idx+1}', avg_tasks_dropped, total_timesteps)
+
+    return avg_reward
+
+
 # pylint: disable=C0301,C0303,C0103,C0209
 def main():
 
@@ -377,7 +464,7 @@ def main():
     parser.add_argument('-c', '--core_offset', type=int, default=0, help='Core offset for CPU assignment')
     parser.add_argument('-n', '--num_workers', type=int, default=2, help='Number of worker processes')
     parser.add_argument('-e', '--experience_per_worker', type=int, default=96*3, help='Experiences per worker')
-    parser.add_argument('-s', '--seed', type=int, default=0, help='Random seed for environment')
+    parser.add_argument('-s', '--seed', type=int, default=42, help='Random seed for environment')
     
     args = parser.parse_args()
     core_offset = args.core_offset
@@ -402,7 +489,7 @@ def main():
     # num_workers = 8  # Example: you can adjust this dynamically
 
     # experience_per_worker = 96*3  # Experiences per worker
-    experience_per_worker = max(96, experience_per_worker) # The experices per worker should be at least of 96 time steps (1 day)
+    # experience_per_worker = max(96, experience_per_worker) # The experices per worker should be at least of 96 time steps (1 day)
     
     total_experiences = experience_per_worker * num_workers # The total number of experiences to collect
     
@@ -414,7 +501,7 @@ def main():
     env_name = "GreenDCC_Env"  # environment name
 
     hl_has_continuous_action_space = True  # continuous action space
-    ll_has_continuous_action_space = True  # continuous action space
+    ll_has_continuous_action_space = False  # continuous action space
 
     max_ep_len = 96*7                   # max timesteps in one episode
     max_training_timesteps = int(10e9)   # break training loop if timeteps > max_training_timesteps
@@ -425,9 +512,9 @@ def main():
     # best_reward = float('-inf')       # initialize best reward as negative infinity
     print_avg_reward = 0                # initialize average reward
 
-    action_std = 0.6                    # starting std for action distribution (Multivariate Normal)
+    action_std = 0.5                    # starting std for action distribution (Multivariate Normal)
     action_std_decay_rate = 0.02        # linearly decay action_std (action_std = action_std - action_std_decay_rate)
-    min_action_std = 0.05                # minimum action_std (stop decay after action_std <= min_action_std)
+    min_action_std = 0.01                # minimum action_std (stop decay after action_std <= min_action_std)
     action_std_decay_freq = int(100e3)  # action_std decay frequency (in num timesteps)
     #####################################################
 
@@ -439,14 +526,14 @@ def main():
     hl_K_epochs = 5               # update policy for K epochs in one PPO update for high level network
     ll_K_epochs = 5               # update policy for K epochs in one PPO update for low level network
 
-    eps_clip = 0.1             # clip parameter for PPO
+    eps_clip = 0.3             # clip parameter for PPO
     hl_gamma = 0.50            # discount factor for high level network
-    ll_gamma = 0.99            # discount factor for low level network
+    ll_gamma = 0.95            # discount factor for low level network
 
-    hl_lr_actor = 0.003       # learning rate for high level actor network
-    hl_lr_critic = 0.01       # learning rate for high level critic network
-    ll_lr_actor = 0.003       # learning rate for low level actor network(s)
-    ll_lr_critic = 0.01       # learning rate for low level critic network(s)
+    hl_lr_actor = 0.0003       # learning rate for high level actor network
+    hl_lr_critic = 0.001       # learning rate for high level critic network
+    ll_lr_actor = 0.0003       # learning rate for low level actor network(s)
+    ll_lr_critic = 0.001       # learning rate for low level critic network(s)
 
     # random_seed = 80         # set random seed if required (0 = no random seed)
     #####################################################
@@ -577,7 +664,7 @@ def main():
         'obs_dim_hl': obs_space_hl.shape[0],
         'obs_dim_ll': [i.shape[0] for i in obs_space_ll],
         'action_dim_hl': action_space_hl.shape[0],
-        'action_dim_ll': [i.shape[0] for i in action_space_ll],
+        'action_dim_ll': [i.n for i in action_space_ll],  # Use .n for discrete action spaces
         'goal_dim_ll': [i for i in goal_dim_ll],
         'hl_lr_actor': hl_lr_actor,
         'hl_lr_critic': hl_lr_critic,
@@ -650,159 +737,173 @@ def main():
     max_training_timesteps = int(300e6)  # Adjust as needed
     # update_timestep = max_ep_len // 2     # Update policy every n timesteps
     
+    evaluation_interval = 10000  # Evaluate every 100,000 timesteps
+    next_evaluation_step = evaluation_interval
+
     # Record the start time
     benchmark_start_time = time.time()
 
     while total_timesteps <= max_training_timesteps:
         # Collect experiences from all workers
-        for conn in parent_conns:
-            conn.send('collect_experience')
+        try:
+            for conn in parent_conns:
+                conn.send('collect_experience')
 
-        all_experiences = []
-        stats_list = []
-        for conn in parent_conns:
-            experiences, stats = conn.recv()
-            all_experiences.append(experiences)
-            stats_list.append(stats)
+            all_experiences = []
+            stats_list = []
+            for conn in parent_conns:
+                experiences, stats = conn.recv()
+                all_experiences.append(experiences)
+                stats_list.append(stats)
 
-        # print("All experiences:")
-        # for exp in all_experiences:
-        #     print(exp.keys())
+            # print("All experiences:")
+            # for exp in all_experiences:
+            #     print(exp.keys())
 
-        # print("Stats list:")
-        # for stats in stats_list:
-        #     print(stats.keys())
+            # print("Stats list:")
+            # for stats in stats_list:
+            #     print(stats.keys())
 
-         # Aggregate metrics
-        CO2_footprint_per_DC_all_workers = []
-        bat_total_energy_with_battery_KWh_per_DC_all_workers = []
-        ls_tasks_overdued_per_DC_all_workers = []
-        ls_tasks_dropped_per_DC_all_workers = []
+            # Aggregate metrics
+            CO2_footprint_per_DC_all_workers = []
+            bat_total_energy_with_battery_KWh_per_DC_all_workers = []
+            ls_tasks_overdued_per_DC_all_workers = []
+            ls_tasks_dropped_per_DC_all_workers = []
+            
+            for stats in stats_list:
+                CO2_footprint_per_DC_all_workers.append(stats['CO2_footprint_per_DC'])
+                bat_total_energy_with_battery_KWh_per_DC_all_workers.append(stats['bat_total_energy_with_battery_KWh_per_DC'])
+                ls_tasks_overdued_per_DC_all_workers.append(stats['ls_tasks_overdued_per_DC'])
+                ls_tasks_dropped_per_DC_all_workers.append(stats['ls_tasks_dropped_per_DC'])
+
+            # Convert lists to numpy arrays for aggregation
+            CO2_footprint_per_DC_all_workers = np.array(CO2_footprint_per_DC_all_workers)
+            bat_total_energy_with_battery_KWh_per_DC_all_workers = np.array(bat_total_energy_with_battery_KWh_per_DC_all_workers)
+            ls_tasks_overdued_per_DC_all_workers = np.array(ls_tasks_overdued_per_DC_all_workers)
+
+            # Aggregate metrics across all workers
+            total_CO2_footprint_per_DC = np.sum(CO2_footprint_per_DC_all_workers, axis=0)
+            total_bat_total_energy_with_battery_KWh_per_DC = np.sum(bat_total_energy_with_battery_KWh_per_DC_all_workers, axis=0)
+            total_ls_tasks_overdued_per_DC = np.sum(ls_tasks_overdued_per_DC_all_workers, axis=0)
+
+            # Log metrics to TensorBoard
+            for idx, dc_id in enumerate(datacenter_ids):
+                writer.add_scalar(f'Environment/CO2_Footprint/DC_{idx+1}', total_CO2_footprint_per_DC[idx], i_episode)
+                writer.add_scalar(f'Environment/TotalEnergy/DC_{idx+1}', total_bat_total_energy_with_battery_KWh_per_DC[idx], i_episode)
+                writer.add_scalar(f'Environment/TasksOverdue/DC_{idx+1}', total_ls_tasks_overdued_per_DC[idx], i_episode)
+                writer.add_scalar(f'Environment/TasksDropped/DC_{idx+1}', ls_tasks_dropped_per_DC_all_workers[0][idx], i_episode)
+
+            # Log the current learning rates for actor and critic (both high-level and low-level policies)
+            hl_actor_lr = global_ppo_agent.high_policy.scheduler_actor.get_last_lr()[0]
+            hl_critic_lr = global_ppo_agent.high_policy.scheduler_critic.get_last_lr()[0]
+            writer.add_scalar('LearningRate/HighLevelActor', hl_actor_lr, total_timesteps)
+            writer.add_scalar('LearningRate/HighLevelCritic', hl_critic_lr, total_timesteps)
+
+            # For low-level policies, assuming each has its own scheduler
+            for i, dc_id in enumerate(global_ppo_agent.ll_policy_ids):
+                ll_actor_lr = global_ppo_agent.low_policies[dc_id].scheduler_actor.get_last_lr()[0]
+                ll_critic_lr = global_ppo_agent.low_policies[dc_id].scheduler_critic.get_last_lr()[0]
+                writer.add_scalar(f'LearningRate/LowLevelActor/DC_{i+1}', ll_actor_lr, total_timesteps)
+                writer.add_scalar(f'LearningRate/LowLevelCritic/DC_{i+1}', ll_critic_lr, total_timesteps)
+
+            # Aggregate experiences
+            aggregated_experiences = aggregate_experiences(all_experiences)
+
+            # Update global PPO agent with aggregated experiences
+            # Calculate the time requiere to update the global PPO agent
+            # curr_time = datetime.now().replace(microsecond=0)
+            high_policy_loss, low_policy_losses = global_ppo_agent.update_with_experiences(aggregated_experiences)
+            # print("Time taken to update the global PPO agent: ", datetime.now().replace(microsecond=0) - curr_time)
+
+            # Log losses and rewards
+            # Compute total rewards from stats
+            total_hl_rewards = sum([stats['hl_current_ep_reward'] for stats in stats_list])
+            ll_total_rewards = [0 for _ in range(num_ll_policies)]
+            for i in range(num_ll_policies):
+                ll_total_rewards[i] = sum([stats['ll_current_ep_reward'][i] for stats in stats_list])
+
+            total_episode_reward = sum([stats['total_episode_reward'] for stats in stats_list])
+            total_rewards.extend([stats['total_episode_reward'] for stats in stats_list])
+            total_episode_lengths = [stats['episode_length'] for stats in stats_list]
+
+            # Log to TensorBoard
+            avg_hl_reward = total_hl_rewards / num_workers
+            writer.add_scalar('Rewards/HighLevelPolicy', avg_hl_reward, i_episode)
+            for i in range(num_ll_policies):
+                avg_ll_reward = ll_total_rewards[i] / num_workers
+                writer.add_scalar(f'Rewards/LowLevelPolicy/DC_{i+1}', avg_ll_reward, i_episode)
+
+            avg_total_reward = total_episode_reward / num_workers
+            writer.add_scalar('Rewards/TotalEpisodeReward', avg_total_reward, i_episode)
+
+            # Log losses
+            # Log high-level policy losses (actor and critic separately)
+            writer.add_scalar('Loss/HighLevelPolicy_Actor', high_policy_loss[0], total_timesteps) # Actor loss
+            writer.add_scalar('Loss/HighLevelPolicy_Critic', high_policy_loss[1], total_timesteps) # Critic loss
+
+            # Log low-level policy losses (actor and critic separately for each data center)
+            for i, dc_id in enumerate(global_ppo_agent.ll_policy_ids):
+                writer.add_scalar(f'Loss/LowLevelPolicy/DC_{i+1}_Actor', low_policy_losses[dc_id][0], total_timesteps)
+                writer.add_scalar(f'Loss/LowLevelPolicy/DC_{i+1}_Critic', low_policy_losses[dc_id][1], total_timesteps)
+
+            # Send updated policy parameters to workers
+            policy_params = global_ppo_agent.get_policy_params()
+            for conn in parent_conns:
+                conn.send('update_policy')
+                conn.send(policy_params)
+
+            # Decay action_std if it's time
+            if total_timesteps >= next_action_std_decay_step:
+                global_ppo_agent.decay_action_std(action_std_decay_rate, min_action_std)
+                
+                next_action_std_decay_step += action_std_decay_freq  # Schedule next decay step
+                
+                # Optionally log the new action_std for both high-level and low-level policies
+                current_action_std = global_ppo_agent.high_policy.action_std
+                print(f"Decayed action_std to {current_action_std}")
+                writer.add_scalar('Hyperparameters/ActionStd_HighLevel', current_action_std, total_timesteps)
+                # For low-level policies, you can log the action_std of one policy as an example
+                ll_policy_id = list(global_ppo_agent.low_policies.keys())[0]
+                # current_action_std_ll = global_ppo_agent.low_policies[ll_policy_id].action_std
+                # writer.add_scalar(f'Hyperparameters/ActionStd_LowLevel_{ll_policy_id}', current_action_std_ll, total_timesteps)
+
+            # if total_timesteps >= target_timesteps:
+            #     end_time = time.time()  # Record the end time
+            #     elapsed_time = end_time - benchmark_start_time  # Calculate the elapsed time
+            #     print(f"Time required for {num_cores_per_worker} num workers per core is: {elapsed_time:.2f} seconds")
+                # break
+
+            total_timesteps += sum(total_episode_lengths)
+            i_episode += num_workers
+
+            # Save models periodically
+            if len(total_rewards) >= num_episodes_for_checkpoint * num_workers:
+                average_total_reward = np.mean(total_rewards[-num_episodes_for_checkpoint * num_workers:])
+                
+                print(f'Episode: {i_episode}, Timestep: {total_timesteps}, Average Total Reward over last {num_episodes_for_checkpoint * num_workers} episodes: {average_total_reward:.2f}, Best Total Reward: {best_total_reward:.2f}')
+
+                # Checkpoint saving logic
+                if average_total_reward > best_total_reward:
+                    print("--------------------------------------------------------------------------------------------")
+                    print("New best average reward over last {} episodes: {:.2f}".format(num_episodes_for_checkpoint * num_workers, average_total_reward))
+                    print(f"Saving models to checkpoints: {hl_checkpoint_path}, {ll_checkpoint_path}")
+                    global_ppo_agent.save(hl_checkpoint_path, ll_checkpoint_path)
+                    print("Models saved")
+                    elapsed_time = datetime.now().replace(microsecond=0) - start_time
+                    print("Elapsed Time  : ", elapsed_time)
+                    print("--------------------------------------------------------------------------------------------")
+                    best_total_reward = average_total_reward
+            
+            if total_timesteps >= next_evaluation_step:
+                avg_reward = evaluate_policy(env_config, global_ppo_agent, num_episodes=5, writer=writer, total_timesteps=total_timesteps)
+                print(f'Evaluation at timestep {total_timesteps}: Average Reward: {avg_reward}')
+                next_evaluation_step += evaluation_interval
         
-        for stats in stats_list:
-            CO2_footprint_per_DC_all_workers.append(stats['CO2_footprint_per_DC'])
-            bat_total_energy_with_battery_KWh_per_DC_all_workers.append(stats['bat_total_energy_with_battery_KWh_per_DC'])
-            ls_tasks_overdued_per_DC_all_workers.append(stats['ls_tasks_overdued_per_DC'])
-            ls_tasks_dropped_per_DC_all_workers.append(stats['ls_tasks_dropped_per_DC'])
-
-        # Convert lists to numpy arrays for aggregation
-        CO2_footprint_per_DC_all_workers = np.array(CO2_footprint_per_DC_all_workers)
-        bat_total_energy_with_battery_KWh_per_DC_all_workers = np.array(bat_total_energy_with_battery_KWh_per_DC_all_workers)
-        ls_tasks_overdued_per_DC_all_workers = np.array(ls_tasks_overdued_per_DC_all_workers)
-
-        # Aggregate metrics across all workers
-        total_CO2_footprint_per_DC = np.sum(CO2_footprint_per_DC_all_workers, axis=0)
-        total_bat_total_energy_with_battery_KWh_per_DC = np.sum(bat_total_energy_with_battery_KWh_per_DC_all_workers, axis=0)
-        total_ls_tasks_overdued_per_DC = np.sum(ls_tasks_overdued_per_DC_all_workers, axis=0)
-
-        # Log metrics to TensorBoard
-        for idx, dc_id in enumerate(datacenter_ids):
-            writer.add_scalar(f'Environment/CO2_Footprint/DC_{idx+1}', total_CO2_footprint_per_DC[idx], i_episode)
-            writer.add_scalar(f'Environment/TotalEnergy/DC_{idx+1}', total_bat_total_energy_with_battery_KWh_per_DC[idx], i_episode)
-            writer.add_scalar(f'Environment/TasksOverdue/DC_{idx+1}', total_ls_tasks_overdued_per_DC[idx], i_episode)
-            writer.add_scalar(f'Environment/TasksDropped/DC_{idx+1}', ls_tasks_dropped_per_DC_all_workers[0][idx], i_episode)
-
-        # Log the current learning rates for actor and critic (both high-level and low-level policies)
-        hl_actor_lr = global_ppo_agent.high_policy.scheduler_actor.get_last_lr()[0]
-        hl_critic_lr = global_ppo_agent.high_policy.scheduler_critic.get_last_lr()[0]
-        writer.add_scalar('LearningRate/HighLevelActor', hl_actor_lr, total_timesteps)
-        writer.add_scalar('LearningRate/HighLevelCritic', hl_critic_lr, total_timesteps)
-
-        # For low-level policies, assuming each has its own scheduler
-        for i, dc_id in enumerate(global_ppo_agent.ll_policy_ids):
-            ll_actor_lr = global_ppo_agent.low_policies[dc_id].scheduler_actor.get_last_lr()[0]
-            ll_critic_lr = global_ppo_agent.low_policies[dc_id].scheduler_critic.get_last_lr()[0]
-            writer.add_scalar(f'LearningRate/LowLevelActor/DC_{i+1}', ll_actor_lr, total_timesteps)
-            writer.add_scalar(f'LearningRate/LowLevelCritic/DC_{i+1}', ll_critic_lr, total_timesteps)
-
-        # Aggregate experiences
-        aggregated_experiences = aggregate_experiences(all_experiences)
-
-        # Update global PPO agent with aggregated experiences
-        # Calculate the time requiere to update the global PPO agent
-        # curr_time = datetime.now().replace(microsecond=0)
-        high_policy_loss, low_policy_losses = global_ppo_agent.update_with_experiences(aggregated_experiences)
-        # print("Time taken to update the global PPO agent: ", datetime.now().replace(microsecond=0) - curr_time)
-
-        # Log losses and rewards
-        # Compute total rewards from stats
-        total_hl_rewards = sum([stats['hl_current_ep_reward'] for stats in stats_list])
-        ll_total_rewards = [0 for _ in range(num_ll_policies)]
-        for i in range(num_ll_policies):
-            ll_total_rewards[i] = sum([stats['ll_current_ep_reward'][i] for stats in stats_list])
-
-        total_episode_reward = sum([stats['total_episode_reward'] for stats in stats_list])
-        total_rewards.extend([stats['total_episode_reward'] for stats in stats_list])
-        total_episode_lengths = [stats['episode_length'] for stats in stats_list]
-
-        # Log to TensorBoard
-        avg_hl_reward = total_hl_rewards / num_workers
-        writer.add_scalar('Rewards/HighLevelPolicy', avg_hl_reward, i_episode)
-        for i in range(num_ll_policies):
-            avg_ll_reward = ll_total_rewards[i] / num_workers
-            writer.add_scalar(f'Rewards/LowLevelPolicy/DC_{i+1}', avg_ll_reward, i_episode)
-
-        avg_total_reward = total_episode_reward / num_workers
-        writer.add_scalar('Rewards/TotalEpisodeReward', avg_total_reward, i_episode)
-
-        # Log losses
-        # Log high-level policy losses (actor and critic separately)
-        writer.add_scalar('Loss/HighLevelPolicy_Actor', high_policy_loss[0], total_timesteps) # Actor loss
-        writer.add_scalar('Loss/HighLevelPolicy_Critic', high_policy_loss[1], total_timesteps) # Critic loss
-
-        # Log low-level policy losses (actor and critic separately for each data center)
-        for i, dc_id in enumerate(global_ppo_agent.ll_policy_ids):
-            writer.add_scalar(f'Loss/LowLevelPolicy/DC_{i+1}_Actor', low_policy_losses[dc_id][0], total_timesteps)
-            writer.add_scalar(f'Loss/LowLevelPolicy/DC_{i+1}_Critic', low_policy_losses[dc_id][1], total_timesteps)
-
-        # Send updated policy parameters to workers
-        policy_params = global_ppo_agent.get_policy_params()
-        for conn in parent_conns:
-            conn.send('update_policy')
-            conn.send(policy_params)
-
-        # Decay action_std if it's time
-        if total_timesteps >= next_action_std_decay_step:
-            global_ppo_agent.decay_action_std(action_std_decay_rate, min_action_std)
-            
-            next_action_std_decay_step += action_std_decay_freq  # Schedule next decay step
-            
-            # Optionally log the new action_std for both high-level and low-level policies
-            current_action_std = global_ppo_agent.high_policy.action_std
-            print(f"Decayed action_std to {current_action_std}")
-            writer.add_scalar('Hyperparameters/ActionStd_HighLevel', current_action_std, total_timesteps)
-            # For low-level policies, you can log the action_std of one policy as an example
-            ll_policy_id = list(global_ppo_agent.low_policies.keys())[0]
-            current_action_std_ll = global_ppo_agent.low_policies[ll_policy_id].action_std
-            writer.add_scalar(f'Hyperparameters/ActionStd_LowLevel_{ll_policy_id}', current_action_std_ll, total_timesteps)
-
-        # if total_timesteps >= target_timesteps:
-        #     end_time = time.time()  # Record the end time
-        #     elapsed_time = end_time - benchmark_start_time  # Calculate the elapsed time
-        #     print(f"Time required for {num_cores_per_worker} num workers per core is: {elapsed_time:.2f} seconds")
-            # break
-
-        total_timesteps += sum(total_episode_lengths)
-        i_episode += num_workers
-
-        # Save models periodically
-        if len(total_rewards) >= num_episodes_for_checkpoint * num_workers:
-            average_total_reward = np.mean(total_rewards[-num_episodes_for_checkpoint * num_workers:])
-            
-            print(f'Episode: {i_episode}, Timestep: {total_timesteps}, Average Total Reward over last {num_episodes_for_checkpoint * num_workers} episodes: {average_total_reward:.2f}, Best Total Reward: {best_total_reward:.2f}')
-
-            # Checkpoint saving logic
-            if average_total_reward > best_total_reward:
-                print("--------------------------------------------------------------------------------------------")
-                print("New best average reward over last {} episodes: {:.2f}".format(num_episodes_for_checkpoint * num_workers, average_total_reward))
-                print(f"Saving models to checkpoints: {hl_checkpoint_path}, {ll_checkpoint_path}")
-                global_ppo_agent.save(hl_checkpoint_path, ll_checkpoint_path)
-                print("Models saved")
-                elapsed_time = datetime.now().replace(microsecond=0) - start_time
-                print("Elapsed Time  : ", elapsed_time)
-                print("--------------------------------------------------------------------------------------------")
-                best_total_reward = average_total_reward
-
+        # Print the complete trace of the error
+        except Exception as e:
+            print("Error occurred: ", e)
+            traceback.print_exc()
+            break
     # Close worker processes
     for conn in parent_conns:
         conn.send('close')

@@ -107,8 +107,10 @@ class DCRL(gym.Env):
         self.datacenter_capacity_mw = env_config['datacenter_capacity_mw']
         self.dc_config_file = env_config['dc_config_file']
         self.timezone_shift = env_config['timezone_shift']
-        self.days_per_episode = env_config['days_per_episode']
+        self.days_per_episode = env_config['days_per_episode'] + np.random.randint(-5, 30)
         self.initialize_queue_at_reset =  env_config.get('initialize_queue_at_reset', False)
+        
+        # print(f'Simulating {self.days_per_episode} days')
         
         self.workload_baseline = env_config.get('workload_baseline', False)
         self.debug = env_config.get('debug', False)
@@ -119,7 +121,7 @@ class DCRL(gym.Env):
         #     print(f'Changing the simulated month to {self.month}')
         # else:
         self.month = env_config.get('month')
-        print(f'Simulating month {self.month}')
+        # print(f'Simulating month {self.month}')
 
         self.evaluation_mode = env_config['evaluation']
 
@@ -254,7 +256,7 @@ class DCRL(gym.Env):
 
         return ci_features
 
-    def _create_ls_state(self, t_i, current_workload, queue_status, current_ci, ci_future, ci_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram):
+    def _create_ls_state(self, t_i, current_workload, queue_status, current_ci, ci_future, ci_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, ls_info):
         """
         Create the state of the load shifting environment.
 
@@ -262,78 +264,25 @@ class DCRL(gym.Env):
             np.ndarray: State of the load shifting environment.
         """
         hour_sin_cos = t_i[:2]
-        
-        # # CI Trend analysis
-        # trend_smoothing_window = 4
-        # smoothed_ci_future = np.convolve(np.hstack((current_ci, ci_future[:16])), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
-        # smoothed_ci_past = np.convolve(np.hstack((ci_past, current_ci)), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
-        
-        # # Slope the next 4 hours of CI and the previous 1 hour of CI
-        # ci_future_slope = np.polyfit(range(len(smoothed_ci_future)), smoothed_ci_future, 1)[0]
-        # ci_past_slope = np.polyfit(range(len(smoothed_ci_past)), smoothed_ci_past, 1)[0]
-
-        # # Extract features for future and past CI
-        # ci_future_features = self.extract_ci_features(ci_future, current_ci)
-        # # ci_past_features = self.extract_ci_features(ci_past, current_ci)
-        # ci_future = [ci_future[3], ci_future[15], ci_future[31]]
-        # # Assemble CI features
-        # ci_features = np.hstack([
-        #                 ci_future_slope, ci_past_slope,
-        #                 ci_future_features
-        #             ])
-
-        # # Weather trend analysis
-        # temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
-        
-        # # Extract features for the future temperature
-        # temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
-        
-        # mean_forecast_temperature = np.mean(next_n_out_temperature) # [mean of next 4 intervals]
-        # # Assemble temperature features
-        # temperature_features = np.hstack([
-        #                                 temperature_slope, temperature_features
-        #                             ])
-        
-        # temperature_future = [next_n_out_temperature[3], next_n_out_temperature[15], next_n_out_temperature[31]]
-        
-        # #workload divided by the capacity
-        # workload_capacity = current_workload / self.datacenter_capacity_mw
-        
-        # # Previous computed workload
-        # previous_computed_workload = self.ls_info['ls_previous_computed_workload']
-        
-        # # Combine all features into the state
-        # ls_state = np.float32(np.hstack((
-        #                                 hour_sin_cos,
-        #                                 current_ci,
-        #                                 ci_future,
-        #                                 queue_status,
-        #                                 current_workload,
-        #                                 next_workload,
-        #                                 mean_forecast_temperature, 
-        #                                 temperature_future,
-        #                                 ls_task_age_histogram,
-        #                                 previous_computed_workload
-        #                                 )))
 
         # # CI Trend analysis
         trend_smoothing_window = 4
         smoothed_ci_future = np.convolve(np.hstack((current_ci, ci_future[:16])), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
-        # smoothed_ci_past = np.convolve(np.hstack((ci_past, current_ci)), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
+        smoothed_ci_past = np.convolve(np.hstack((ci_past, current_ci)), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
         
         # # Slope the next 4 hours of CI and the previous 1 hour of CI
         ci_future_slope = np.polyfit(range(len(smoothed_ci_future)), smoothed_ci_future, 1)[0]
-        # ci_past_slope = np.polyfit(range(len(smoothed_ci_past)), smoothed_ci_past, 1)[0]
+        ci_past_slope = np.polyfit(range(len(smoothed_ci_past)), smoothed_ci_past, 1)[0]
 
         # # Extract features for future and past CI
-        # ci_future_features = self.extract_ci_features(ci_future, current_ci)
+        ci_future_features = self.extract_ci_features(ci_future, current_ci)
         # # ci_past_features = self.extract_ci_features(ci_past, current_ci)
 
         # # Assemble CI features
-        # ci_features = np.hstack([
-        #                 ci_future_slope, ci_past_slope,
-        #                 ci_future_features
-        #             ])
+        ci_features = np.hstack([
+                        ci_future_slope, ci_past_slope,
+                        ci_future_features
+                    ])
 
         # # Weather trend analysis
         # temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
@@ -359,11 +308,20 @@ class DCRL(gym.Env):
         #                                 temperature_features,
         #                                 ls_task_age_histogram
         #                             )))
-        ls_state = np.float32(np.hstack((current_ci,
-                                         ci_future_slope,
-                                         current_workload,
-                                         oldest_task_age,
-                                         queue_status
+        
+        dropped_tasks = np.minimum(ls_info['ls_tasks_dropped'], 4) / 4 # Cropping the number of dropped tasks to 4
+        overdue_tasks = np.minimum(ls_info['ls_overdue_penalty'], 10) / 10 # Cropping the number of overdue tasks to 10
+        
+        ls_state = np.float32(np.hstack((
+            # hour_sin_cos,
+            current_ci,
+            ci_features,
+            current_workload,
+            oldest_task_age,
+            # queue_status,
+            ls_task_age_histogram,
+            dropped_tasks,
+            overdue_tasks
             
                                     )))
         # if len(ls_state) != 26:
@@ -483,7 +441,7 @@ class DCRL(gym.Env):
         oldest_task_age = self.ls_info['ls_oldest_task_age']
         average_task_age = self.ls_info['ls_average_task_age']
         ls_task_age_histogram = self.ls_info['ls_task_age_histogram']
-        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram)
+        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, self.ls_info)
         
         self.dc_state = self._create_dc_state(current_workload, next_workload, current_out_temperature, next_out_temperature)
         
@@ -574,7 +532,7 @@ class DCRL(gym.Env):
         next_n_out_temperature = self.weather_m.get_n_next_temperature(n=32)
 
         
-        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, norm_temp, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram)
+        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, norm_temp, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, self.ls_info)
         self.dc_state = self._create_dc_state(workload, next_workload, norm_temp, next_out_temperature)
         self.bat_state = self._create_bat_state(workload, next_workload, ci_i, norm_temp)
 
@@ -584,6 +542,9 @@ class DCRL(gym.Env):
         # Calculate rewards for all agents based on the updated state
         location = self.location
         ci_i_12_hours = self.ci_m.get_n_future_ci(n=4*12)
+        # if terminal:
+            # print(f'Terminal state reached at day {day} and hour {hour}')
+            
         reward_params = self._calculate_reward_params(workload, temp, ci_i, ci_i_future, day, hour, terminal, location, ci_i_12_hours)
         self.ls_reward, self.dc_reward, self.bat_reward = self.calculate_reward(reward_params)
 

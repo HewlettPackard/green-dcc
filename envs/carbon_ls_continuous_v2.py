@@ -29,23 +29,21 @@ class CarbonLoadEnv(gym.Env):
             n_vars_battery (int, optional): Additional number of variables from the battery. Defaults to 1.
             test_mode (bool, optional): Used for evaluation of the model. Defaults to False.
         """
-        assert flexible_workload_ratio < 0.9, "flexible_workload_ratio should be lower than 0.9"
+        assert flexible_workload_ratio < 1, "flexible_workload_ratio should be lower than 1.0 (100%)"
         self.flexible_workload_ratio = flexible_workload_ratio
         
         self.shiftable_tasks_percentage = self.flexible_workload_ratio
         self.non_shiftable_tasks_percentage = 1 - self.flexible_workload_ratio
         
-        # Define a single continuous action space: [-1, 1]
-        # -1: Defer all shiftable tasks
-        # 0: Do nothing
-        # 1: Process all DTQ tasks
+        # Define a single continuous action space: [0, 1]
+        # Action directly specifies the desired computed workload (utilization) between 0 and 1
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
         
         
         # State: [Sin(h), Cos(h), Sin(day_of_year), Cos(day_of_year), self.ls_state, ci_i_future (n_vars_ci), var_to_LS_energy (n_vars_energy), batSoC (n_vars_battery)], 
         # self.ls_state = [current_workload, queue status]
-        # self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(19,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(5,), dtype=np.float32)
+        # self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(16,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(11,), dtype=np.float32)
 
 
         self.global_total_steps = 0
@@ -75,7 +73,9 @@ class CarbonLoadEnv(gym.Env):
         histogram, _ = np.histogram(task_ages, bins=age_bins)
         normalized_histogram = histogram / max(len(self.tasks_queue), 1)  # Avoid division by zero
         
-        normalized_histogram[-1] = 1 if normalized_histogram[-1] > 0 else 0
+        # Replace with a binary value for each bin if there are any tasks in each bin
+        normalized_histogram = np.where(normalized_histogram > 0, 1, 0)
+        
         return normalized_histogram  # Returns an array of proportions
     
     def reset(self, *, seed=None, options=None):
@@ -184,33 +184,27 @@ class CarbonLoadEnv(gym.Env):
         Makes an environment step in `CarbonLoadEnv`.
 
         Args:
-            action (float): Continuous action between -1 and 1.
-                            -1: Defer all shiftable tasks.
-                             1: Process tasks from the DTQ to maximize utilization.
-                             Values between -1 and 0 defer a fraction of tasks, and values between 0 and 1 process a fraction of tasks in the DTQ.
-
-        Returns:
-            state (List[float]): Current state of the environment.
-            reward (float): Reward value.
-            done (bool): A boolean signaling if the episode has ended.
-            info (dict): A dictionary containing additional information about the environment state.
+            action (float): Continuous action between 0 and 1.
+                            The desired computed workload as a fraction of capacity.
         """
         # assert self.action_space.contains(action), f"Action {action} is not in the action space {self.action_space}"
-
-        enforced = False
-        # print(f'Executing temporal load shifting action: {action[0]:.3f} with the current workload: {self.workload:.3f}')
-        non_shiftable_tasks = int(math.ceil(self.workload * self.non_shiftable_tasks_percentage * 100))
-        shiftable_tasks     = int(math.floor(self.workload * self.shiftable_tasks_percentage * 100))
-        tasks_dropped = 0  # Track the number of dropped tasks
-        actual_tasks_processed = 0  # Track the number of processed tasks
-        action_value = np.clip(action[0], -1.0, 1.0)  # Clip the action to [-1, 1]  # Single continuous action
+        action_value = np.clip(action[0], self.action_space.low[0], self.action_space.high[0])  # Clip the action to [0, 1]  # Single continuous action
         
+        # transform the action_value from [-1, 1] to [0, 1]
+        action_value = (action_value + 1) / 2
+        
+        capacity = 100  # Total capacity in tasks per time step
+        desired_tasks_to_process = int(action_value * capacity) #- non_shiftable_tasks
+        
+        # Calculate mandatory tasks
+        non_shiftable_tasks = int(round(self.workload * self.non_shiftable_tasks_percentage * capacity))
+
         # Handle overdue tasks
         overdue_tasks = [task for task in self.tasks_queue if (self.current_day - task['day']) * 24 + (self.current_hour - task['hour']) > 24]
         overdue_penalty = len(overdue_tasks)
 
         # Calculate initial available capacity
-        available_capacity = 90 - (non_shiftable_tasks + shiftable_tasks)  # Limit to 90% capacity
+        available_capacity = capacity - non_shiftable_tasks  # Limit to 90% capacity
 
         # Process overdue tasks if there's capacity
         overdue_tasks_to_process = 0
@@ -220,79 +214,85 @@ class CarbonLoadEnv(gym.Env):
             overdue_tasks_to_process = tasks_that_can_be_processed
 
             for task in overdue_tasks[:tasks_that_can_be_processed]:
-                self.tasks_queue.remove(task)
-
+                self.tasks_queue.remove(task)        
         
-        # Update available capacity after processing overdue tasks
-        available_capacity = 90 - (non_shiftable_tasks + shiftable_tasks + overdue_tasks_to_process)
+        # Total mandatory tasks
+        mandatory_tasks = non_shiftable_tasks + overdue_tasks_to_process
 
+        # Ensure that desired_tasks_to_process is at least the mandatory tasks
+        under_desired = 0
+        if desired_tasks_to_process < mandatory_tasks:
+            # The agent must process at least the mandatory tasks
+            under_desired = mandatory_tasks - desired_tasks_to_process
+            desired_tasks_to_process = mandatory_tasks  # Adjust desired tasks to mandatory
+
+        # Ensure we do not exceed capacity
+        if desired_tasks_to_process > capacity:
+            desired_tasks_to_process = capacity
+
+        # After processing mandatory tasks, capacity remaining
+        capacity_remaining = capacity - mandatory_tasks
+
+        # Remaining desired tasks after mandatory tasks
+        remaining_desired_tasks = desired_tasks_to_process - mandatory_tasks
+
+        tasks_processed = mandatory_tasks
+
+        # Process shiftable tasks from current workload
+        shiftable_tasks = int(round(self.workload * self.shiftable_tasks_percentage * capacity))
+
+        tasks_to_process_from_shiftable = 0
+        if remaining_desired_tasks > 0 and capacity_remaining > 0:
+            tasks_to_process_from_shiftable = min(shiftable_tasks, remaining_desired_tasks, capacity_remaining)
+            tasks_processed += tasks_to_process_from_shiftable
+            capacity_remaining -= tasks_to_process_from_shiftable
+            remaining_desired_tasks -= tasks_to_process_from_shiftable
+
+        # Process tasks from the queue
+        tasks_to_process_from_queue = 0
+        if remaining_desired_tasks > 0 and capacity_remaining > 0:
+            tasks_to_process_from_queue = min(len(self.tasks_queue), remaining_desired_tasks, capacity_remaining)
+            for _ in range(int(tasks_to_process_from_queue)):
+                self.tasks_queue.popleft()
+            tasks_processed += tasks_to_process_from_queue
+            capacity_remaining -= tasks_to_process_from_queue
+            remaining_desired_tasks -= tasks_to_process_from_queue
+
+        # Defer remaining shiftable tasks
+        tasks_to_defer = shiftable_tasks - tasks_to_process_from_shiftable
+        available_queue_space = self.queue_max_len - len(self.tasks_queue)
+        tasks_to_add_to_queue = min(tasks_to_defer, available_queue_space)
+        self.tasks_queue.extend(
+            [{'day': self.current_day, 'hour': self.current_hour, 'utilization': 1}] * int(tasks_to_add_to_queue)
+        )
+        tasks_dropped = tasks_to_defer - tasks_to_add_to_queue  # Tasks that couldn't be deferred due to full queue
+
+        # Update current utilization
+        self.current_utilization = tasks_processed / capacity
         
-        if action_value < 0:  # Defer a fraction of shiftable tasks
-            fraction_to_defer = abs(action_value)  # Convert to positive fraction between 0 and 1
-            tasks_to_defer = int(shiftable_tasks * fraction_to_defer)
-
-            # Attempt to queue deferred tasks
-            available_queue_space = self.queue_max_len - len(self.tasks_queue)
-            tasks_to_add = min(tasks_to_defer, available_queue_space)
-            tasks_dropped += tasks_to_defer - tasks_to_add
-
-            # Add deferred tasks to the queue
-            self.tasks_queue.extend(
-                [{'day': self.current_day, 'hour': self.current_hour, 'utilization': 1}] * tasks_to_add
-            )
-
-            # Update utilization
-            self.current_utilization = ((shiftable_tasks - tasks_to_add) + overdue_tasks_to_process) / 100
-
-        
-        elif action_value > 0:  # Process a fraction of tasks from the queue
-            fraction_to_process = action_value  # Fraction between 0 and 1
-            if available_capacity > 0:
-                max_tasks_can_process = min(len(self.tasks_queue), available_capacity)
-                tasks_to_process = int(max_tasks_can_process * fraction_to_process)
-
-                # if we can process all of the tasks in the queue, make it faster with clear() instead of with a for loop
-                if tasks_to_process == len(self.tasks_queue):
-                    self.tasks_queue.clear()
-                else:
-                    # Vectorized: Pop multiple tasks at once
-                    for _ in range(tasks_to_process):
-                        self.tasks_queue.popleft()
-
-                # # Process tasks from the queue
-                # for _ in range(tasks_to_process):
-                #     self.tasks_queue.popleft()
-                actual_tasks_processed = tasks_to_process
-
-                # Update utilization
-                self.current_utilization = (shiftable_tasks + overdue_tasks_to_process + actual_tasks_processed) / 100
-            else:
-                self.current_utilization = (shiftable_tasks + overdue_tasks_to_process) / 100
-
-        else:  # action_value == 0, Do nothing
-            self.current_utilization = (shiftable_tasks + overdue_tasks_to_process) / 100
-
-        if not self.initialize_queue_at_reset: # That means that we are on eval mode
-            self.current_utilization += non_shiftable_tasks / 100
-            
-        self.global_total_steps += 1
-        
+        # if not self.initialize_queue_at_reset: # That means that we are on eval mode
+            # self.current_utilization += non_shiftable_tasks / capacity
+                    
         original_workload = self.workload
         tasks_in_queue = len(self.tasks_queue)
-
             
         reward = 0 
         
-        # Calculate the age of each task in the queue
-        if len(self.tasks_queue) > 0:
-            task_ages = [(self.current_day - task['day']) * 24 + (self.current_hour - task['hour']) for task in self.tasks_queue]
+        # Calculate queue statistics
+        tasks_in_queue = len(self.tasks_queue)
+        if tasks_in_queue > 0:
+            task_ages = [
+                (self.current_day - task['day']) * 24 + (self.current_hour - task['hour'])
+                for task in self.tasks_queue
+            ]
             oldest_task_age = max(task_ages)
             average_task_age = sum(task_ages) / len(task_ages)
         else:
             oldest_task_age = 0.0
             average_task_age = 0.0
-        
+
         task_age_histogram = self.get_task_age_histogram(self.tasks_queue, self.current_day, self.current_hour)
+
 
 
         info = {"ls_original_workload": original_workload,
@@ -307,14 +307,17 @@ class CarbonLoadEnv(gym.Env):
                 'ls_norm_tasks_in_queue': tasks_in_queue/self.queue_max_len,
                 'ls_tasks_dropped': tasks_dropped,
                 'ls_current_hour': self.current_hour,
-                'ls_tasks_processed': actual_tasks_processed,
-                'ls_enforced': enforced,
+                'ls_tasks_processed': tasks_processed,
+                'ls_enforced': False,
                 'ls_oldest_task_age': oldest_task_age/24,
                 'ls_average_task_age': average_task_age/24,
                 'ls_overdue_penalty': overdue_penalty,
                 'ls_computed_tasks': int(self.current_utilization*100),
                 'ls_task_age_histogram': task_age_histogram,}
 
+        # Update the environment state
+        self.global_total_steps += 1
+    
         if info['ls_shifted_workload'] > 1 or info['ls_shifted_workload'] < 0:
             # Launch an exception
             raise ValueError("The utilization should be between 0 and 1")

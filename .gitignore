@@ -1,4 +1,6 @@
 Eplus-env-datacenter-mixed-continuous*/
+heuristics/
+heuristics.zip
 results/
 .history/
 __pycache__/
@@ -26,3 +28,4 @@ HRL_*_logs
 HRL_*_preTrained
 HRL_runs
 results.csv
+*/HRL_eval_runs/

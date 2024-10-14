@@ -22,16 +22,16 @@ CURR_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG = {
     # DC1
     'config1' : {
-        'location': 'ny',
-        'cintensity_file': 'NY_NG_&_avgCI.csv',
+        'location': 'ca',
+        'cintensity_file': 'CA_NG_&_avgCI.csv',
         'weather_file': 'USA_NY_New.York-LaGuardia.epw',
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
-        'flexible_load': 0.6,
+        'flexible_load': 0.999,
         'timezone_shift': 8,
         'month': 7,
-        'days_per_episode': 7,
+        'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
@@ -43,23 +43,22 @@ DEFAULT_CONFIG = {
 
     # DC2
     'config2' : {
-        'location': 'va',
-        'cintensity_file': 'VA_NG_&_avgCI.csv',
+        'location': 'ca',
+        'cintensity_file': 'CA_NG_&_avgCI.csv',
         'weather_file': 'USA_AZ_Phoenix-Sky.Harbor.epw',
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
-        'flexible_load': 0.6,
+        'flexible_load': 0.999,
         'timezone_shift': 0,
         'month': 7,
-        'days_per_episode': 7,
+        'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
-        'workload_baseline': 0.2,
         'initialize_queue_at_reset': True,
         'agents': ['agent_ls'],
-        'workload_baseline': 0.2,
+        'workload_baseline': 0.0,
 
         },
 
@@ -71,10 +70,10 @@ DEFAULT_CONFIG = {
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
-        'flexible_load': 0.6,
+        'flexible_load': 0.999,
         'timezone_shift': 16,
         'month': 7,
-        'days_per_episode': 7,
+        'days_per_episode': 30,
         'partial_obs': True,
         'nonoverlapping_shared_obs_space': True,
         'debug': False,
@@ -121,7 +120,7 @@ class HeirarchicalDCRL(gym.Env):
             'DC3': DC3,
         }
 
-        self.datacenter_ids = list(self.datacenters.keys())
+        self.datacenter_ids = sorted(list(self.datacenters.keys()))
         
         # Load trained lower level agent
         self.lower_level_actor = LowLevelActorHARL(
@@ -185,6 +184,7 @@ class HeirarchicalDCRL(gym.Env):
         random_init_day  = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1])) # self.init_day 
         random_init_hour = random.randint(0, 23)
         
+        # print(f'Random init day: {random_init_day}, Random init hour: {random_init_hour}')
         
         # Reset environments and store initial observations and infos
         for env_id, env in self.datacenters.items():
@@ -498,7 +498,7 @@ class HeirarchicalDCRL(gym.Env):
             )
         # Apply the final net transfers to update the current workloads of each datacenter
         for dc, transfer in net_transfer.items():
-            new_workload = original_workload[dc] + transfer
+            new_workload = round(original_workload[dc] + transfer, 6)
             if new_workload < 0 or new_workload > 1:
                 raise ValueError(f"Workload for {dc} should be between 0 and 1 after transfer, got {new_workload:.3f}")
             self.datacenters[dc].workload_m.set_current_workload(new_workload)

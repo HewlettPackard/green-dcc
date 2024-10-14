@@ -74,36 +74,50 @@ class RunningStats:
         normalized_batch = (batch - self.mean) / std
         return normalized_batch
 
+# In your PPO class or as a separate class
+class SharedFeatureExtractor(nn.Module):
+    def __init__(self, input_dim, shared_hidden_dim):
+        super(SharedFeatureExtractor, self).__init__()
+        self.shared_layers = nn.Sequential(
+            nn.Linear(input_dim, shared_hidden_dim),
+            nn.LayerNorm(shared_hidden_dim),
+            nn.Tanh(),
+            # nn.Linear(shared_hidden_dim, shared_hidden_dim),
+            # nn.LayerNorm(shared_hidden_dim),
+            # nn.ReLU(),
+        )
+    
+    def forward(self, x):
+        return self.shared_layers(x)
+
 
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, has_continuous_action_space, action_std_init):
+    def __init__(self, shared_feature_extractor, action_dim, has_continuous_action_space, action_std_init):
         super(Actor, self).__init__()
+        self.shared_feature_extractor = shared_feature_extractor
         self.has_continuous_action_space = has_continuous_action_space
-        # self.layer_norm = nn.LayerNorm(state_dim)
         self.action_dim = action_dim
+        self.action_std_init = action_std_init
 
         if has_continuous_action_space:
             self.action_var = torch.full((action_dim,), action_std_init * action_std_init).to(device)
 
-            self.actor = nn.Sequential(
-                nn.Linear(state_dim, 32),
-                nn.Tanh(),
-                nn.Linear(32, 32),
+            self.policy_head = nn.Sequential(
+                nn.Linear(shared_feature_extractor.shared_layers[-3].out_features, 32),
                 nn.Tanh(),
                 nn.Linear(32, action_dim),
                 nn.Tanh()
             )
+
         else:
-            self.actor = nn.Sequential(
-                nn.Linear(state_dim, 32),
-                nn.Tanh(),
-                nn.Linear(32, 32),
+            self.policy_head = nn.Sequential(
+                nn.Linear(shared_feature_extractor.shared_layers[-3].out_features, 32),
                 nn.Tanh(),
                 nn.Linear(32, action_dim),
                 nn.Softmax(dim=-1)
             )
-        
+
         # Apply weight initialization
         # self.apply(self.init_weights)
 
@@ -123,42 +137,44 @@ class Actor(nn.Module):
             self.action_var = torch.full((self.action_dim,), new_action_std * new_action_std).to(device)
 
     def forward(self, state):
+        shared_representation = self.shared_feature_extractor(state)
         if self.has_continuous_action_space:
-            action_mean = self.actor(state)
+            action_mean = self.policy_head(shared_representation)
             return action_mean
         else:
-            action_probs = self.actor(state)
+            action_probs = self.policy_head(shared_representation)
             return action_probs
 
     def evaluate(self, state, action):
+        shared_representation = self.shared_feature_extractor(state)
         if self.has_continuous_action_space:
-            action_mean = self.actor(state)
+            action_mean = self.policy_head(shared_representation)
             action_var = self.action_var.expand_as(action_mean)
             cov_mat = torch.diag_embed(action_var).to(device)
             dist = MultivariateNormal(action_mean, cov_mat)
         else:
-            action_probs = self.actor(state)
+            action_probs = self.policy_head(shared_representation)
             dist = Categorical(action_probs)
 
         action_logprobs = dist.log_prob(action)
         dist_entropy = dist.entropy()
 
         return action_logprobs, dist_entropy
+    
 class Critic(nn.Module):
-    def __init__(self, state_dim):
+    def __init__(self, shared_feature_extractor):
         super(Critic, self).__init__()
-        # self.layer_norm = nn.LayerNorm(state_dim)
-        self.critic = nn.Sequential(
-            nn.Linear(state_dim, 256),
+        self.shared_feature_extractor = shared_feature_extractor
+        self.value_head = nn.Sequential(
+            nn.Linear(shared_feature_extractor.shared_layers[-3].out_features, 64),
             nn.Tanh(),
-            nn.Linear(256, 256),
-            nn.Tanh(),
-            nn.Linear(256, 1)
+            nn.Linear(64, 1)
         )
 
     def forward(self, state):
-        # state = self.layer_norm(state)
-        return self.critic(state)
+        shared_representation = self.shared_feature_extractor(state)
+        value = self.value_head(shared_representation)
+        return value
 
 class RolloutDataset(data.Dataset):
     def __init__(self, states, actions, logprobs, returns, advantages, old_state_values):
@@ -178,7 +194,7 @@ class RolloutDataset(data.Dataset):
 
         
 class PPO:
-    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6):
+    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6, shared_feature_extractor=None, **kwargs):
 
         self.has_continuous_action_space = has_continuous_action_space
 
@@ -190,15 +206,24 @@ class PPO:
         self.K_epochs = K_epochs
         
         self.buffer = RolloutBuffer()
-        
-        # Separate actor and critic networks
-        self.actor = Actor(state_dim, action_dim, has_continuous_action_space, action_std_init).to(device)
-        self.critic = Critic(state_dim).to(device)
+        self.shared_feature_extractor = shared_feature_extractor
 
-        self.actor_old = Actor(state_dim, action_dim, has_continuous_action_space, action_std_init).to(device)
+        # Separate actor and critic networks
+        self.actor = Actor(shared_feature_extractor=self.shared_feature_extractor,
+                           action_dim=action_dim,
+                           has_continuous_action_space=has_continuous_action_space,
+                           action_std_init=action_std_init
+                           ).to(device)
+        self.critic = Critic(shared_feature_extractor=self.shared_feature_extractor).to(device)
+
+        self.actor_old = Actor(shared_feature_extractor=self.shared_feature_extractor,
+                           action_dim=action_dim,
+                           has_continuous_action_space=has_continuous_action_space,
+                           action_std_init=action_std_init
+                           ).to(device)
         self.actor_old.load_state_dict(self.actor.state_dict())
 
-        self.critic_old = Critic(state_dim).to(device)
+        self.critic_old = Critic(shared_feature_extractor=self.shared_feature_extractor).to(device)
         self.critic_old.load_state_dict(self.critic.state_dict())
 
         # Separate optimizers
@@ -226,6 +251,21 @@ class PPO:
             mode='triangular2',
             cycle_momentum=False
         )
+        
+        # Collect parameters for the optimizer
+        if self.shared_feature_extractor is not None:
+            self.optimizer = torch.optim.Adam(
+                list(self.actor.policy_head.parameters()) +
+                list(self.critic.value_head.parameters()) +
+                list(self.shared_feature_extractor.parameters()),
+                lr=lr_actor  # You might want to set different LRs
+            )
+        else:
+            self.optimizer = torch.optim.Adam(
+                list(self.actor.parameters()) + list(self.critic.parameters()),
+                lr=lr_actor
+            )
+            
 
         self.MseLoss = nn.MSELoss()
         self.batch_size = 128
@@ -334,8 +374,8 @@ class PPO:
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(device)
 
         # Normalize states once
-        self.state_stats.update(old_states)
-        old_states = self.state_stats.normalize(old_states)
+        # self.state_stats.update(old_states)
+        # old_states = self.state_stats.normalize(old_states)
 
         # Prepare data as a list of transitions
         dataset = data.TensorDataset(old_states, old_actions, old_logprobs, old_returns, old_state_values)
@@ -352,8 +392,8 @@ class PPO:
             advantages = old_returns - state_values.detach()
 
             # Normalize advantages per epoch
-            self.advantage_stats.update(advantages)
-            advantages = self.advantage_stats.normalize(advantages)
+            # self.advantage_stats.update(advantages)
+            # advantages = self.advantage_stats.normalize(advantages)
             
             # Check that the lengths of the tensors are correct
             if not (old_states.size(0) == old_actions.size(0) == old_logprobs.size(0) == old_returns.size(0) == advantages.size(0) == old_state_values.size(0)):
@@ -400,7 +440,7 @@ class PPO:
                 surr1 = ratios * batch_advantages
                 surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * batch_advantages
                 actor_loss = -torch.min(surr1, surr2) - 0.01 * dist_entropy
-
+                
                 # Value function clipping with Huber loss (or MSE loss)
                 value_pred_clipped = batch_old_state_values + torch.clamp(
                     state_values - batch_old_state_values, -self.eps_clip, self.eps_clip
@@ -409,19 +449,16 @@ class PPO:
                 value_loss_clipped = (value_pred_clipped - batch_returns).pow(2)
                 critic_loss = 0.5 * torch.max(value_loss_unclipped, value_loss_clipped).mean()
 
+                # Combine actor and critic losses
+                loss = actor_loss.mean() + critic_loss
+                
                 # Update actor
-                self.optimizer_actor.zero_grad()
-                actor_loss.mean().backward()
-                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_norm=5.0)
-                self.optimizer_actor.step()
-                self.scheduler_actor.step()
-
-                # Update critic
-                self.optimizer_critic.zero_grad()
-                critic_loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=5.0)
-                self.optimizer_critic.step()
-                self.scheduler_critic.step()
+                self.optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.shared_feature_extractor.parameters(), max_norm=5.0)
+                torch.nn.utils.clip_grad_norm_(self.actor.policy_head.parameters(), max_norm=5.0)
+                torch.nn.utils.clip_grad_norm_(self.critic.value_head.parameters(), max_norm=5.0)
+                self.optimizer.step()
 
                 total_actor_loss += actor_loss.mean().item()
                 total_critic_loss += critic_loss.item()
