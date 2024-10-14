@@ -28,4 +28,6 @@ HRL_*_logs
 HRL_*_preTrained
 HRL_runs
 results.csv
+heuristics/
+HRL_*_runs/
 */HRL_eval_runs/

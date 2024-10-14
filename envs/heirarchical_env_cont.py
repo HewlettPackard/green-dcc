@@ -331,6 +331,11 @@ class HeirarchicalDCRL(gym.Env):
             self.metrics[env_id]['workload'].append(info['agent_ls']['ls_shifted_workload'])
             self.metrics[env_id]['ls_overdue_penalty'].append(info['agent_ls']['ls_overdue_penalty'])
 
+            self.heir_obs[env_id] = self.get_dc_variables(env_id)
+            
+        # Get common variables after reset (the time manager has internally the hour variable)
+        self.heir_obs['__common__'] = self.get_common_variables()
+        
         done = any(self.all_done.values())
         return done
 
