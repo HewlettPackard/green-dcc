@@ -17,7 +17,8 @@ class CarbonLoadEnv(gym.Env):
         test_mode=False,
         queue_max_len=500,
         initialize_queue_at_reset=False,
-        num_action_levels=5  # Number of discrete action levels
+        num_action_levels=5,  # Number of discrete action levels
+        max_task_hours = 24
         ):
         """Creates a discrete load shifting environment.
 
@@ -32,7 +33,7 @@ class CarbonLoadEnv(gym.Env):
         
         self.shiftable_tasks_percentage = self.flexible_workload_ratio
         self.non_shiftable_tasks_percentage = 1 - self.flexible_workload_ratio
-        
+        self.max_task_hours = max_task_hours
         # Define a discrete action space: [0, num_action_levels - 1]
         self.num_action_levels = num_action_levels
         self.action_space = spaces.Discrete(self.num_action_levels)
@@ -87,7 +88,7 @@ class CarbonLoadEnv(gym.Env):
             # task_ages = np.random.random_integers(0, max_task_age*4, initial_queue_length)/4
             
             # Generate task ages using an exponential distribution
-            max_task_age = 24  # Maximum age in hours
+            max_task_age = self.max_task_hours  # Maximum age in hours
             # Set the rate parameter (lambda) for the exponential distribution
             lambda_param = 1.0 / 4.0  # Mean age of 6 hours (adjust as needed)
             task_ages = np.round(np.random.exponential(scale=1.0 / lambda_param, size=initial_queue_length) * 4)/4
@@ -182,19 +183,18 @@ class CarbonLoadEnv(gym.Env):
         
         capacity = 100  # Total capacity in tasks per time step
         desired_tasks_to_process = int(action_value * capacity) #- non_shiftable_tasks
-        
         # Calculate mandatory tasks
         non_shiftable_tasks = int(round(self.workload * self.non_shiftable_tasks_percentage * capacity))
-
         # Handle overdue tasks
-        overdue_tasks = [task for task in self.tasks_queue if (self.current_day - task['day']) * 24 + (self.current_hour - task['hour']) > 24]
+        overdue_tasks = [task for task in self.tasks_queue if (self.current_day - task['day']) * 24 + (self.current_hour - task['hour']) > self.max_task_hours]
         overdue_penalty = len(overdue_tasks)
-
+        
         # Calculate initial available capacity
         available_capacity = capacity - non_shiftable_tasks  # Limit to remaining capacity after non-shiftable tasks
-
         # Process overdue tasks if there's capacity
         overdue_tasks_to_process = 0
+        if overdue_penalty > 0:
+            print("overdue_penalty: ", overdue_penalty)
         if available_capacity > 0 and len(overdue_tasks) > 0:
             overdue_task_count = len(overdue_tasks)
             tasks_that_can_be_processed = min(overdue_task_count, available_capacity)
@@ -219,7 +219,7 @@ class CarbonLoadEnv(gym.Env):
 
         # After processing mandatory tasks, capacity remaining
         capacity_remaining = capacity - mandatory_tasks
-
+        #print("desired_tasks_to_process: ", desired_tasks_to_process)
         # Remaining desired tasks after mandatory tasks
         remaining_desired_tasks = desired_tasks_to_process - mandatory_tasks
 
@@ -228,15 +228,41 @@ class CarbonLoadEnv(gym.Env):
         # Process shiftable tasks from current workload
         shiftable_tasks = int(round(self.workload * self.shiftable_tasks_percentage * capacity))
 
-        tasks_to_process_from_shiftable = 0
-        if remaining_desired_tasks > 0 and capacity_remaining > 0:
-            tasks_to_process_from_shiftable = min(shiftable_tasks, remaining_desired_tasks, capacity_remaining)
-            tasks_processed += tasks_to_process_from_shiftable
-            capacity_remaining -= tasks_to_process_from_shiftable
-            remaining_desired_tasks -= tasks_to_process_from_shiftable
+        # tasks_to_process_from_shiftable = 0
+        # if remaining_desired_tasks > 0 and capacity_remaining > 0:
+        #     tasks_to_process_from_shiftable = min(shiftable_tasks, remaining_desired_tasks, capacity_remaining)
+        #     tasks_processed += tasks_to_process_from_shiftable
+        #     capacity_remaining -= tasks_to_process_from_shiftable
+        #     remaining_desired_tasks -= tasks_to_process_from_shiftable
+
+        # # Process tasks from the queue
+        # tasks_to_process_from_queue = 0
+        # if remaining_desired_tasks > 0 and capacity_remaining > 0:
+        #     tasks_to_process_from_queue = min(len(self.tasks_queue), remaining_desired_tasks, capacity_remaining)
+        #     for _ in range(int(tasks_to_process_from_queue)):
+        #         self.tasks_queue.popleft()
+        #     tasks_processed += tasks_to_process_from_queue
+        #     capacity_remaining -= tasks_to_process_from_queue
+        #     remaining_desired_tasks -= tasks_to_process_from_queue
+
+        # # Defer remaining shiftable tasks
+        # tasks_to_defer = shiftable_tasks - tasks_to_process_from_shiftable
+        # available_queue_space = self.queue_max_len - len(self.tasks_queue)
+        # tasks_to_add_to_queue = min(tasks_to_defer, available_queue_space)
+        # self.tasks_queue.extend(
+        #     [{'day': self.current_day, 'hour': self.current_hour, 'utilization': 1}] * int(tasks_to_add_to_queue)
+        # )
+
+        tasks_to_defer = shiftable_tasks
+        available_queue_space = self.queue_max_len - len(self.tasks_queue)
+        tasks_to_add_to_queue = min(tasks_to_defer, available_queue_space)
+        self.tasks_queue.extend(
+            [{'day': self.current_day, 'hour': self.current_hour, 'utilization': 1}] * int(tasks_to_add_to_queue)
+        )
 
         # Process tasks from the queue
         tasks_to_process_from_queue = 0
+
         if remaining_desired_tasks > 0 and capacity_remaining > 0:
             tasks_to_process_from_queue = min(len(self.tasks_queue), remaining_desired_tasks, capacity_remaining)
             for _ in range(int(tasks_to_process_from_queue)):
@@ -245,15 +271,15 @@ class CarbonLoadEnv(gym.Env):
             capacity_remaining -= tasks_to_process_from_queue
             remaining_desired_tasks -= tasks_to_process_from_queue
 
-        # Defer remaining shiftable tasks
-        tasks_to_defer = shiftable_tasks - tasks_to_process_from_shiftable
-        available_queue_space = self.queue_max_len - len(self.tasks_queue)
-        tasks_to_add_to_queue = min(tasks_to_defer, available_queue_space)
-        self.tasks_queue.extend(
-            [{'day': self.current_day, 'hour': self.current_hour, 'utilization': 1}] * int(tasks_to_add_to_queue)
-        )
+        # tasks_to_process_from_shiftable = 0
+        # if remaining_desired_tasks > 0 and capacity_remaining > 0:
+        #     tasks_to_process_from_shiftable = min(shiftable_tasks, remaining_desired_tasks, capacity_remaining)
+        #     tasks_processed += tasks_to_process_from_shiftable
+        #     capacity_remaining -= tasks_to_process_from_shiftable
+        #     remaining_desired_tasks -= tasks_to_process_from_shiftable
+        
         tasks_dropped = tasks_to_defer - tasks_to_add_to_queue  # Tasks that couldn't be deferred due to full queue
-
+        
         # Update current utilization
         self.current_utilization = tasks_processed / capacity
         

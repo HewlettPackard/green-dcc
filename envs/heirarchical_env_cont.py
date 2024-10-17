@@ -29,7 +29,7 @@ DEFAULT_CONFIG = {
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
         'flexible_load': 0.999,
-        'timezone_shift': 8,
+        'timezone_shift': 0,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
@@ -37,7 +37,8 @@ DEFAULT_CONFIG = {
         'debug': False,
         'initialize_queue_at_reset': True,
         'agents': ['agent_ls'],
-        'workload_baseline': -0.1,
+        'workload_baseline': 0.0,
+        'dc_id' : 1
 
         },
 
@@ -59,6 +60,7 @@ DEFAULT_CONFIG = {
         'initialize_queue_at_reset': True,
         'agents': ['agent_ls'],
         'workload_baseline': 0.0,
+        'dc_id' : 2
 
         },
 
@@ -71,7 +73,7 @@ DEFAULT_CONFIG = {
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
         'flexible_load': 0.999,
-        'timezone_shift': 16,
+        'timezone_shift': 0,
         'month': 7,
         'days_per_episode': 30,
         'partial_obs': True,
@@ -79,7 +81,8 @@ DEFAULT_CONFIG = {
         'debug': False,
         'initialize_queue_at_reset': True,
         'agents': ['agent_ls'],
-        'workload_baseline': -0.2,
+        'workload_baseline': 0.0,
+        'dc_id' : 3
 
         },
     
@@ -291,7 +294,6 @@ class HeirarchicalDCRL(gym.Env):
         # for the low-level agents here
         for datacenter_id in self.datacenters:
             curr_workload = self.datacenters[datacenter_id].workload_m.get_current_workload()
-            # print(f'Current workload for {datacenter_id}: {curr_workload}')
             # On agent_ls, the workload is the 5th element of the array (sine/cos hour day, workload, queue, etc)
             self.low_level_observations[datacenter_id]['agent_ls'][4] = curr_workload
             
@@ -439,7 +441,6 @@ class HeirarchicalDCRL(gym.Env):
         return action_dict
 
     def safety_enforcement(self, actions: dict):
-        
         # Check if the action is an array instead of a dictionary
         if isinstance(actions, np.ndarray):
         # Transform the array into the expected dictionary format
@@ -466,7 +467,7 @@ class HeirarchicalDCRL(gym.Env):
         # Initialize the net transfer for each datacenter
         current_datacenter_workload = original_workload.copy()  # This will be dynamically updated
         net_transfer = {dc: 0.0 for dc in self.datacenters}
-    
+        worload_ratio = 1
         overassigned_workload = []
         for _, action in actions.items():
             sender = self.datacenter_ids[action['sender']]
@@ -475,22 +476,25 @@ class HeirarchicalDCRL(gym.Env):
 
             sender_capacity = self.datacenters[sender].datacenter_capacity_mw
             receiver_capacity = self.datacenters[receiver].datacenter_capacity_mw
-
-            # Determine the effective workload to be moved from sender to receiver
-            workload_to_move_mwh = workload_to_move * current_datacenter_workload[sender] * sender_capacity
-            receiver_available_mwh = (self.max_util - current_datacenter_workload[receiver]) * receiver_capacity
             
+            # Determine the effective workload to be moved from sender to receiver
+            workload_to_move_mwh = workload_to_move * sender_capacity * worload_ratio #* current_datacenter_workload[sender] 
+            receiver_available_mwh = (self.max_util - current_datacenter_workload[receiver]) * receiver_capacity
+            #print("workload_to_move_mwh: " , workload_to_move_mwh)
             # The effective movement is the minimum between the workload to move and available capacity in the receiver
             effective_movement_mwh = min(workload_to_move_mwh, receiver_available_mwh)
-
+            #print("possible movement: ", effective_movement_mwh)
             # Update net transfer for sender (workload is leaving) and receiver (workload is incoming)
-            net_transfer[sender] -= effective_movement_mwh / sender_capacity  # outgoing workload
-            net_transfer[receiver] += effective_movement_mwh / receiver_capacity  # incoming workload
+            sender_effective_movement_mwh = min(effective_movement_mwh, current_datacenter_workload[sender]) / sender_capacity
+            net_transfer[sender] -= sender_effective_movement_mwh #effective_movement_mwh / sender_capacity  # outgoing workload
+            net_transfer[receiver] += sender_effective_movement_mwh / receiver_capacity  # incoming workload
 
             # Dynamically update current workloads after each transfer
-            current_datacenter_workload[sender] -= effective_movement_mwh / sender_capacity
-            current_datacenter_workload[receiver] += effective_movement_mwh / receiver_capacity
-
+            #print("sender_effective_movement_mwh: ", sender_effective_movement_mwh)
+            current_datacenter_workload[sender] -= sender_effective_movement_mwh / sender_capacity
+            current_datacenter_workload[receiver] += sender_effective_movement_mwh / receiver_capacity
+            #print("DC: ",sender , 'Workload: ',  current_datacenter_workload[sender])
+            #print("DC: ",receiver , 'Workload: ', current_datacenter_workload[receiver])
             # print(f'Effective movement: {effective_movement_mwh:.3f} MWh from {sender} to {receiver}')
 
             # Track overassigned workload if the transfer was partially completed
@@ -498,12 +502,13 @@ class HeirarchicalDCRL(gym.Env):
                 (
                     sender, 
                     receiver,
-                    (workload_to_move_mwh - effective_movement_mwh) / receiver_capacity
+                    (workload_to_move_mwh - sender_effective_movement_mwh) / receiver_capacity
                 )
             )
         # Apply the final net transfers to update the current workloads of each datacenter
         for dc, transfer in net_transfer.items():
             new_workload = round(original_workload[dc] + transfer, 6)
+            #new_workload = max(new_workload, 0)
             if new_workload < 0 or new_workload > 1:
                 raise ValueError(f"Workload for {dc} should be between 0 and 1 after transfer, got {new_workload:.3f}")
             self.datacenters[dc].workload_m.set_current_workload(new_workload)
