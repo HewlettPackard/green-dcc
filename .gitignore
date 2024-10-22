@@ -34,3 +34,4 @@ HRL_*_runs/
 *.csv
 *.zip
 logs/*
+ray_results/*
