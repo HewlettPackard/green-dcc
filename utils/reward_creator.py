@@ -12,7 +12,7 @@ norm_cfp_values = {'ny': {'mean': 40174, 'std': 13873},
 }
 
 norm_energy_values = {'ny': {'mean': 173, 'std': 45},
-                      'ca': {'mean': 270, 'std': 200},
+                      'ca': {'mean': 240, 'std': 50},
                       'az': {'mean': 234, 'std': 78},
                       'va': {'mean': 170, 'std': 49}
     }
@@ -32,7 +32,7 @@ def default_ls_reward(params: dict) -> float:
     location = params['location']
     total_energy = params['bat_total_energy_with_battery_KWh']
     norm_total_energy = (total_energy - norm_energy_values[location]['mean']) / norm_energy_values[location]['std']
-    
+    # bat_dcload.append(total_energy)
     # Calculate energy footprint reward
     norm_ci = params['norm_CI']
     footprint_reward = -0.5 * norm_ci * norm_total_energy  # Reduced scaling to make the reward less aggressive

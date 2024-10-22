@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
-        'flexible_load': 0.999,
+        'flexible_load': 0.4,
         'timezone_shift': 8,
         'month': 7,
         'days_per_episode': 30,
@@ -37,7 +37,7 @@ DEFAULT_CONFIG = {
         'debug': False,
         'initialize_queue_at_reset': True,
         'agents': ['agent_ls'],
-        'workload_baseline': -0.1,
+        'workload_baseline': 0.0,
 
         },
 
@@ -49,7 +49,7 @@ DEFAULT_CONFIG = {
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
-        'flexible_load': 0.999,
+        'flexible_load': 0.4,
         'timezone_shift': 0,
         'month': 7,
         'days_per_episode': 30,
@@ -70,7 +70,7 @@ DEFAULT_CONFIG = {
         'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv',
         'dc_config_file': 'dc_config_dc1.json',
         'datacenter_capacity_mw' : 1.0,
-        'flexible_load': 0.999,
+        'flexible_load': 0.4,
         'timezone_shift': 16,
         'month': 7,
         'days_per_episode': 30,
@@ -79,7 +79,7 @@ DEFAULT_CONFIG = {
         'debug': False,
         'initialize_queue_at_reset': True,
         'agents': ['agent_ls'],
-        'workload_baseline': -0.2,
+        'workload_baseline': 0.0,
 
         },
     
@@ -226,9 +226,9 @@ class HeirarchicalDCRL(gym.Env):
         # actions[2] -> transfer between DC2 and DC3
 
         # Calculate workload to transfer based on action magnitude and direction
-        transfer_DC1_DC2 = np.clip(actions[0], self.action_space.low[0], self.action_space.high[0])
-        transfer_DC1_DC3 = np.clip(actions[1], self.action_space.low[0], self.action_space.high[0])
-        transfer_DC2_DC3 = np.clip(actions[2], self.action_space.low[0], self.action_space.high[0])
+        transfer_DC1_DC2 = np.clip(actions[0], self.action_space['high_level_policy'].low[0], self.action_space['high_level_policy'].high[0])
+        transfer_DC1_DC3 = np.clip(actions[1], self.action_space['high_level_policy'].low[0], self.action_space['high_level_policy'].high[0])
+        transfer_DC2_DC3 = np.clip(actions[2], self.action_space['high_level_policy'].low[0], self.action_space['high_level_policy'].high[0])
         
         # The transfer is a dictionary of dictionaries with the following structure:
         # 'transfer_0': {'receiver': 1/0, 'sender': 0/1, 'workload_to_move': array([actions[0]])
@@ -298,17 +298,18 @@ class HeirarchicalDCRL(gym.Env):
             # Update the workload in the environment
             self.datacenters[datacenter_id].ls_env.update_workload(curr_workload)
         
+        # I am not sure what this action does because we are overwriting the action of the active agents with the computed actions. 
         # Compute actions for each dc_id in each environment
         low_level_actions = {}
         for env_id, env_obs in self.low_level_observations.items():
             if self.all_done[env_id]:
                 continue
             # Only the 'active_agents' are considered, the rest are using the default "do-nothing" action
-            low_level_actions[env_id] = self.lower_level_actor.compute_actions(env_obs)
+            # low_level_actions[env_id] = self.lower_level_actor.compute_actions(env_obs)
 
             # Override computed low-level actions with provided actions
-            low_level_actions[env_id].update(actions.get(env_id, {}))
-
+            # low_level_actions[env_id].update(actions.get(env_id, {}))
+            low_level_actions[env_id] =  actions.get(env_id, {})
         # Step through each environment with computed low_level_actions
         self.low_level_infos = {}
         self.low_level_rewards = {}

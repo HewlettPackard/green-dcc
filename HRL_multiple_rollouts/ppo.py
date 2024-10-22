@@ -213,7 +213,7 @@ class PPO:
             self.optimizer_actor,
             base_lr=lr_actor / 100,  # Set base_lr to a fraction of lr_actor
             max_lr=lr_actor,        # Use initial lr_actor as max_lr
-            step_size_up=5000,       # Adjust step_size_up as needed
+            step_size_up=50000,       # Adjust step_size_up as needed
             mode='triangular2',
             cycle_momentum=False    # Set to True if using optimizers with momentum
         )
@@ -222,7 +222,7 @@ class PPO:
             self.optimizer_critic,
             base_lr=lr_critic / 100,
             max_lr=lr_critic,
-            step_size_up=5000,
+            step_size_up=50000,
             mode='triangular2',
             cycle_momentum=False
         )
@@ -334,8 +334,8 @@ class PPO:
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(device)
 
         # Normalize states once
-        self.state_stats.update(old_states)
-        old_states = self.state_stats.normalize(old_states)
+        # self.state_stats.update(old_states)
+        # old_states = self.state_stats.normalize(old_states)
 
         # Prepare data as a list of transitions
         dataset = data.TensorDataset(old_states, old_actions, old_logprobs, old_returns, old_state_values)

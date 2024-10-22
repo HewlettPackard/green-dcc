@@ -43,7 +43,7 @@ class CarbonLoadEnv(gym.Env):
         # State: [Sin(h), Cos(h), Sin(day_of_year), Cos(day_of_year), self.ls_state, ci_i_future (n_vars_ci), var_to_LS_energy (n_vars_energy), batSoC (n_vars_battery)], 
         # self.ls_state = [current_workload, queue status]
         # self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(16,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(11,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-2.0, high=2.0, shape=(15,), dtype=np.float32)
 
 
         self.global_total_steps = 0
@@ -94,8 +94,8 @@ class CarbonLoadEnv(gym.Env):
             initial_queue_length = np.random.randint(1, self.queue_max_len // 4)
 
             # Generate random task ages between 0 and 24 hours
-            max_task_age = 24  # Maximum age in hours
-            task_ages = np.random.random_integers(0, max_task_age*4, initial_queue_length)/4
+            # max_task_age = 24  # Maximum age in hours
+            # task_ages = np.random.random_integers(0, max_task_age*4, initial_queue_length)/4
             
             # Generate task ages using an exponential distribution
             max_task_age = 24  # Maximum age in hours
@@ -105,7 +105,6 @@ class CarbonLoadEnv(gym.Env):
 
             # Cap the task ages at max_task_age
             task_ages = np.clip(task_ages, 0, max_task_age)
-
             
             # Sort the task ages in descending order
             task_ages = np.sort(task_ages)[::-1]
@@ -170,8 +169,8 @@ class CarbonLoadEnv(gym.Env):
                 "ls_norm_tasks_in_queue": 0,
                 'ls_tasks_processed': 0,
                 'ls_enforced': False,
-                'ls_oldest_task_age': oldest_task_age,
-                'ls_average_task_age': average_task_age,
+                'ls_oldest_task_age': oldest_task_age/24,
+                'ls_average_task_age': average_task_age/24,
                 'ls_overdue_penalty': 0,
                 'ls_task_age_histogram': task_age_histogram,}
         
@@ -204,7 +203,7 @@ class CarbonLoadEnv(gym.Env):
         overdue_penalty = len(overdue_tasks)
 
         # Calculate initial available capacity
-        available_capacity = capacity - non_shiftable_tasks  # Limit to 90% capacity
+        available_capacity = capacity - non_shiftable_tasks  # Limit to capacity
 
         # Process overdue tasks if there's capacity
         overdue_tasks_to_process = 0
@@ -241,6 +240,8 @@ class CarbonLoadEnv(gym.Env):
         # Process shiftable tasks from current workload
         shiftable_tasks = int(round(self.workload * self.shiftable_tasks_percentage * capacity))
 
+        # TODO: Add the shiftable tasks to the queue first and then compute the tasks from the queue, to remove the older tasks first
+        
         tasks_to_process_from_shiftable = 0
         if remaining_desired_tasks > 0 and capacity_remaining > 0:
             tasks_to_process_from_shiftable = min(shiftable_tasks, remaining_desired_tasks, capacity_remaining)
@@ -341,7 +342,144 @@ class CarbonLoadEnv(gym.Env):
                                        task_age_histogram])), dtype=np.float32)
         
         return state, reward, done, truncated, info 
-        
+    
+    # def step(self, action, workload_rest_day=0):
+    #     """
+    #     Makes an environment step in `CarbonLoadEnv`.
+
+    #     Args:
+    #         action (float): Continuous action between -1.0 and 1.0.
+    #                         The desired computed workload as a fraction of capacity.
+    #     """
+    #     # Clip and scale the action to [0, 1]
+    #     action_value = np.clip(action[0], self.action_space.low[0], self.action_space.high[0])
+    #     action_value = (action_value + 1) / 2
+
+    #     capacity = 100  # Total capacity in tasks per time step
+    #     desired_tasks_to_process = int(action_value * capacity)
+
+    #     # Calculate mandatory tasks: non-shiftable and overdue tasks
+    #     non_shiftable_tasks = int(round(self.workload * self.non_shiftable_tasks_percentage * capacity))
+
+    #     # Handle overdue tasks
+    #     overdue_tasks = [task for task in self.tasks_queue if (self.current_day - task['day']) * 24 + (self.current_hour - task['hour']) > 24]
+    #     overdue_penalty = len(overdue_tasks)
+    #     tasks_processed = 0
+    #     # Process overdue tasks if there's capacity
+    #     overdue_tasks_to_process = 0
+    #     if len(overdue_tasks) > 0:
+    #         overdue_tasks_to_process = min(len(overdue_tasks), capacity)
+    #         tasks_processed += overdue_tasks_to_process
+    #         for _ in range(overdue_tasks_to_process):
+    #             self.tasks_queue.remove(overdue_tasks.pop(0))
+
+    #     # Enqueue all shiftable tasks from the current workload
+    #     shiftable_tasks = int(round(self.workload * self.shiftable_tasks_percentage * capacity))
+
+    #     # Add shiftable tasks to the queue
+    #     available_queue_space = self.queue_max_len - len(self.tasks_queue)
+    #     tasks_to_add_to_queue = min(shiftable_tasks, available_queue_space)
+    #     self.tasks_queue.extend(
+    #         [{'day': self.current_day, 'hour': self.current_hour, 'utilization': 1}] * int(tasks_to_add_to_queue)
+    #     )
+    #     tasks_dropped = shiftable_tasks - tasks_to_add_to_queue  # Tasks that couldn't be deferred due to full queue
+
+    #     # Calculate mandatory tasks total
+    #     mandatory_tasks = non_shiftable_tasks + overdue_tasks_to_process
+
+    #     # Ensure desired_tasks_to_process is at least mandatory_tasks
+    #     if desired_tasks_to_process < mandatory_tasks:
+    #         desired_tasks_to_process = mandatory_tasks  # Adjust desired tasks to mandatory
+
+    #     # Ensure we do not exceed capacity
+    #     if desired_tasks_to_process > capacity:
+    #         desired_tasks_to_process = capacity
+
+    #     # Calculate remaining capacity after mandatory tasks
+    #     capacity_remaining = capacity - mandatory_tasks
+
+    #     # Remaining desired tasks after mandatory tasks
+    #     remaining_desired_tasks = desired_tasks_to_process - mandatory_tasks
+
+    #     tasks_processed += mandatory_tasks
+
+    #     # Process tasks from the queue to meet remaining_desired_tasks
+    #     tasks_to_process_from_queue = 0
+    #     if remaining_desired_tasks > 0 and capacity_remaining > 0:
+    #         tasks_to_process_from_queue = min(len(self.tasks_queue), remaining_desired_tasks, capacity_remaining)
+    #         for _ in range(int(tasks_to_process_from_queue)):
+    #             self.tasks_queue.popleft()
+    #         tasks_processed += tasks_to_process_from_queue
+    #         capacity_remaining -= tasks_to_process_from_queue
+    #         remaining_desired_tasks -= tasks_to_process_from_queue
+
+    #     # Update current utilization
+    #     self.current_utilization = tasks_processed / capacity
+
+    #     # Original workload and tasks in queue
+    #     original_workload = self.workload
+    #     tasks_in_queue = len(self.tasks_queue)
+
+    #     # Calculate queue statistics
+    #     if tasks_in_queue > 0:
+    #         task_ages = [
+    #             (self.current_day - task['day']) * 24 + (self.current_hour - task['hour'])
+    #             for task in self.tasks_queue
+    #         ]
+    #         oldest_task_age = max(task_ages)
+    #         average_task_age = sum(task_ages) / len(task_ages)
+    #     else:
+    #         oldest_task_age = 0.0
+    #         average_task_age = 0.0
+
+    #     task_age_histogram = self.get_task_age_histogram(self.tasks_queue, self.current_day, self.current_hour)
+
+    #     info = {
+    #         "ls_original_workload": original_workload,
+    #         "ls_shifted_workload": self.current_utilization,
+    #         "ls_previous_computed_workload": self.previous_computed_workload,
+    #         "ls_action": action_value,
+    #         "ls_norm_load_left": 0,
+    #         "ls_unasigned_day_load_left": 0,
+    #         "ls_penalty_flag": 0,
+    #         'ls_queue_max_len': self.queue_max_len,
+    #         'ls_tasks_in_queue': tasks_in_queue,
+    #         'ls_norm_tasks_in_queue': tasks_in_queue / self.queue_max_len,
+    #         'ls_tasks_dropped': tasks_dropped,
+    #         'ls_current_hour': self.current_hour,
+    #         'ls_tasks_processed': tasks_processed,
+    #         'ls_enforced': False,
+    #         'ls_oldest_task_age': oldest_task_age / 24,
+    #         'ls_average_task_age': average_task_age / 24,
+    #         'ls_overdue_penalty': overdue_penalty,
+    #         'ls_computed_tasks': int(self.current_utilization * capacity),
+    #         'ls_task_age_histogram': task_age_histogram,
+    #     }
+
+    #     # Update the environment state
+    #     self.global_total_steps += 1
+
+    #     # Update the previous computed workload
+    #     self.previous_computed_workload = self.current_utilization
+
+    #     # Done and truncated are managed by the main class, implement individual function if needed
+    #     truncated = False
+    #     done = False
+
+    #     # Update state
+    #     state = np.asarray(np.hstack((
+    #         [self.current_utilization,
+    #         tasks_in_queue / self.queue_max_len,
+    #         oldest_task_age / 24,
+    #         average_task_age / 24,
+    #         task_age_histogram]
+    #     )), dtype=np.float32)
+
+    #     reward = 0  # Adjust as per your reward function
+
+    #     return state, reward, done, truncated, info
+
+
     def update_workload(self, workload):
         """
         Makes an environment step in`BatteryEnvFwd.

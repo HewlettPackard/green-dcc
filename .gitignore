@@ -31,3 +31,6 @@ results.csv
 heuristics/
 HRL_*_runs/
 */HRL_eval_runs/
+*.csv
+*.zip
+logs/*

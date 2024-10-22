@@ -8,6 +8,7 @@ import asyncio
 import torch
 import argparse
 import subprocess
+import traceback
 
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
@@ -238,8 +239,15 @@ def collect_experience(env, ppo_agent, env_config, state, experience_per_worker)
             policy = ppo_agent.low_policies[dc_id]
             goal = goal_mapping[dc_id]
 
+            # concat here also the workload of the other DCs. Extract those values from env.low_level_infos
+            other_dc_workloads = []
+            for dc_id2, infos in env.low_level_infos.items():
+                if dc_id != dc_id2:
+                    other_dc_workloads.append(infos['agent_ls']['ls_original_workload'])
+                    # other_dc_workloads.append(infos['__common__']['workload'])
+   
             # Concatenate low-level observation with goal
-            state_ll = np.concatenate([state['low_level_obs_' + dc_id], goal])
+            state_ll = np.concatenate([state['low_level_obs_' + dc_id], goal, other_dc_workloads])
 
             # Select action
             low_level_action, low_level_logprobs, low_level_state_values = policy.select_action(state_ll)
@@ -405,7 +413,14 @@ def evaluate_policy(env_config, ppo_agent, num_episodes=10, writer=None, total_t
             for dc_id in ppo_agent.ll_policy_ids:
                 policy = ppo_agent.low_policies[dc_id]
                 goal = goal_mapping[dc_id]
-                state_ll = np.concatenate([state['low_level_obs_' + dc_id], goal])
+                # concat here also the workload of the other DCs. Extract those values from env.low_level_infos
+                other_dc_workloads = []
+                for dc_id2, infos in eval_env.low_level_infos.items():
+                    if dc_id != dc_id2:
+                        other_dc_workloads.append(infos['agent_ls']['ls_original_workload'])
+    
+                # Concatenate low-level observation with goal
+                state_ll = np.concatenate([state['low_level_obs_' + dc_id], goal, other_dc_workloads])
                 low_level_action = policy.select_action(state_ll, evaluate=True)
                 actions['low_level_action_' + dc_id] = low_level_action
 
@@ -520,17 +535,17 @@ def main():
     ################ Hierarchical PPO hyperparameters ################
     # update_timestep = max_ep_len // 4      # update policy every n timesteps
     # pylint : disable=C0103
-    hl_K_epochs = 5               # update policy for K epochs in one PPO update for high level network
-    ll_K_epochs = 5               # update policy for K epochs in one PPO update for low level network
+    hl_K_epochs = 10               # update policy for K epochs in one PPO update for high level network
+    ll_K_epochs = 10               # update policy for K epochs in one PPO update for low level network
 
     eps_clip = 0.3             # clip parameter for PPO
     hl_gamma = 0.50            # discount factor for high level network
     ll_gamma = 0.95            # discount factor for low level network
 
-    hl_lr_actor = 0.0003       # learning rate for high level actor network
-    hl_lr_critic = 0.001       # learning rate for high level critic network
-    ll_lr_actor = 0.0003       # learning rate for low level actor network(s)
-    ll_lr_critic = 0.001       # learning rate for low level critic network(s)
+    hl_lr_actor = 0.03       # learning rate for high level actor network
+    hl_lr_critic = 0.1       # learning rate for high level critic network
+    ll_lr_actor = 0.03       # learning rate for low level actor network(s)
+    ll_lr_critic = 0.1       # learning rate for low level critic network(s)
 
     # random_seed = 80         # set random seed if required (0 = no random seed)
     #####################################################
@@ -900,7 +915,8 @@ def main():
         except Exception as e:
             print("Error occurred: ", e)
             traceback.print_exc()
-            continue
+            break
+        
     # Close worker processes
     for conn in parent_conns:
         conn.send('close')
