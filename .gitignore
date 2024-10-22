@@ -35,3 +35,4 @@ HRL_*_runs/
 *.zip
 logs/*
 ray_results/*
+ray_results/
