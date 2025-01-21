@@ -78,7 +78,8 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
         # Transform and enforce actions
         transformed_actions = self.transform_actions(actions['high_level_policy'])
         self.original_workload, self.overassigned_workload = self.safety_enforcement(transformed_actions)
-
+        #TODO: track the original workload, the spatial workload, and the temporal workload
+        
         # Move workload within DCs
         low_level_actions = {
             dc: {'agent_ls': actions[f"{dc}_ls_policy"]} for dc in self.datacenter_ids
@@ -104,7 +105,7 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
 
         if done:
             totalfp = sum(sum(self.metrics[dc]['bat_CO2_footprint']) for dc in self.datacenter_ids)
-            print(f'The total CO2 footprint is {totalfp}')
+            # print(f'The total CO2 footprint is {totalfp}')
 
             # Log the scalar totalfp to TensorBoard
             # self.writer.add_scalar("Total CO2 footprint", totalfp, self.global_step)
@@ -115,6 +116,11 @@ class TrulyHeirarchicalDCRL(HeirarchicalDCRL, MultiAgentEnv):
         info = {}
         for dc in self.datacenter_ids:
             info[f"{dc}_ls_policy"] = self.low_level_infos[dc]
+        
+        # Save in the low_level_infos the original workload as "original_workload_prev_top_level"
+        for dc in self.datacenter_ids:
+            self.low_level_infos[dc]['agent_ls']['original_workload_prev_top_level'] = self.original_workload[dc]
+            
         return obs, rewards, terminated, truncated, info
 
     

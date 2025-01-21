@@ -36,3 +36,8 @@ HRL_*_runs/
 logs/*
 ray_results/*
 ray_results/
+old/
+tb_logs/*
+reward_stats/
+reward_stats_mp/
+*.pkl

@@ -8,16 +8,16 @@ device:
   # whether to use CUDA
   cuda: False
   # whether to set CUDA deterministic
-  cuda_deterministic: False
+  cuda_deterministic: True
   # arg to torch.set_num_threads
   torch_threads: 4
 train:
   # number of parallel environments for training data collection
-  n_rollout_threads: 48
+  n_rollout_threads: 20
   # number of total training steps
-  num_env_steps: 2000000000
+  num_env_steps: 100000000
   # number of steps per environment per training data collection
-  episode_length: 1024
+  episode_length: 200
   # logging interval
   log_interval: 5
   # evaluation interval
@@ -34,9 +34,9 @@ eval:
   # whether to use evaluation
   use_eval: True
   # number of parallel environments for evaluation
-  n_eval_rollout_threads: 12
+  n_eval_rollout_threads: 10
   # number of episodes per evaluation
-  eval_episodes: 5
+  eval_episodes: 20
 render:
   # whether to use render
   use_render: False
@@ -45,9 +45,9 @@ render:
 model:
   # network parameters
   # hidden sizes for mlp module in the network
-  hidden_sizes: [16, 8]
+  hidden_sizes: [128, 128]
   # activation function, choose from sigmoid, tanh, relu, leaky_relu, selu
-  activation_func: tanh
+  activation_func: relu
   # whether to use feature normalization
   use_feature_normalization: True
   # initialization method for network parameters, choose from xavier_uniform_, orthogonal_, ...
@@ -65,9 +65,9 @@ model:
   data_chunk_length: 10
   # optimizer parameters
   # actor learning rate, ineffective for hatrpo
-  lr: 0.0003
+  lr: 0.0005
   # critic learning rate
-  critic_lr: 0.0003
+  critic_lr: 0.0005
   # eps in Adam
   opti_eps: 0.00001
   # weight_decay in Adam
@@ -81,9 +81,9 @@ algo:
   # number of epochs for critic update
   critic_epoch: 5
   # whether to use clipped value loss
-  use_clipped_value_loss: False
+  use_clipped_value_loss: True
   # clip parameter
-  clip_param: 0.25
+  clip_param: 0.2
   # number of mini-batches per epoch for critic update
   critic_num_mini_batch: 1
   # coefficient for value loss
@@ -91,15 +91,15 @@ algo:
   # whether to clip gradient norm
   use_max_grad_norm: True
   # max gradient norm
-  max_grad_norm: 0.5
+  max_grad_norm: 10.0
   # whether to use Generalized Advantage Estimation (GAE)
   use_gae: True
   # discount factor
-  gamma: 0.995
+  gamma: 0.99
   # GAE lambda
-  gae_lambda: 0.9
+  gae_lambda: 0.95
   # whether to use huber loss
-  use_huber_loss: False
+  use_huber_loss: True
   # whether to use policy active masks
   use_policy_active_masks: True
   # huber delta

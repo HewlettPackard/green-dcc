@@ -6,6 +6,16 @@ class DCRLLogger(BaseLogger):
     def get_task_name(self):
         """Specific implementation to return the task name based on the environment args."""
         return f"{self.env_args['location']}-discrete"
+    
+    def __init__(self, args, algo_args, env_args, num_agents, writter, run_dir):
+        super().__init__(args, algo_args, env_args, num_agents, writter, run_dir)
+        
+        self.avg_eval_episode_reward = 0.0
+    
+    
+    def get_task_name(self):
+        """Specific implementation to return the task name based on the environment args."""
+        return f"{self.env_args['location']}-discrete"
 
     def episode_init(self, episode):
         """Initialize metrics at the beginning of each episode."""
@@ -27,7 +37,6 @@ class DCRLLogger(BaseLogger):
             'PUE': 0,
         }
         self.is_off_policy = False
-
 
     def eval_init(self):
         """Initialize metrics at the beginning of each episode."""
@@ -78,19 +87,19 @@ class DCRLLogger(BaseLogger):
         dones_env = np.all(dones, axis=1)
         
         for i in range(len(infos)):  # Assuming infos are structured with one dict per environment
-            self.metrics["net_energy_sum"] += infos[i][2].get("bat_total_energy_with_battery_KWh", 0)
-            self.metrics["CO2_footprint_sum"] += infos[i][2].get("bat_CO2_footprint", 0)
-            self.metrics["water_usage"] += infos[i][1].get("dc_water_usage", 0)
+            self.metrics["net_energy_sum"] += infos[i][0].get("bat_total_energy_with_battery_KWh", 0)
+            self.metrics["CO2_footprint_sum"] += infos[i][0].get("bat_CO2_footprint", 0)
+            self.metrics["water_usage"] += infos[i][0].get("dc_water_usage", 0)
             self.metrics["load_left"] += infos[i][0].get("ls_unasigned_day_load_left", 0)
             self.metrics["ls_tasks_in_queue"] += infos[i][0].get("ls_tasks_in_queue", 0)
             self.metrics["ls_tasks_dropped"] += infos[i][0].get("ls_tasks_dropped", 0)
-            self.metrics["ite_power_sum"] += infos[i][1].get("dc_ITE_total_power_kW", 0)
-            self.metrics['ct_power_sum'] += infos[i][1].get("dc_CT_total_power_kW", 0)  # Added
-            self.metrics['chiller_power_sum'] += infos[i][1].get("dc_Compressor_total_power_kW", 0)  # Added
-            self.metrics["hvac_power_sum"] += infos[i][1].get("dc_HVAC_total_power_kW", 0)
+            self.metrics["ite_power_sum"] += infos[i][0].get("dc_ITE_total_power_kW", 0)
+            self.metrics['ct_power_sum'] += infos[i][0].get("dc_CT_total_power_kW", 0)  # Added
+            self.metrics['chiller_power_sum'] += infos[i][0].get("dc_Compressor_total_power_kW", 0)  # Added
+            self.metrics["hvac_power_sum"] += infos[i][0].get("dc_HVAC_total_power_kW", 0)
             
-            if infos[i][1].get("dc_HVAC_total_power_kW", 0)> 0:
-                self.metrics["hvac_power_on_used"].append(infos[i][1].get("dc_HVAC_total_power_kW", 0))
+            if infos[i][0].get("dc_HVAC_total_power_kW", 0)> 0:
+                self.metrics["hvac_power_on_used"].append(infos[i][0].get("dc_HVAC_total_power_kW", 0))
 
             self.metrics["step_count"] += 1
 
@@ -100,19 +109,19 @@ class DCRLLogger(BaseLogger):
         _, _, _, _, eval_infos, _ = eval_data
         
         for i in range(len(eval_infos)):  # Assuming eval_infos are structured with one dict per environment
-            self.eval_metrics["net_energy_sum"] += eval_infos[i][2].get("bat_total_energy_with_battery_KWh", 0)
-            self.eval_metrics["CO2_footprint_sum"] += eval_infos[i][2].get("bat_CO2_footprint", 0)
-            self.eval_metrics["water_usage"] += eval_infos[i][1].get("dc_water_usage", 0)
+            self.eval_metrics["net_energy_sum"] += eval_infos[i][0].get("bat_total_energy_with_battery_KWh", 0)
+            self.eval_metrics["CO2_footprint_sum"] += eval_infos[i][0].get("bat_CO2_footprint", 0)
+            self.eval_metrics["water_usage"] += eval_infos[i][0].get("dc_water_usage", 0)
             self.eval_metrics["load_left"] += eval_infos[i][0].get("ls_unasigned_day_load_left", 0)
             self.eval_metrics["ls_tasks_in_queue"] += eval_infos[i][0].get("ls_tasks_in_queue", 0)
             self.eval_metrics["ls_tasks_dropped"] += eval_infos[i][0].get("ls_tasks_dropped", 0)
-            self.eval_metrics["ite_power_sum"] += eval_infos[i][1].get("dc_ITE_total_power_kW", 0)
-            self.eval_metrics["ct_power_sum"] += eval_infos[i][1].get("dc_CT_total_power_kW", 0)  # Added
-            self.eval_metrics["chiller_power_sum"] += eval_infos[i][1].get("dc_Compressor_total_power_kW", 0)  # Added
-            self.eval_metrics["hvac_power_sum"] += eval_infos[i][1].get("dc_HVAC_total_power_kW", 0)
+            self.eval_metrics["ite_power_sum"] += eval_infos[i][0].get("dc_ITE_total_power_kW", 0)
+            self.eval_metrics["ct_power_sum"] += eval_infos[i][0].get("dc_CT_total_power_kW", 0)  # Added
+            self.eval_metrics["chiller_power_sum"] += eval_infos[i][0].get("dc_Compressor_total_power_kW", 0)  # Added
+            self.eval_metrics["hvac_power_sum"] += eval_infos[i][0].get("dc_HVAC_total_power_kW", 0)
 
-            if eval_infos[i][1].get("dc_HVAC_total_power_kW", 0)> 0:
-                self.eval_metrics["hvac_power_on_used"].append(eval_infos[i][1].get("dc_HVAC_total_power_kW", 0))
+            if eval_infos[i][0].get("dc_HVAC_total_power_kW", 0)> 0:
+                self.eval_metrics["hvac_power_on_used"].append(eval_infos[i][0].get("dc_HVAC_total_power_kW", 0))
             
             self.eval_metrics["step_count"] += 1
 
@@ -253,7 +262,14 @@ class DCRLLogger(BaseLogger):
             'hvac_power_on_used': []
         }
 
+        # add a method to return current average episode reward to decide whether to save the model
+        self.avg_eval_episode_reward = np.mean(self.eval_episode_rewards)
 
+    def save_weights_log(self,):
+        self.log_file.write("Saving model weights at episode {} with average episode reward {}\n".format(self.episode, self.avg_eval_episode_reward))
+        self.log_file.flush()
+        print(f'Saving model weights at episode {self.episode} with average episode reward {self.avg_eval_episode_reward:.3f}')
+    
     def close(self):
         """Close the logger."""
         super().close()

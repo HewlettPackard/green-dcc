@@ -151,15 +151,18 @@ def make_dc_pyeplus_env(month : int = 1,
     
     # dictionary with locations and min_CRAC_setpoint/max_amb_temp
 
-    if 'NY'.lower() in location.lower():
-        max_amb_temperature = 30.0
-    elif 'AZ'.lower() in location.lower():
-        max_amb_temperature = 40.0
-    elif 'WA'.lower() in location.lower():
-        max_amb_temperature = 20.0
-    else:
-        # print('WARNING, using default values for chiller sizing...')
-        max_amb_temperature = 40.0
+    location_max_temp = {
+        'ny': 35.0,
+        'az': 40.0,
+        'wa': 25.0,
+        'ga': 30.0,
+        'tx': 35.0,
+        'va': 35.0,
+        'il': 30.0,
+        'ca': 27.5
+    }
+
+    max_amb_temperature = 35.0#location_max_temp.get(location.lower(), 40.0)
         
     ctafr, ct_rated_load = DataCenter.chiller_sizing(dc_config, min_CRAC_setpoint=min_temp, max_CRAC_setpoint=max_temp, max_ambient_temp=max_amb_temperature)
     dc_config.CT_REFRENCE_AIR_FLOW_RATE = ctafr
@@ -170,6 +173,7 @@ def make_dc_pyeplus_env(month : int = 1,
     # Find highest and lowest values of ITE power, rackwise outlet temperature
     dc = DataCenter.DataCenter_ITModel(num_racks=dc_config.NUM_RACKS, rack_supply_approach_temp_list=dc_config.RACK_SUPPLY_APPROACH_TEMP_LIST,
                                     rack_CPU_config=dc_config.RACK_CPU_CONFIG, max_W_per_rack=dc_config.MAX_W_PER_RACK, DC_ITModel_config=dc_config)
+    
     raw_curr_stpt_list = range(16,23)
     cpu_load_list = range(0,110,10) # We assume same data center load for all servers; Here it will be max
     p = itertools.product(raw_curr_stpt_list,cpu_load_list)

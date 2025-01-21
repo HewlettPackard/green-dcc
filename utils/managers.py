@@ -562,7 +562,7 @@ class Weather_Manager():
             desired_std_dev (float, optional): Desired standard deviation for coherent noise. Defaults to 0.025.
             temp_column (int, optional): Columng that contains the temperature data. Defaults to 6.
     """
-    def __init__(self, filename='', location='NY', init_day=0, weight=0.02, desired_std_dev=0.75, temp_column=6, rh_column=8, pres_column=9, timezone_shift=0, debug=False):
+    def __init__(self, filename='', location='NY', init_day=0, weight=0.02, desired_std_dev=0.75, temp_column=6, rh_column=8, pres_column=9, timezone_shift=0, debug=False, temperature_baseline=0):
         """Manager of the weather data.
 
         Args:
@@ -589,10 +589,11 @@ class Weather_Manager():
         # Normalize wet bulb temperature data
         self.min_wb_temp = 0
         self.max_wb_temp = 40
+        self.temperature_baseline = temperature_baseline
 
         self.debug = debug
         # if self.debug:
-        temperature_data = np.ones_like(temperature_data) + 29
+        # temperature_data = np.ones_like(temperature_data) + 29
         self.init_day = init_day
         # One year data=24*365=8760
         x = range(0, len(temperature_data))
@@ -607,7 +608,7 @@ class Weather_Manager():
         self.wet_bulb_data = np.interp(xtemperature_new, x, self.wet_bulb_data)
         self.norm_wet_bulb_data = normalize(self.wet_bulb_data, self.min_wb_temp, self.max_wb_temp)
 
-        self.temperature_data = np.interp(xtemperature_new, x, temperature_data)
+        self.temperature_data = np.interp(xtemperature_new, x, temperature_data) + self.temperature_baseline
         self.norm_temp_data = normalize(self.temperature_data, self.min_temp, self.max_temp)
 
         self.time_step = 0

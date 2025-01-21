@@ -23,7 +23,7 @@ class DCRLPettingZooEnv(ParallelEnv):
         
         if env_config['nonoverlapping_shared_obs_space']:
             # ls_state[0:10]->10 variables; dc_state[4:9]->5 variables & bat_state[5]->1 variables
-            self.share_observation_space = {agent: spaces.Box(low=0.0, high=1.0, shape=(16,), dtype=np.float32) for agent in self.possible_agents}
+            self.share_observation_space = {agent: spaces.Box(low=-2.0, high=2.0, shape=(18,), dtype=np.float32) for agent in self.possible_agents}
         else:  
             # Find the maximum dimension of observation space
             max_obs_dim = max(space.shape[0] for space in self.observation_spaces.values())
@@ -39,6 +39,8 @@ class DCRLPettingZooEnv(ParallelEnv):
         
         self.metadata = {'render.modes': []}  # If no rendering is supported
 
+        # For the multi data center environment, I need to set the random_init_hour and the random_init_day
+        
     def reset(self, seed=None, options=None):
         """
         Reset the environment and return initial observations for all agents.
@@ -47,7 +49,7 @@ class DCRLPettingZooEnv(ParallelEnv):
             np.random.seed(seed)  # Example of setting seed, adjust based on your environment's requirements
         
         # initial_observation should be a dictionary with agent names as keys and their observations as values
-        initial_observations, _, _ = self.env.reset()
+        initial_observations, _, _ = self.env.reset(seed)
         # return {agent: obs for agent, obs in zip(self.possible_agents, initial_observations)}
         return initial_observations
 

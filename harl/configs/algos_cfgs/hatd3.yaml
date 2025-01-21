@@ -6,7 +6,7 @@ seed:
   seed: 1
 device:
   # whether to use CUDA
-  cuda: True
+  cuda: False
   # whether to set CUDA deterministic
   cuda_deterministic: True
   # arg to torch.set_num_threads
@@ -15,9 +15,9 @@ train:
   # number of parallel environments for training data collection
   n_rollout_threads: 10
   # number of total steps
-  num_env_steps: 10000000
+  num_env_steps: 100000000
   # number of warmup steps
-  warmup_steps: 10000
+  warmup_steps: 100000
   # number of steps per train
   train_interval: 50
   # ratio of training iterations to train_interval

@@ -30,6 +30,7 @@ class OnPolicyBaseRunner:
 
     def __init__(self, args, algo_args, env_args):
         """Initialize the OnPolicyBaseRunner class.
+        
         Args:
             args: command-line arguments parsed by argparse. Three keys: algo, env, exp_name.
             algo_args: arguments related to algo, loaded from config file and updated with unparsed command-line arguments.
@@ -46,6 +47,9 @@ class OnPolicyBaseRunner:
         self.state_type = env_args.get("state_type", "EP")
         self.share_param = algo_args["algo"]["share_param"]
         self.fixed_order = algo_args["algo"]["fixed_order"]
+        
+        self.current_best_avg_eval_episode_reward = -np.Inf
+        self.update_chkpoints = False
         
         self.dump_info = algo_args["eval"].get('dump_eval_metrcs', False)
         
@@ -266,8 +270,10 @@ class OnPolicyBaseRunner:
             if episode % self.algo_args["train"]["eval_interval"] == 0:
                 if self.algo_args["eval"]["use_eval"]:
                     self.prep_rollout()
-                    self.eval()
-                self.save()
+                    self.update_chkpoints = self.eval()
+                if self.update_chkpoints:
+                    self.save()
+                    self.update_chkpoints = False
 
             self.after_update()
 
@@ -507,6 +513,7 @@ class OnPolicyBaseRunner:
         self.logger.eval_init()  # logger callback at the beginning of evaluation
         eval_episode = 0
 
+        update_chkpoints = False
         # Dictionary to store metrics for each agent across all episodes
         metrics = {
             'agent_1': [],
@@ -634,6 +641,9 @@ class OnPolicyBaseRunner:
                 self.logger.eval_log(
                     eval_episode
                 )  # logger callback at the end of evaluation
+                if self.logger.avg_eval_episode_reward >= self.current_best_avg_eval_episode_reward:
+                    self.current_best_avg_eval_episode_reward = self.logger.avg_eval_episode_reward
+                    update_chkpoints = True
                 break
             
         # Calculate and print evaluation summary statistics
@@ -649,6 +659,8 @@ class OnPolicyBaseRunner:
             # Convert collected data to DataFrame and save as CSV
             self.dump_metrics_to_csv(metrics, eval_episode)
             print("Data saved to evaluation_data.csv.")
+            
+        return update_chkpoints
 
 
     # def dump_metrics_to_csv(self, metrics, eval_episode):
@@ -679,24 +691,26 @@ class OnPolicyBaseRunner:
         for i in range(num_steps):
             combined_row = {}
             for agent_key, data in metrics.items():
-                for key, value in data[i].items():
-                    combined_row[f"{key}"] = round(float(value), 4)
+                if not np.shape(data) == (0,):
+                    for key, value in data[i].items():
+                        combined_row[f"{key}"] = round(float(value), 4)
             combined_data.append(combined_row)
 
         # Sort the combined data by day and then by hour
         # Assuming the keys for day and hour are 'day' and 'hour' respectively
-        sorted_combined_data = sorted(combined_data, key=lambda x: (x['day'], x['hour']))
+        # sorted_combined_data = sorted(combined_data, key=lambda x: (x['day'], x['hour']))
 
         # Determine fieldnames from the keys of the first combined row
-        if sorted_combined_data:
-            fieldnames = sorted_combined_data[0].keys()
+        if combined_data:
+            fieldnames = combined_data[0].keys()
 
             with open(filename, 'w', newline='') as file:
                 writer = csv.DictWriter(file, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerows(sorted_combined_data)
+                writer.writerows(combined_data)
         
         print(f"Metrics for all agents have been saved to {filename}.")
+        return filename
     
     @torch.no_grad()
     def render(self):
@@ -811,11 +825,6 @@ class OnPolicyBaseRunner:
                     if eval_dones[0][0]:
                         print(f"total reward of this episode: {rewards}")
                         break
-        if "smac" in self.args["env"]:  # replay for smac, no rendering
-            if "v2" in self.args["env"]:
-                self.envs.env.save_replay()
-            else:
-                self.envs.save_replay()
 
     def prep_rollout(self):
         """Prepare for rollout."""
@@ -831,6 +840,7 @@ class OnPolicyBaseRunner:
 
     def save(self):
         """Save model parameters."""
+        print(f'Saving the checkpoint at episode {self.logger.episode}')
         for agent_id in range(self.num_agents):
             policy_actor = self.actor[agent_id].actor
             torch.save(
@@ -846,6 +856,7 @@ class OnPolicyBaseRunner:
                 self.value_normalizer.state_dict(),
                 str(self.save_dir) + "/value_normalizer" + ".pt",
             )
+        self.logger.save_weights_log()
 
     def restore(self):
         """Restore model parameters."""

@@ -169,6 +169,9 @@ class Rack():
         # 09/03/2024
         cpu_power_ratio_at_inlet_temp = (base_cpu_power_ratio * (np.exp(4*self.ratio_shift_max_cpu * (ITE_load_pct / 100) - 1.1) + 50 ) * 0.01 * (ITE_load_pct+70)) / self.full_load_pwr
 
+        # 1/15/2025
+        # cpu_power_ratio_at_inlet_temp = (base_cpu_power_ratio * (np.exp(4.0*self.ratio_shift_max_cpu * (ITE_load_pct / 100) - 1.1) + 50 ) * 0.01 * (ITE_load_pct+70)) / self.full_load_pwr
+        
         temp_arr = np.concatenate((self.idle_pwr.reshape(1, -1),
                                 (self.full_load_pwr * cpu_power_ratio_at_inlet_temp).reshape(1, -1)),
                                 axis=0)
@@ -180,7 +183,7 @@ class Rack():
         # itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.ITFAN_REF_V_RATIO)  # [4] Eqn (3)
         # self.v_fan_rack = self.IT_FAN_FULL_LOAD_V*itfan_v_ratio_at_inlet_temp
         base_itfan_v_ratio = self.m_itfan * self.m_coefficient * inlet_temp + self.c_itfan * self.c_coefficient
-        itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio * np.exp(4.0*self.ratio_shift_max_itfan * (ITE_load_pct / 100))
+        itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio * np.exp(3.0*self.ratio_shift_max_itfan * (ITE_load_pct / 100))
         itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp / self.ITFAN_REF_V_RATIO)  # [4] Eqn (3)
         self.v_fan_rack = self.IT_FAN_FULL_LOAD_V * itfan_v_ratio_at_inlet_temp
         
@@ -249,6 +252,7 @@ class DataCenter_ITModel():
         self.wet_bulb_temp = None  # °C
         self.cycles_of_concentration = 5
         self.drift_rate = 0.01
+        self.ctafr = None
         
         
         
@@ -461,9 +465,12 @@ def calculate_HVAC_power(CRAC_setpoint, avg_CRAC_return_temp, ambient_temp, data
         """
     # Air system calculations
     m_sys = DC_Config.RHO_AIR * DC_Config.CRAC_SUPPLY_AIR_FLOW_RATE_pu * data_center_full_load
-    CRAC_cooling_load = m_sys * DC_Config.C_AIR * max(0.0, avg_CRAC_return_temp - CRAC_setpoint)
-    CRAC_Fan_load = DC_Config.CRAC_FAN_REF_P * (DC_Config.CRAC_SUPPLY_AIR_FLOW_RATE_pu / DC_Config.CRAC_REFRENCE_AIR_FLOW_RATE_pu)**3
     
+    temp_factor = 1 + (ambient_temp - 25) / 100  # Example: 1.0 at 25°C, increases with temp
+    CRAC_cooling_load = m_sys * DC_Config.C_AIR * max(0.0, (avg_CRAC_return_temp - CRAC_setpoint)) * temp_factor
+
+    CRAC_Fan_load = DC_Config.CRAC_FAN_REF_P * (DC_Config.CRAC_SUPPLY_AIR_FLOW_RATE_pu / DC_Config.CRAC_REFRENCE_AIR_FLOW_RATE_pu)**3 * temp_factor
+
     chiller_power = calculate_chiller_power(DC_Config.CT_FAN_REF_P, CRAC_cooling_load, ambient_temp)
 
     # Chiller power calculation
@@ -485,7 +492,7 @@ def calculate_HVAC_power(CRAC_setpoint, avg_CRAC_return_temp, ambient_temp, data
         ctafr = DC_Config.CT_REFRENCE_AIR_FLOW_RATE
     
     # v_air_hist.append(v_air)
-    CT_Fan_pwr = DC_Config.CT_FAN_REF_P * (min(v_air / 20, 1))**3
+    CT_Fan_pwr = DC_Config.CT_FAN_REF_P * (min(v_air / 20, 1))**3 * temp_factor
     
     # ToDo: exploring the new chiller_power method
     return CRAC_Fan_load, CT_Fan_pwr, CRAC_cooling_load, chiller_power, power_consumed_CW, power_consumed_CT

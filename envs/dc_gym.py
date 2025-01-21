@@ -149,6 +149,8 @@ class dc_gymenv(gym.Env):
         
         self.raw_curr_stpt += crac_setpoint_delta * self.action_scaling_factor
         self.raw_curr_stpt = max(min(self.raw_curr_stpt, self.max_temp), self.min_temp)
+        
+        # print(f'Computing the following workload utilization: {self.cpu_load_frac}')
     
         ITE_load_pct_list = [self.cpu_load_frac*100 for i in range(self.DC_Config.NUM_RACKS)] 
         

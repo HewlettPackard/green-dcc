@@ -12,10 +12,14 @@ norm_cfp_values = {'ny': {'mean': 40174, 'std': 13873},
 }
 
 norm_energy_values = {'ny': {'mean': 173, 'std': 45},
-                      'ca': {'mean': 240, 'std': 50},
+                      'ca': {'mean': 90, 'std': 14},
                       'az': {'mean': 234, 'std': 78},
                       'va': {'mean': 170, 'std': 49}
     }
+
+# Default mean and standard deviation for undefined locations
+DEFAULT_MEAN = 150
+DEFAULT_STD = 50
 def default_ls_reward(params: dict) -> float:
     """
     Calculates a simplified reward value for load shifting.
@@ -30,29 +34,35 @@ def default_ls_reward(params: dict) -> float:
         float: Reward value.
     """
     location = params['location']
+
+    location_values = norm_energy_values.get(location, {'mean': DEFAULT_MEAN, 'std': DEFAULT_STD})
     total_energy = params['bat_total_energy_with_battery_KWh']
-    norm_total_energy = (total_energy - norm_energy_values[location]['mean']) / norm_energy_values[location]['std']
-    # bat_dcload.append(total_energy)
+    norm_total_energy = (total_energy - location_values['mean']) / location_values['std']
+    bat_dcload.append(total_energy)
     # Calculate energy footprint reward
     norm_ci = params['norm_CI']
-    footprint_reward = -0.5 * norm_ci * norm_total_energy  # Reduced scaling to make the reward less aggressive
+    footprint_reward = -4.0 * norm_ci * norm_total_energy  # Reduced scaling to make the reward less aggressive
 
     # Penalty for overdue tasks (simplified to make it less harsh)
-    overdue_penalty = -1.0 * params['ls_overdue_penalty']  # Smoother penalty, allowing positive reward for fewer overdue tasks
-    overdue_penalty = np.clip(overdue_penalty, -10.0, 0.0)  # Capped to avoid extreme negative values
+    overdue_penalty = -2.0 * params['ls_overdue_penalty']  # Smoother penalty, allowing positive reward for fewer overdue tasks
+    overdue_penalty = np.clip(overdue_penalty, -100.0, 0.0)  # Capped to avoid extreme negative values
 
     # Penalty for dropped tasks (kept simpler and smaller in magnitude)
-    dropped_tasks_penalty = -0.5 * params['ls_tasks_dropped']
-    dropped_tasks_penalty = np.clip(dropped_tasks_penalty, -2.0, 0.0)  # Cap the penalty to avoid large negative values
+    dropped_tasks_penalty = -2.0 * params['ls_tasks_dropped']
+    dropped_tasks_penalty = np.clip(dropped_tasks_penalty, -20.0, 0.0)  # Cap the penalty to avoid large negative values
 
     # Reward for minimizing energy consumption
     # energy_consumption_reward = -0.2 * norm_total_energy  # Encourage minimizing energy but at a reduced scale
 
+    # Reward to encourage to have the lowest number of tasks in the queue (between 0 and 0.2)
+    tasks_in_queue_reward = -0.2 * params['ls_norm_tasks_in_queue']  # Encourage minimizing tasks in the queue but at a reduced
+    
+    
     # Total reward
-    total_reward = footprint_reward + overdue_penalty + dropped_tasks_penalty
+    total_reward = footprint_reward + overdue_penalty + dropped_tasks_penalty + tasks_in_queue_reward
 
     # Add a base reward to avoid all negative rewards, which helps with learning
-    base_reward = 1.0
+    base_reward = 0.0
 
     return total_reward + base_reward
 # def default_ls_reward(params: dict) -> float:

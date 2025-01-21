@@ -73,43 +73,50 @@ class BaseLogger:
             * self.algo_args["train"]["n_rollout_threads"]
         )
         self.end = time.time()
+        # print(
+        #     "Env {} Task {} Algo {} Exp {} updates {}/{} episodes, total num timesteps {}/{}, FPS {}.".format(
+        #         self.args["env"],
+        #         self.task_name,
+        #         self.args["algo"],
+        #         self.args["exp_name"],
+        #         self.episode,
+        #         self.episodes,
+        #         self.total_num_steps,
+        #         self.algo_args["train"]["num_env_steps"],
+        #         int(self.total_num_steps / (self.end - self.start)),
+        #     )
+        # )
+        percent_completion = (self.total_num_steps / self.algo_args["train"]["num_env_steps"]) * 100
         print(
-            "Env {} Task {} Algo {} Exp {} updates {}/{} episodes, total num timesteps {}/{}, FPS {}.".format(
-                self.args["env"],
-                self.task_name,
-                self.args["algo"],
-                self.args["exp_name"],
-                self.episode,
-                self.episodes,
-                self.total_num_steps,
-                self.algo_args["train"]["num_env_steps"],
-                int(self.total_num_steps / (self.end - self.start)),
-            )
+            f'Env {self.args["env"]} Task {self.task_name} Algo {self.args["algo"]} Exp {self.args["exp_name"]} '
+            f'updates {self.episode}/{self.episodes} episodes, percent completion {percent_completion:.2f}%, '
+            f'FPS {int(self.total_num_steps / (self.end - self.start))}.'
         )
+
 
         critic_train_info["average_step_rewards"] = critic_buffer.get_mean_rewards()
         self.log_train(actor_train_infos, critic_train_info)
 
-        print(
-            "Average step reward is {}.".format(
-                critic_train_info["average_step_rewards"]
-            )
-        )
+        # print(
+        #     "Average step reward is {}.".format(
+        #         critic_train_info["average_step_rewards"]
+        #     )
+        # )
+        print(f'Average step reward is {critic_train_info["average_step_rewards"]:3f}.')
 
         if len(self.done_episodes_rewards) > 0:
             aver_episode_rewards = np.mean(self.done_episodes_rewards)
-            print(
-                "Some episodes done, average episode reward is {}.\n".format(
-                    aver_episode_rewards
-                )
-            )
-            self.writter.add_scalar("train/average_step_rewards", aver_episode_rewards, self.total_num_steps)
-
-            # self.writter.add_scalars(
-            #     "train/train_episode_rewards",
-            #     {"aver_rewards": aver_episode_rewards},
-            #     self.total_num_steps,
+            # print(
+            #     "Some episodes done, average episode reward is {}.\n".format(
+            #         aver_episode_rewards
+            #     )
             # )
+            print(f'Some episodes done, average episode reward is {aver_episode_rewards:3f}.\n')
+            self.writter.add_scalars(
+                "train_episode_rewards",
+                {"aver_rewards": aver_episode_rewards},
+                self.total_num_steps,
+            )
             self.done_episodes_rewards = []
 
     def eval_init(self):
@@ -119,14 +126,6 @@ class BaseLogger:
             * self.algo_args["train"]["episode_length"]
             * self.algo_args["train"]["n_rollout_threads"]
         )
-        self.eval_episode_rewards = []
-        self.one_episode_rewards = []
-        for eval_i in range(self.algo_args["eval"]["n_eval_rollout_threads"]):
-            self.one_episode_rewards.append([])
-            self.eval_episode_rewards.append([])
-            
-    def eval_init_off_policy(self,total_num_steps):
-        self.total_num_steps = total_num_steps
         self.eval_episode_rewards = []
         self.one_episode_rewards = []
         for eval_i in range(self.algo_args["eval"]["n_eval_rollout_threads"]):
@@ -176,26 +175,18 @@ class BaseLogger:
         # log actor
         for agent_id in range(self.num_agents):
             for k, v in actor_train_infos[agent_id].items():
-                agent_k = "train/agent%i/" % agent_id + k
-                # self.writter.add_scalars(f"train/{agent_k}", {agent_k: v}, self.total_num_steps)
-                tag = f"train/agent{agent_id}/{k}"  # Simplified tag
-                self.writter.add_scalar(tag, v, self.total_num_steps)
-
+                agent_k = "agent%i/" % agent_id + k
+                self.writter.add_scalars(agent_k, {agent_k: v}, self.total_num_steps)
         # log critic
         for k, v in critic_train_info.items():
             critic_k = "critic/" + k
-            # self.writter.add_scalars(f"train/{critic_k}", {critic_k: v}, self.total_num_steps)
-            tag = f"train/critic/{k}"  # Simplified tag
-            self.writter.add_scalar(tag, v, self.total_num_steps)
+            self.writter.add_scalars(critic_k, {critic_k: v}, self.total_num_steps)
 
     def log_env(self, env_infos):
         """Log environment information."""
         for k, v in env_infos.items():
             if len(v) > 0:
-                # self.writter.add_scalars(f"train/{k}", {k: np.mean(v)}, self.total_num_steps)
-                tag = f"metrics/{k}"  # Use 'metrics' for evaluation metrics
-                self.writter.add_scalar(tag, np.mean(v), self.total_num_steps)
-
+                self.writter.add_scalars(k, {k: np.mean(v)}, self.total_num_steps)
 
     def close(self):
         """Close the logger."""

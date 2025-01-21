@@ -41,12 +41,12 @@ class RBCBaselines:
         
         return actions
 
-    def multi_step_greedy(self):
+    def multi_step_greedy(self, variable='ci'):
         """Perform multi-step greedy workload transfers based on carbon intensity."""
         
         # Step 1: Rank data centers by their carbon intensity
         hier_obs = self.env.get_original_observation()
-        carbon_intensities = [hier_obs[dc]['ci'][0] for dc in self.env.datacenters]
+        carbon_intensities = [hier_obs[dc][variable][0] for dc in self.env.datacenters]
         ranked_indices = np.argsort(carbon_intensities)
         
         # Initialize the action array

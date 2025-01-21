@@ -1,0 +1,22 @@
+agents:
+  - agent_ls
+location: ca
+cintensity_file: 'CA_NG_&_avgCI.csv'
+weather_file: 'USA_NY_New.York-LaGuardia.epw'
+workload_file: 'Alibaba_CPU_Data_Hourly_1.csv'
+max_bat_cap_Mw: 1.0
+individual_reward_weight: 0.8
+flexible_load: 0.9999
+ls_reward: default_ls_reward
+dc_reward: default_dc_reward
+bat_reward: default_bat_reward
+dc_config_file: 'dc_config.json'
+partial_obs: True
+nonoverlapping_shared_obs_space: True
+datacenter_capacity_mw: 1.0
+timezone_shift: 8
+month: 7
+days_per_episode: 30
+debug: False
+initialize_queue_at_reset: True
+workload_baseline: 0.0

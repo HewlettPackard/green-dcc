@@ -107,14 +107,16 @@ class DCRL(gym.Env):
         self.datacenter_capacity_mw = env_config['datacenter_capacity_mw']
         self.dc_config_file = env_config['dc_config_file']
         self.timezone_shift = env_config['timezone_shift']
-        self.days_per_episode = env_config['days_per_episode'] + np.random.randint(-5, 30)
+        self.days_per_episode = env_config['days_per_episode']# + np.random.randint(-5, 30)
         self.initialize_queue_at_reset =  env_config.get('initialize_queue_at_reset', False)
         
-        # print(f'Simulating {self.days_per_episode} days')
         
         self.workload_baseline = env_config.get('workload_baseline', False)
+        self.temperature_baseline = env_config.get('temperature_baseline', False)
         self.debug = env_config.get('debug', False)
         
+        # print(f'Location: {self.location}: Simulating {self.days_per_episode} days, with a workload baseline of {self.workload_baseline} and a temperature baseline of {self.temperature_baseline}')
+
         # # Assign month according to worker index, if available
         # if hasattr(env_config, 'worker_index'):
         #     self.month = int((env_config.worker_index - 1) % 12)
@@ -141,8 +143,8 @@ class DCRL(gym.Env):
         n_vars_energy, n_vars_battery = 0, 0  # for partial observability (for p.o.)
         n_vars_ci = 32
         self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, flexible_workload_ratio=self.flexible_load,
-                                  n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=2000, initialize_queue_at_reset=self.initialize_queue_at_reset)
-        self.dc_env, _ = make_dc_pyeplus_env(month=self.month + 1, location=ci_loc, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
+                                  n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=1000, initialize_queue_at_reset=self.initialize_queue_at_reset)
+        self.dc_env, _ = make_dc_pyeplus_env(month=self.month + 1, location=self.location, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
                                              datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file, add_cpu_usage=False)
         self.bat_env = make_bat_fwd_env(month=self.month, max_bat_cap_Mwh=self.dc_env.ranges['max_battery_energy_Mwh'], 
                                         max_dc_pw_MW=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][1] / 1e6, 
@@ -165,23 +167,23 @@ class DCRL(gym.Env):
         # Create the observation/action space if the agent is used for training.
         # Otherwise, create the base agent for the environment.
         if "agent_ls" in self.agents:
-            self.observation_space.append(self.ls_env.observation_space)
-            self.action_space.append(self.ls_env.action_space)
+            self.observation_space = self.ls_env.observation_space
+            self.action_space = self.ls_env.action_space
             flexible_load = self.flexible_load
-        else:
-            self.base_agents["agent_ls"] = BaseLoadShiftingAgent()
+        # else:
+        self.base_agents["agent_ls"] = BaseLoadShiftingAgent()
             
         if "agent_dc" in self.agents:
             self.observation_space.append(self.dc_env.observation_space)
             self.action_space.append(self.dc_env.action_space)
-        else:
-            self.base_agents["agent_dc"] = BaseHVACAgent()
+        # else:
+        self.base_agents["agent_dc"] = BaseHVACAgent()
             
         if "agent_bat" in self.agents:
             self.observation_space.append(self.bat_env.observation_space)
             self.action_space.append(self.bat_env.action_space)
-        else:
-            self.base_agents["agent_bat"] = BaseBatteryAgent()
+        # else:
+        self.base_agents["agent_bat"] = BaseBatteryAgent()
             
         # ls_state[0:10]->10 variables
         # dc_state[4:9] & bat_state[5]->5+1 variables
@@ -191,16 +193,37 @@ class DCRL(gym.Env):
         self.ranges_day = [max(0, self.init_day - 7), min(364, self.init_day + 7)]
         self.t_m = Time_Manager(self.init_day, timezone_shift=self.timezone_shift, days_per_episode=self.days_per_episode)
         self.workload_m = Workload_Manager(init_day=self.init_day, workload_filename=self.workload_file, timezone_shift=self.timezone_shift, debug=self.debug, workload_baseline=self.workload_baseline)
-        self.weather_m = Weather_Manager(init_day=self.init_day, location=wea_loc, filename=self.weather_file, timezone_shift=self.timezone_shift, debug=self.debug)
+        self.weather_m = Weather_Manager(init_day=self.init_day, location=wea_loc, filename=self.weather_file, timezone_shift=self.timezone_shift, debug=self.debug, temperature_baseline=self.temperature_baseline)
         self.ci_m = CI_Manager(init_day=self.init_day, location=ci_loc, filename=self.ci_file, future_steps=n_vars_ci, timezone_shift=self.timezone_shift)
 
         # This actions_are_logits is True only for MADDPG, because RLLib defines MADDPG only for continuous actions.
         self.actions_are_logits = env_config.get("actions_are_logits", False)
+        
+        self.seed = None
                 
-    
+    def set_seed(self, seed=None):
+        """Set the random seed for the environment."""
+        self.seed = seed
+        seed = seed or 1
+        np.random.seed(seed)
+        random.seed(seed)
+        if torch is not None:
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
+
+        self._seed_spaces(seed)
+
+    def _seed_spaces(self, seed):
+        """Seed the action and observation spaces."""
+        if hasattr(self, 'action_space') and hasattr(self.action_space, 'seed'):
+            self.action_space.seed(seed)
+        if hasattr(self, 'observation_space') and hasattr(self.observation_space, 'seed'):
+            self.observation_space.seed(seed)
 
     def seed(self, seed=None):
         """Set the random seed for the environment."""
+        self.set_seed(seed)
         seed = seed or 1
         np.random.seed(seed)
         random.seed(seed)
@@ -210,13 +233,6 @@ class DCRL(gym.Env):
                 torch.cuda.manual_seed_all(seed)
 
         self._seed_spaces()
-
-    def _seed_spaces(self):
-        """Seed the action and observation spaces."""
-        if hasattr(self, 'action_space') and hasattr(self.action_space, 'seed'):
-            self.action_space.seed(self.seed)
-        if hasattr(self, 'observation_space') and hasattr(self.observation_space, 'seed'):
-            self.observation_space.seed(self.seed)
 
     def extract_ci_features(self, ci_values, current_ci):
         # Calculate statistical measures
@@ -242,21 +258,20 @@ class DCRL(gym.Env):
 
         # Relative CI position
         ci_percentile = (current_ci - ci_mean) / (ci_std + 1e-8)
-        # Limit the ci_percentile
-        ci_percentile = np.clip(ci_percentile, -10, 10)
-
+        
         # Assemble features
         ci_features = np.array([
                                 ci_mean,
-                                # ci_std,
-                                # ci_percentile,
+                                ci_std,
+                                ci_percentile,
                                 time_to_next_peak/len(ci_values),
                                 time_to_next_valley/len(ci_values),
                             ])
 
         return ci_features
 
-    def _create_ls_state(self, t_i, current_workload, queue_status, current_ci, ci_future, ci_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, ls_info):
+    def _create_ls_state(self, t_i, current_workload, queue_status, current_ci, ci_future, ci_past, next_workload, current_out_temperature, 
+                         next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram):
         """
         Create the state of the load shifting environment.
 
@@ -265,71 +280,61 @@ class DCRL(gym.Env):
         """
         hour_sin_cos = t_i[:2]
 
-        # # CI Trend analysis
+        # CI Trend analysis
         trend_smoothing_window = 4
         smoothed_ci_future = np.convolve(np.hstack((current_ci, ci_future[:16])), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
         smoothed_ci_past = np.convolve(np.hstack((ci_past, current_ci)), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
         
-        # # Slope the next 4 hours of CI and the previous 1 hour of CI
+        # Normalize CI values
+        stacked = np.hstack((ci_past, current_ci, ci_future))
+        ci_mean = np.mean(stacked)
+        ci_std = np.std(stacked)
+        
+        ci_past_window = (ci_past[::4] - ci_mean) / (ci_std + 1e-8)     # One sample per hour
+        ci_future_window = (ci_future[::4] - ci_mean) / (ci_std + 1e-8)
+    
+        # Slope the next 4 hours of CI and the previous 1 hour of CI
         ci_future_slope = np.polyfit(range(len(smoothed_ci_future)), smoothed_ci_future, 1)[0]
         ci_past_slope = np.polyfit(range(len(smoothed_ci_past)), smoothed_ci_past, 1)[0]
 
-        # # Extract features for future and past CI
+        # Extract features for future and past CI
         ci_future_features = self.extract_ci_features(ci_future, current_ci)
-        # # ci_past_features = self.extract_ci_features(ci_past, current_ci)
+        # ci_past_features = self.extract_ci_features(ci_past, current_ci)
 
-        # # Assemble CI features
+        # Assemble CI features
         ci_features = np.hstack([
                         ci_future_slope, ci_past_slope,
                         ci_future_features
                     ])
 
-        # # Weather trend analysis
-        # temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
+        # Weather trend analysis
+        temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
         
-        # # Extract features for the future temperature
-        # temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
+        # Extract features for the future temperature
+        temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
         
-        # # Assemble temperature features
-        # temperature_features = np.hstack([
-        #                                 temperature_slope, temperature_features
-        #                             ])
+        # Assemble temperature features
+        temperature_features = np.hstack([
+                                        temperature_slope, temperature_features
+                                    ])
         
-        # # Combine all features into the state
-        # ls_state = np.float32(np.hstack((
-        #                                 hour_sin_cos,
-        #                                 current_ci,
-        #                                 ci_features,
-        #                                 oldest_task_age,
-        #                                 average_task_age,
-        #                                 queue_status,
-        #                                 current_workload,
-        #                                 current_out_temperature,
-        #                                 temperature_features,
-        #                                 ls_task_age_histogram
-        #                             )))
-        
-        dropped_tasks = np.minimum(ls_info['ls_tasks_dropped'], 4) / 4 # Cropping the number of dropped tasks to 4
-        overdue_tasks = np.minimum(ls_info['ls_overdue_penalty'], 10) / 10 # Cropping the number of overdue tasks to 10
-        
+        # Combine all features into the state
         ls_state = np.float32(np.hstack((
-            # hour_sin_cos,
-            current_ci,
-            ci_features,
-            current_workload,
-            oldest_task_age,
-            # queue_status,
-            ls_task_age_histogram,
-            dropped_tasks,
-            overdue_tasks
-            
+                                        hour_sin_cos,
+                                        current_ci,
+                                        ci_features,
+                                        oldest_task_age,
+                                        average_task_age,
+                                        queue_status,
+                                        current_workload,
+                                        current_out_temperature,
+                                        temperature_features,
+                                        ls_task_age_histogram,
+                                        ci_past_window,
+                                        ci_future_window
                                     )))
         # if len(ls_state) != 26:
             # print(f'Error: {len(ls_state)}')
-            
-        # Raise an error if there is a nan in the state
-        if np.isnan(ls_state).any():
-            raise ValueError("State contains NaN values")
         return ls_state
     
     def _create_dc_state(self, current_workload, next_workload, current_out_temperature, next_out_temperature):
@@ -380,8 +385,11 @@ class DCRL(gym.Env):
                                         )))
         return bat_state
 
+    def seed(self, seed=None):
+        self.set_seed(seed)
 
-    def reset(self, random_init_day=None, random_init_hour=None):
+
+    def reset(self, seed=None, random_init_day=None, random_init_hour=None):
         """
         Reset the environment.
 
@@ -393,6 +401,12 @@ class DCRL(gym.Env):
             states (dict): Dictionary of states.
             infos (dict): Dictionary of infos.
         """
+        if seed is not None:
+            self.set_seed(seed)
+        
+        random_init_day  = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1])) # self.init_day 
+        random_init_hour = random.randint(0, 23)
+        
         # Reset termination and reward flags for all agents
         self.ls_terminated = self.dc_terminated = self.bat_terminated = False
         self.ls_truncated = self.dc_truncated = self.bat_truncated = False
@@ -433,7 +447,7 @@ class DCRL(gym.Env):
         
         current_out_temperature = self.weather_m.get_current_temperature()
         next_out_temperature = self.weather_m.get_next_temperature()
-        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=32)
+        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=16)
         
         # ls_state -> [time (sine/cosine enconded), original ls observation, current+future normalized CI]
         queue_status = self.ls_info['ls_norm_tasks_in_queue']
@@ -441,7 +455,7 @@ class DCRL(gym.Env):
         oldest_task_age = self.ls_info['ls_oldest_task_age']
         average_task_age = self.ls_info['ls_average_task_age']
         ls_task_age_histogram = self.ls_info['ls_task_age_histogram']
-        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, self.ls_info)
+        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram)
         
         self.dc_state = self._create_dc_state(current_workload, next_workload, current_out_temperature, next_out_temperature)
         
@@ -483,7 +497,7 @@ class DCRL(gym.Env):
         }
         available_actions = None
                 
-        return states, self.infos, available_actions 
+        return self.ls_state, self.infos 
 
             
     
@@ -529,10 +543,9 @@ class DCRL(gym.Env):
         average_task_age = self.ls_info['ls_average_task_age']
         ls_task_age_histogram = self.ls_info['ls_task_age_histogram']
         
-        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=32)
+        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=16)
 
-        
-        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, norm_temp, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, self.ls_info)
+        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, norm_temp, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram)
         self.dc_state = self._create_dc_state(workload, next_workload, norm_temp, next_out_temperature)
         self.bat_state = self._create_bat_state(workload, next_workload, ci_i, norm_temp)
 
@@ -578,14 +591,14 @@ class DCRL(gym.Env):
         if terminal:
             self._handle_terminal(terminateds, truncateds)
 
-        return obs, rew, terminateds, truncateds, info
+        return obs, self.ls_reward, terminateds['__all__'], truncateds['__all__'], info
 
 
     def _perform_actions(self, action_dict):
         """Execute actions for each agent and update their respective environments."""
         # Load shifting agent
         if "agent_ls" in self.agents:
-            action = action_dict["agent_ls"]
+            action =  action_dict
         else:
             action = self.base_agents["agent_ls"].do_nothing_action()
 
@@ -627,7 +640,7 @@ class DCRL(gym.Env):
             obs['agent_dc'] = self.dc_state
         if "agent_bat" in self.agents:
             obs['agent_bat'] = self.bat_state
-        return obs
+        return self.ls_state
 
 
     def _calculate_reward_params(self, workload, temp, ci_i, ci_i_future, day, hour, terminal, location=None, ci_i_12_hours=None):
