@@ -9,7 +9,7 @@ from tqdm import tqdm
 import gymnasium as gym
 from gymnasium.spaces import Dict, Box, Discrete
 
-from envs.dcrl_env_harl_partialobs import DCRL
+from envs.dcrl_env_harl_partialobs_sb3 import DCRL
 from utils.hierarchical_workload_optimizer import WorkloadOptimizer
 from utils.low_level_wrapper import LowLevelActorRLLIB, LowLevelActorHARL
 from utils.utils_cf import get_init_day
@@ -199,10 +199,10 @@ class HeirarchicalDCRL(gym.Env):
         self.energy_stats = []
         self.debug = True
         
-        # self.seed = None
+        self.int_seed = None
     
     def seed(self, seed=None):
-        # self.seed = seed
+        self.int_seed = seed
         np.random.seed(seed)
         random.seed(seed)
         torch.manual_seed(seed)
@@ -211,12 +211,11 @@ class HeirarchicalDCRL(gym.Env):
     def reset(self, seed=None, options=None):
         
         # Set seed if we are not in rllib
-        # if seed is not None:
-            # self.seed = seed
-            # np.random.seed(seed)
-            # random.seed(seed)
-            # torch.manual_seed(seed)
-            # tf1.random.set_random_seed(0)
+        if seed is not None:
+            self.int_seed = seed
+            np.random.seed(seed)
+            random.seed(seed)
+            torch.manual_seed(seed)
 
         self.low_level_observations = {}
         self.low_level_infos = {}
@@ -242,7 +241,7 @@ class HeirarchicalDCRL(gym.Env):
         
         # Reset environments and store initial observations and infos
         for env_id, env in self.datacenters.items():
-            obs, info, _ = env.reset(random_init_day, random_init_hour)
+            obs, info = env.reset(seed=self.int_seed, random_init_day=random_init_day, random_init_hour=random_init_hour)
             self.low_level_observations[env_id] = obs
             self.low_level_infos[env_id] = info
             
@@ -353,6 +352,9 @@ class HeirarchicalDCRL(gym.Env):
         # You can store the aggregated metrics in the info dict
         info["co2_footprint"] = total_co2
         info["water_usage"] = total_water
+        
+        # Include inside the info dict the self.low_level_infos
+        info['low_level_infos'] = self.low_level_infos
 
         # Return as usual
         return self.flatten_observation(self.heir_obs), self.calc_reward(), False, done, info
@@ -365,7 +367,7 @@ class HeirarchicalDCRL(gym.Env):
             curr_workload = self.datacenters[datacenter_id].workload_m.get_current_workload()
             # print(f'Current workload for {datacenter_id}: {curr_workload}')
             # On agent_ls, the workload is the 5th element of the array (sine/cos hour day, workload, queue, etc)
-            self.low_level_observations[datacenter_id]['agent_ls'][4] = curr_workload
+            self.low_level_observations[datacenter_id][4] = curr_workload
             
             # Update the workload in the environment
             self.datacenters[datacenter_id].ls_env.update_workload(curr_workload)
@@ -391,7 +393,7 @@ class HeirarchicalDCRL(gym.Env):
             
             new_obs, rewards, terminated, truncated, info = self.datacenters[env_id].step(low_level_actions[env_id])
             self.low_level_observations[env_id] = new_obs
-            self.all_done[env_id] = terminated['__all__'] or truncated['__all__']
+            self.all_done[env_id] = terminated or truncated
 
             self.low_level_infos[env_id] = info
             self.low_level_rewards[env_id] = rewards
@@ -419,6 +421,7 @@ class HeirarchicalDCRL(gym.Env):
         Handles both single values and arrays.
         """
         self._original_observation = observation  # Save the original observation
+        # print(f'Original observation in the main: {self._original_observation}')
 
         flattened_obs = []
 
@@ -441,6 +444,9 @@ class HeirarchicalDCRL(gym.Env):
                     flattened_obs.extend(np.asarray(value).flatten())  # Convert to array and flatten
 
         self.flat_obs = np.array(flattened_obs, dtype=np.float32)
+        
+        # print(f'Flattened observation: {self._original_observation}')
+        
         return self.flat_obs
     
     def get_common_variables(self):
@@ -457,7 +463,7 @@ class HeirarchicalDCRL(gym.Env):
         dc = self.datacenters[dc_id]
 
         available_capacity = dc.datacenter_capacity_mw - dc.workload_m.get_current_workload()
-        normalized_ocupacity_last_period = dc.ls_info['ls_previous_computed_workload'] / dc.datacenter_capacity_mw
+        # normalized_ocupacity_last_period = dc.ls_info['ls_previous_computed_workload'] / dc.datacenter_capacity_mw
 
         # TODO: check if the variables are normalized with the same values or with min_max values
         obs = {
@@ -470,7 +476,6 @@ class HeirarchicalDCRL(gym.Env):
             'predicted_weather': dc.weather_m.get_forecast_weather(steps=1),
             'predicted_ci': dc.ci_m.get_forecast_ci()[0],
             'available_capacity': available_capacity,
-            'normalized_ocupacity_last_period': normalized_ocupacity_last_period,
             'ctafr': dc.dc_env.dc.DC_ITModel_config.CT_REFRENCE_AIR_FLOW_RATE,
             'ct_rated_load': dc.dc_env.dc.DC_ITModel_config.CT_FAN_REF_P/1e6,
         }
@@ -483,6 +488,7 @@ class HeirarchicalDCRL(gym.Env):
         """
         Returns the original (unflattened) observation dictionary.
         """
+        # print(f'Original observation: {self._original_observation}')
         return self._original_observation
 
         
@@ -596,6 +602,12 @@ class HeirarchicalDCRL(gym.Env):
                 raise ValueError(f"Workload for {dc} should be between 0 and 1 after transfer, got {new_workload:.3f}")
 
             self.datacenters[dc].workload_m.set_current_workload(new_workload)
+
+        # Print the original workload and the final workload assignment and the actions for each datacenter
+        # for dc in self.datacenters:
+        #     print(f"{dc}: Original={original_workload[dc]:.3f}, Final={self.datacenters[dc].workload_m.get_current_workload():.3f}")
+        # for action_id, action in actions.items():
+        #     print(f"{action_id}: {action}")
 
         # 7) Keep track of total computed workload
         self.total_computed_workload += sum(self.base_workload_on_curr_step.values())

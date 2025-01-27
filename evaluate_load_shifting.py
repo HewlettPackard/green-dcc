@@ -3,9 +3,9 @@ import torch
 import numpy as np
 import gymnasium as gym
 from stable_baselines3 import PPO
-from envs.dcrl_env_harl_partialobs import DCRL, EnvConfig
+from envs.dcrl_env_harl_partialobs_sb3 import DCRL, EnvConfig
 from tqdm import tqdm
-#%%
+
 def evaluate_agent(env, agent, n_episodes=10):
     """
     Evaluate the performance of an agent in the given environment.
@@ -50,13 +50,15 @@ config["agents"] = ["agent_ls"]  # Only load-shifting agent active
 config['flexible_load'] = 0.4
 config['location'] = 'ca'
 config['month'] = 6
+config['initialize_queue_at_reset'] = False
+config['random_init_day_at_reset'] = False
 
 # Initialize the environment
 env = DCRL(config)
 env.seed = 0
 
 # Load the trained model
-model_path = "checkpoints/load_shifting/KOYY6O/ls_ppo_6840000_steps.zip"  # Adjust path as necessary
+model_path = "ls_ppo_model_2ND6YU"  # Adjust path as necessary
 trained_model = PPO.load(model_path, env)
 
 # Initialize the baseline agent
@@ -91,6 +93,10 @@ plt.grid()
 plt.show()
 #%% Plot the original workload and the shifted workload of the first week on the first episode fron the infos['agent_ls']
 # Extract workload information from the first episode
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Assuming original_workload, shifted_workload, and carbon_intensity are already populated
 original_workload = []
 shifted_workload = []
 carbon_intensity = []
@@ -100,14 +106,57 @@ for info in trained_results['infos']:
         shifted_workload.append(info['agent_ls']['ls_shifted_workload'])
         carbon_intensity.append(info['agent_bat']['bat_avg_CI'])
 
-# Plot the original and shifted workload for the first week in one y-axis and the carbon intensity in another y-axis
-fig, ax1 = plt.subplots(figsize=(12, 6))
+# Define parameters
+days = 4  # Number of simulated days to display
+samples_per_day = 96  # 96 samples per day (15-minute intervals)
 
 # Plot original and shifted workload
-ax1.plot(original_workload[1:24*4*7], label="Original Workload", color='tab:blue')
-ax1.plot(shifted_workload[1:24*4*7], label="Shifted Workload", color='tab:orange')
+fig, ax1 = plt.subplots(figsize=(4.5, 2.9))
+
+x_values = np.arange(len(original_workload[:samples_per_day * days-1])) / samples_per_day
+
+# Plot original and shifted workload
+ax1.plot(x_values, np.array(original_workload[1:samples_per_day * days]) * 100, label="Original Workload", 
+         color='tab:blue', linestyle='-', linewidth=2, alpha=0.9)
+ax1.plot(x_values, np.array(shifted_workload[1:samples_per_day * days]) * 100, label="Shifted Workload", 
+         color='tab:orange', linestyle='-', linewidth=2, alpha=0.9)
+ax1.set_xlabel("Simulated Days")
+ax1.set_ylabel("Data Center Utilization (%)")
+ax1.legend(loc="upper left")
+ax1.grid(True, linestyle='--', alpha=0.5)
+ax1.set_ylim(0, 110)
+ax1.set_xlim(0, days)
+
+ax1.set_xticks(np.arange(0, days + 1, 1))  # Whole numbers from 0 to `days`
+
+# Create a second y-axis for carbon intensity
+ax2 = ax1.twinx()
+ax2.plot(x_values, carbon_intensity[1:samples_per_day * days], label="CI", color='tab:green', linestyle='-', linewidth=2, alpha=0.9)
+ax2.set_ylabel("Carbon Intensity (gCO2/kWh)")
+ax2.legend(loc="upper right")
+ax2.set_ylim(100, 350)
+
+plt.title("Original vs Temporal Shifted Workload and CI")
+plt.tight_layout()
+
+# Save and show
+# plt.savefig('Figures/Original_vs_temporal_loadshifting.pdf', format='pdf')
+plt.show()
+
+#%% Plot the action taken by the agent for the first week on the first episode from the infos['agent_ls'] and the carbon intensity in another y-axis
+# Extract actions taken by the agent from the first episode
+actions = []
+for info in trained_results['infos']:
+    if 'agent_ls' in info:
+        actions.append(info['agent_ls']['ls_action'])
+
+# Plot the actions taken by the agent for the first week
+fig, ax1 = plt.subplots(figsize=(4.5, 2.6))
+
+# Plot actions
+ax1.plot(np.tanh(actions[1:24*4*7]), label="Actions Taken", color='tab:red')
 ax1.set_xlabel("Time (hours)")
-ax1.set_ylabel("Workload")
+ax1.set_ylabel("Actions")
 ax1.legend(loc="upper left")
 ax1.grid()
 
@@ -117,6 +166,22 @@ ax2.plot(carbon_intensity[1:24*4*7], label="Carbon Intensity", color='tab:green'
 ax2.set_ylabel("Carbon Intensity (gCO2/kWh)")
 ax2.legend(loc="upper right")
 
-plt.title("Original vs Shifted Workload and Carbon Intensity (First Week)")
+plt.title("Actions Taken by Agent and Carbon Intensity (First Week)")
 plt.show()
+# %% Obtain the sum of the carbon emissions for the first week and compare both
+# Calculate the carbon emissions for the first week
+trained_carbon_emmisions = []
+for info in trained_results['infos']:
+    if 'agent_ls' in info:
+        trained_carbon_emmisions.append(info['agent_bat']['bat_CO2_footprint'])
+
+baseline_carbon_emmisions = []
+for info in baseline_results['infos']:
+    if 'agent_ls' in info:
+        baseline_carbon_emmisions.append(info['agent_bat']['bat_CO2_footprint'])
+        
+print(f"Trained Agent Total Carbon Emissions: {np.sum(trained_carbon_emmisions)}")
+print(f"Baseline Agent Total Carbon Emissions: {np.sum(baseline_carbon_emmisions)}")
+print(f"Carbon Emissions Difference: {np.sum(trained_carbon_emmisions) - np.sum(baseline_carbon_emmisions)}")
+print(f"Carbon Emissions Reduccion (%) : {100 * (np.sum(baseline_carbon_emmisions) - np.sum(trained_carbon_emmisions)) / np.sum(baseline_carbon_emmisions)}")
 # %%

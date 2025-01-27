@@ -709,7 +709,9 @@ class Weather_Manager():
         
     def get_current_weather(self):
         # return self.temperature_data[self.time_step]
-        return self._current_norm_temp
+        # normalize this temperature data using min 0 and max 40
+        norm_temp = self._current_temp / 40
+        return self._current_temp
     
     def get_current_temperature(self):
         return self._current_norm_temp

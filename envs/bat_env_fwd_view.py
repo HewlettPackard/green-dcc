@@ -73,11 +73,11 @@ class BatteryEnvFwd(gym.Env):
             'action': -1,
             'avg_dc_power_mw': self.raw_obs[0],
             'Grid_CI': 0,
-            'total_energy_with_battery': 0,
-            'CO2_footprint': 0,
+            'bat_total_energy_with_battery_KWh': 0,
+            'bat_CO2_footprint': 0,
             'bat_avg_CI': 0,
-            'battery SOC': self.battery.current_load,
-            'total_energy_with_battery': 0
+            'bat_SOC': self.battery.current_load,
+            'bat_total_energy_without_battery_KWh': 0
         }
 
     def step(self, action_id):
@@ -113,6 +113,7 @@ class BatteryEnvFwd(gym.Env):
             'bat_dcload_min': self.dcload_min,
             'bat_dcload_max': self.dcload_max,
         }
+        # print(f'Info: {self.info}')
         #Done and truncated are managed by the main class, implement individual function if needed
         truncated = False
         done = False 

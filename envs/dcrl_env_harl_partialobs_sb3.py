@@ -1,4 +1,5 @@
 import os
+import pickle
 import random
 from typing import Optional, Tuple, Union
 
@@ -15,6 +16,7 @@ from utils.make_envs_pyenv import (make_bat_fwd_env, make_dc_pyeplus_env,
 from utils.managers import (CI_Manager, Time_Manager, Weather_Manager,
                             Workload_Manager)
 from utils.utils_cf import get_energy_variables, get_init_day, obtain_paths
+from stable_baselines3 import PPO
 
 
 class EnvConfig(dict):
@@ -67,6 +69,8 @@ class EnvConfig(dict):
         'debug': False,
         
         'initialize_queue_at_reset': False,
+        'random_init_day_at_reset': False,
+        'normalization_file': None,
     }
 
     def __init__(self, raw_config):
@@ -107,14 +111,25 @@ class DCRL(gym.Env):
         self.datacenter_capacity_mw = env_config['datacenter_capacity_mw']
         self.dc_config_file = env_config['dc_config_file']
         self.timezone_shift = env_config['timezone_shift']
-        self.days_per_episode = env_config['days_per_episode'] + np.random.randint(-5, 30)
+        self.days_per_episode = env_config['days_per_episode']# + np.random.randint(-5, 30)
         self.initialize_queue_at_reset =  env_config.get('initialize_queue_at_reset', False)
+        self.random_init_day_at_reset = env_config.get('random_init_day_at_reset', False)
+        self.normalization_file = env_config.get('normalization_file', None)
         
-        # print(f'Simulating {self.days_per_episode} days')
+        # Load normalization values from the .pkl file
+        self.obs_mean = None
+        self.obs_std = None
+        self.reward_mean = None
+        self.reward_std = None
+        if self.normalization_file:
+            self._load_normalization(self.normalization_file)
         
         self.workload_baseline = env_config.get('workload_baseline', False)
+        self.temperature_baseline = env_config.get('temperature_baseline', False)
         self.debug = env_config.get('debug', False)
         
+        # print(f'Location: {self.location}: Simulating {self.days_per_episode} days, with a workload baseline of {self.workload_baseline} and a temperature baseline of {self.temperature_baseline}')
+
         # # Assign month according to worker index, if available
         # if hasattr(env_config, 'worker_index'):
         #     self.month = int((env_config.worker_index - 1) % 12)
@@ -141,8 +156,8 @@ class DCRL(gym.Env):
         n_vars_energy, n_vars_battery = 0, 0  # for partial observability (for p.o.)
         n_vars_ci = 32
         self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, flexible_workload_ratio=self.flexible_load,
-                                  n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=2000, initialize_queue_at_reset=self.initialize_queue_at_reset)
-        self.dc_env, _ = make_dc_pyeplus_env(month=self.month + 1, location=ci_loc, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
+                                  n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=1000, initialize_queue_at_reset=self.initialize_queue_at_reset)
+        self.dc_env, _ = make_dc_pyeplus_env(month=self.month + 1, location=self.location, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
                                              datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file, add_cpu_usage=False)
         self.bat_env = make_bat_fwd_env(month=self.month, max_bat_cap_Mwh=self.dc_env.ranges['max_battery_energy_Mwh'], 
                                         max_dc_pw_MW=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][1] / 1e6, 
@@ -162,29 +177,26 @@ class DCRL(gym.Env):
         self.base_agents = {}
         flexible_load = 0
         
-        # self.max_value_state = 0
-        # self.min_value_state = 0
-        
         # Create the observation/action space if the agent is used for training.
         # Otherwise, create the base agent for the environment.
         if "agent_ls" in self.agents:
             self.observation_space = self.ls_env.observation_space
             self.action_space = self.ls_env.action_space
             flexible_load = self.flexible_load
-        else:
-            self.base_agents["agent_ls"] = BaseLoadShiftingAgent()
+        # else:
+        self.base_agents["agent_ls"] = BaseLoadShiftingAgent()
             
         if "agent_dc" in self.agents:
-            self.observation_space = self.dc_env.observation_space
-            self.action_space = self.dc_env.action_space
-        else:
-            self.base_agents["agent_dc"] = BaseHVACAgent()
+            self.observation_space.append(self.dc_env.observation_space)
+            self.action_space.append(self.dc_env.action_space)
+        # else:
+        self.base_agents["agent_dc"] = BaseHVACAgent()
             
         if "agent_bat" in self.agents:
-            self.observation_space = self.bat_env.observation_space
-            self.action_space = self.bat_env.action_space
-        else:
-            self.base_agents["agent_bat"] = BaseBatteryAgent()
+            self.observation_space.append(self.bat_env.observation_space)
+            self.action_space.append(self.bat_env.action_space)
+        # else:
+        self.base_agents["agent_bat"] = BaseBatteryAgent()
             
         # ls_state[0:10]->10 variables
         # dc_state[4:9] & bat_state[5]->5+1 variables
@@ -194,16 +206,50 @@ class DCRL(gym.Env):
         self.ranges_day = [max(0, self.init_day - 7), min(364, self.init_day + 7)]
         self.t_m = Time_Manager(self.init_day, timezone_shift=self.timezone_shift, days_per_episode=self.days_per_episode)
         self.workload_m = Workload_Manager(init_day=self.init_day, workload_filename=self.workload_file, timezone_shift=self.timezone_shift, debug=self.debug, workload_baseline=self.workload_baseline)
-        self.weather_m = Weather_Manager(init_day=self.init_day, location=wea_loc, filename=self.weather_file, timezone_shift=self.timezone_shift, debug=self.debug)
+        self.weather_m = Weather_Manager(init_day=self.init_day, location=wea_loc, filename=self.weather_file, timezone_shift=self.timezone_shift, debug=self.debug, temperature_baseline=self.temperature_baseline)
         self.ci_m = CI_Manager(init_day=self.init_day, location=ci_loc, filename=self.ci_file, future_steps=n_vars_ci, timezone_shift=self.timezone_shift)
 
         # This actions_are_logits is True only for MADDPG, because RLLib defines MADDPG only for continuous actions.
         self.actions_are_logits = env_config.get("actions_are_logits", False)
-                
-    
+        
+        self.seed = None
+        
+        self.agent_ls = PPO.load("ls_ppo_model_LLAG7E.zip", device="cpu")
+        self.use_frozen_ls = True  # Turn on/off if you want to freeze agent_ls
 
+        
+    def _load_normalization(self, normalization_file):
+        """
+        Load normalization statistics from the VecNormalize .pkl file.
+        """
+        with open(normalization_file, "rb") as file:
+            vec_normalize_data = pickle.load(file)
+        
+        # Store the mean and std for observations and rewards
+        self.obs_mean = vec_normalize_data.obs_rms.mean
+        self.obs_std = vec_normalize_data.obs_rms.var ** 0.5
+        self.reward_mean = vec_normalize_data.ret_rms.mean
+        self.reward_std = vec_normalize_data.ret_rms.var ** 0.5
+
+    def normalize_obs(self, obs):
+        """
+        Normalize observations using precomputed mean and std.
+        """
+        if self.obs_mean is not None and self.obs_std is not None:
+            return (obs - self.obs_mean) / (self.obs_std + 1e-8)
+        return obs
+
+    def normalize_reward(self, reward):
+        """
+        Normalize rewards using precomputed mean and std.
+        """
+        if self.reward_mean is not None and self.reward_std is not None:
+            return (reward - self.reward_mean) / (self.reward_std + 1e-8)
+        return reward
+    
     def set_seed(self, seed=None):
         """Set the random seed for the environment."""
+        self.seed = seed
         seed = seed or 1
         np.random.seed(seed)
         random.seed(seed)
@@ -220,6 +266,19 @@ class DCRL(gym.Env):
             self.action_space.seed(seed)
         if hasattr(self, 'observation_space') and hasattr(self.observation_space, 'seed'):
             self.observation_space.seed(seed)
+
+    # def seed(self, seed=None):
+    #     """Set the random seed for the environment."""
+    #     self.set_seed(seed)
+    #     seed = seed or 1
+    #     np.random.seed(seed)
+    #     random.seed(seed)
+    #     if torch is not None:
+    #         torch.manual_seed(seed)
+    #         if torch.cuda.is_available():
+    #             torch.cuda.manual_seed_all(seed)
+
+    #     self._seed_spaces()
 
     def extract_ci_features(self, ci_values, current_ci):
         # Calculate statistical measures
@@ -245,21 +304,20 @@ class DCRL(gym.Env):
 
         # Relative CI position
         ci_percentile = (current_ci - ci_mean) / (ci_std + 1e-8)
-        # Limit the ci_percentile
-        ci_percentile = np.clip(ci_percentile, -10, 10)
-
+        
         # Assemble features
         ci_features = np.array([
                                 ci_mean,
-                                # ci_std,
-                                # ci_percentile,
+                                ci_std,
+                                ci_percentile,
                                 time_to_next_peak/len(ci_values),
                                 time_to_next_valley/len(ci_values),
                             ])
 
         return ci_features
 
-    def _create_ls_state(self, t_i, current_workload, queue_status, current_ci, ci_future, ci_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, ls_info):
+    def _create_ls_state(self, t_i, current_workload, queue_status, current_ci, ci_future, ci_past, next_workload, current_out_temperature, 
+                         next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram):
         """
         Create the state of the load shifting environment.
 
@@ -268,71 +326,62 @@ class DCRL(gym.Env):
         """
         hour_sin_cos = t_i[:2]
 
-        # # CI Trend analysis
+        # CI Trend analysis
         trend_smoothing_window = 4
         smoothed_ci_future = np.convolve(np.hstack((current_ci, ci_future[:16])), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
         smoothed_ci_past = np.convolve(np.hstack((ci_past, current_ci)), np.ones(trend_smoothing_window), 'valid') / trend_smoothing_window
         
-        # # Slope the next 4 hours of CI and the previous 1 hour of CI
+        # Normalize CI values
+        stacked = np.hstack((ci_past, current_ci, ci_future))
+        ci_mean = np.mean(stacked)
+        ci_std = np.std(stacked)
+        
+        ci_past_window = (ci_past[::4] - ci_mean) / (ci_std + 1e-8)     # One sample per hour
+        ci_future_window = (ci_future[::4] - ci_mean) / (ci_std + 1e-8)
+    
+        # Slope the next 4 hours of CI and the previous 1 hour of CI
         ci_future_slope = np.polyfit(range(len(smoothed_ci_future)), smoothed_ci_future, 1)[0]
         ci_past_slope = np.polyfit(range(len(smoothed_ci_past)), smoothed_ci_past, 1)[0]
 
-        # # Extract features for future and past CI
+        # Extract features for future and past CI
         ci_future_features = self.extract_ci_features(ci_future, current_ci)
-        # # ci_past_features = self.extract_ci_features(ci_past, current_ci)
+        # ci_past_features = self.extract_ci_features(ci_past, current_ci)
 
-        # # Assemble CI features
+        # Assemble CI features
         ci_features = np.hstack([
                         ci_future_slope, ci_past_slope,
                         ci_future_features
                     ])
 
-        # # Weather trend analysis
-        # temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
+        # Weather trend analysis
+        temperature_slope = np.polyfit(range(len(next_n_out_temperature) + 1), np.hstack([current_out_temperature, next_n_out_temperature]), 1)[0]
         
-        # # Extract features for the future temperature
-        # temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
+        # Extract features for the future temperature
+        temperature_features = self.extract_ci_features(next_n_out_temperature, current_out_temperature)
         
-        # # Assemble temperature features
-        # temperature_features = np.hstack([
-        #                                 temperature_slope, temperature_features
-        #                             ])
+        # Assemble temperature features
+        temperature_features = np.hstack([
+                                        temperature_slope, temperature_features
+                                    ])
         
-        # # Combine all features into the state
-        # ls_state = np.float32(np.hstack((
-        #                                 hour_sin_cos,
-        #                                 current_ci,
-        #                                 ci_features,
-        #                                 oldest_task_age,
-        #                                 average_task_age,
-        #                                 queue_status,
-        #                                 current_workload,
-        #                                 current_out_temperature,
-        #                                 temperature_features,
-        #                                 ls_task_age_histogram
-        #                             )))
-        
-        dropped_tasks = np.minimum(ls_info['ls_tasks_dropped'], 4) / 4 # Cropping the number of dropped tasks to 4
-        overdue_tasks = np.minimum(ls_info['ls_overdue_penalty'], 10) / 10 # Cropping the number of overdue tasks to 10
-        
+        # Combine all features into the state
         ls_state = np.float32(np.hstack((
-            # hour_sin_cos,
-            current_ci,
-            ci_features,
-            current_workload,
-            oldest_task_age,
-            # queue_status,
-            ls_task_age_histogram,
-            dropped_tasks,
-            overdue_tasks
-            
+                                        hour_sin_cos,
+                                        current_ci,
+                                        ci_features,
+                                        oldest_task_age,
+                                        average_task_age,
+                                        queue_status,
+                                        current_workload,
+                                        # next_workload,
+                                        current_out_temperature,
+                                        temperature_features,
+                                        ls_task_age_histogram,
+                                        ci_past_window,
+                                        ci_future_window
                                     )))
         # if len(ls_state) != 26:
             # print(f'Error: {len(ls_state)}')
-            
-        # Raise an error if there is a nan in the state
-        if np.isnan(ls_state).any():
-            raise ValueError("State contains NaN values")
         return ls_state
     
     def _create_dc_state(self, current_workload, next_workload, current_out_temperature, next_out_temperature):
@@ -383,8 +432,11 @@ class DCRL(gym.Env):
                                         )))
         return bat_state
 
+    def seed(self, seed=None):
+        self.set_seed(seed)
 
-    def reset(self, seed=0, random_init_day=None, random_init_hour=None):
+
+    def reset(self, seed=None, random_init_day=None, random_init_hour=None):
         """
         Reset the environment.
 
@@ -396,11 +448,19 @@ class DCRL(gym.Env):
             states (dict): Dictionary of states.
             infos (dict): Dictionary of infos.
         """
+        if seed is not None:
+            self.set_seed(seed)
         
-        self.set_seed(seed)
+        # Randomly initialize the day and hour at reset
+        if self.random_init_day_at_reset:
+            random_init_day  = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1])) # self.init_day 
+            random_init_hour = random.randint(0, 23)
         
-        random_init_day  = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1])) # self.init_day 
-        random_init_hour = random.randint(0, 23)
+        # If random_init_day is None, then use the default initialization day
+        elif random_init_day is None and random_init_hour is None:
+            random_init_day = self.init_day
+            random_init_hour = 6
+        # Else, use the provided initialization day and hour
         
         # Reset termination and reward flags for all agents
         self.ls_terminated = self.dc_terminated = self.bat_terminated = False
@@ -442,7 +502,7 @@ class DCRL(gym.Env):
         
         current_out_temperature = self.weather_m.get_current_temperature()
         next_out_temperature = self.weather_m.get_next_temperature()
-        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=32)
+        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=16)
         
         # ls_state -> [time (sine/cosine enconded), original ls observation, current+future normalized CI]
         queue_status = self.ls_info['ls_norm_tasks_in_queue']
@@ -450,7 +510,7 @@ class DCRL(gym.Env):
         oldest_task_age = self.ls_info['ls_oldest_task_age']
         average_task_age = self.ls_info['ls_average_task_age']
         ls_task_age_histogram = self.ls_info['ls_task_age_histogram']
-        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, self.ls_info)
+        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, current_out_temperature, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram)
         
         self.dc_state = self._create_dc_state(current_workload, next_workload, current_out_temperature, next_out_temperature)
         
@@ -462,14 +522,15 @@ class DCRL(gym.Env):
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
 
         # States should be a dictionary with agent names as keys and their observations as values
+        states = {}
         self.infos = {}
         # Update states and infos considering the agents defined in the environment config self.agents.
         if "agent_ls" in self.agents:
-            states = self.ls_state
+            states["agent_ls"] = self.ls_state
         if "agent_dc" in self.agents:
-            states = self.dc_state
+            states["agent_dc"] = self.dc_state
         if "agent_bat" in self.agents:
-            states = self.bat_state
+            states["agent_bat"] = self.bat_state
 
         # Prepare the infos dictionary with common and individual agent information
         self.infos = {
@@ -491,7 +552,7 @@ class DCRL(gym.Env):
         }
         available_actions = None
                 
-        return states, self.infos 
+        return self.normalize_obs(self.ls_state), self.infos 
 
             
     
@@ -512,6 +573,14 @@ class DCRL(gym.Env):
         obs, rew, terminateds, truncateds, info = {}, {}, {}, {}, {}
         terminateds["__all__"] = False
         truncateds["__all__"] = False
+        
+        if "agent_ls" in self.agents and self.use_frozen_ls:
+            # Instead of using the action from the user, 
+            # call the loaded SB3 policy to get the action for agent_ls
+            obs_ls = self.ls_state  # or however you store the current LS observation
+            action_ls, _ = self.agent_ls.predict(obs_ls, deterministic=True)
+            action_dict["agent_ls"] = action_ls
+            
         
         # Perform actions for each agent and update their respective environments
         self._perform_actions(action_dict)
@@ -537,10 +606,9 @@ class DCRL(gym.Env):
         average_task_age = self.ls_info['ls_average_task_age']
         ls_task_age_histogram = self.ls_info['ls_task_age_histogram']
         
-        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=32)
+        next_n_out_temperature = self.weather_m.get_n_next_temperature(n=16)
 
-        
-        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, norm_temp, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram, self.ls_info)
+        self.ls_state = self._create_ls_state(t_i, workload, queue_status, ci_i, ci_i_future, ci_i_past, next_workload, norm_temp, next_out_temperature, next_n_out_temperature, oldest_task_age, average_task_age, ls_task_age_histogram)
         self.dc_state = self._create_dc_state(workload, next_workload, norm_temp, next_out_temperature)
         self.bat_state = self._create_bat_state(workload, next_workload, ci_i, norm_temp)
 
@@ -554,7 +622,7 @@ class DCRL(gym.Env):
             # print(f'Terminal state reached at day {day} and hour {hour}')
             
         reward_params = self._calculate_reward_params(workload, temp, ci_i, ci_i_future, day, hour, terminal, location, ci_i_12_hours)
-        self.ls_reward, self.dc_reward, self.bat_reward = self.calculate_reward(reward_params)
+        self.ls_reward, self.dc_reward, self.bat_reward, ls_partials = self.calculate_reward(reward_params)
 
         # Update rewards, terminations, and truncations for each agent
         self._update_reward_and_termination(rew, terminateds, truncateds)
@@ -578,6 +646,14 @@ class DCRL(gym.Env):
                     'agent_dc': self.dc_state,
                     'agent_bat': self.bat_state
                 }
+            },
+            'partials': {
+                "ls_footprint_reward": ls_partials["footprint_reward"],
+                "ls_overdue_penalty": ls_partials["overdue_penalty"],
+                "ls_dropped_tasks_penalty": ls_partials["dropped_tasks_penalty"],
+                "ls_tasks_in_queue_reward": ls_partials["tasks_in_queue_reward"],
+                "ls_over_utilization_penalty": ls_partials["over_utilization_penalty"],
+                "ls_action_penalty": ls_partials["action_penalty"],
             }
         }
 
@@ -586,24 +662,14 @@ class DCRL(gym.Env):
         if terminal:
             self._handle_terminal(terminateds, truncateds)
 
-        # # print the max and the min value of the state
-        # if self.max_value_state < np.max(obs['agent_ls']):
-        #     self.max_value_state = np.max(obs['agent_ls'])
-        #     print(f'Max value of the state: {self.max_value_state}')
-        #     self.max_value_state = np.max(obs['agent_ls'])
-        # if self.min_value_state > np.min(obs['agent_ls']):
-        #     self.min_value_state = np.min(obs['agent_ls'])
-        #     print(f'Min value of the state: {self.min_value_state}')
-        #     self.min_value_state = np.min(obs['agent_ls'])
-
-        return obs['agent_ls'], rew['agent_ls'], terminateds['agent_ls'], truncateds['agent_ls'], info
+        return self.normalize_obs(obs), self.normalize_reward(self.ls_reward), terminateds['__all__'], truncateds['__all__'], self.infos
 
 
     def _perform_actions(self, action_dict):
         """Execute actions for each agent and update their respective environments."""
         # Load shifting agent
         if "agent_ls" in self.agents:
-            action = action_dict
+            action =  action_dict["agent_ls"]
         else:
             action = self.base_agents["agent_ls"].do_nothing_action()
 
@@ -645,7 +711,7 @@ class DCRL(gym.Env):
             obs['agent_dc'] = self.dc_state
         if "agent_bat" in self.agents:
             obs['agent_bat'] = self.bat_state
-        return obs
+        return self.ls_state
 
 
     def _calculate_reward_params(self, workload, temp, ci_i, ci_i_future, day, hour, terminal, location=None, ci_i_12_hours=None):
@@ -707,10 +773,10 @@ class DCRL(gym.Env):
             bat_reward (float): Individual reward for the battery agent.
         """
 
-        ls_reward = self.ls_reward_method(params)
+        ls_reward, ls_partials = self.ls_reward_method(params, return_partials=True)
         dc_reward = self.dc_reward_method(params)
         bat_reward = self.bat_reward_method(params)
-        return ls_reward, dc_reward, bat_reward
+        return ls_reward, dc_reward, bat_reward, ls_partials
 
 
     def render(self):
@@ -722,15 +788,10 @@ class DCRL(gym.Env):
 
     def close(self):
         """
-        Close the environments.
+        Close the environment.
         """
-        if hasattr(self, 'ls_env') and self.ls_env is not None:
-            self.ls_env.close()
-        if hasattr(self, 'dc_env') and self.dc_env is not None:
-            self.dc_env.close()
-        if hasattr(self, 'bat_env') and self.bat_env is not None:
-            self.bat_env.close()
-            
+        self.env.close()  # pylint: disable=no-member
+        
         
     def get_avail_actions(self):
         """

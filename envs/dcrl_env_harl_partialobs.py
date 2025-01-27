@@ -1,4 +1,5 @@
 import os
+import pickle
 import random
 from typing import Optional, Tuple, Union
 
@@ -67,6 +68,8 @@ class EnvConfig(dict):
         'debug': False,
         
         'initialize_queue_at_reset': False,
+        'random_init_day_at_reset': False,
+        'normalization_file': None,
     }
 
     def __init__(self, raw_config):
@@ -109,7 +112,16 @@ class DCRL(gym.Env):
         self.timezone_shift = env_config['timezone_shift']
         self.days_per_episode = env_config['days_per_episode']# + np.random.randint(-5, 30)
         self.initialize_queue_at_reset =  env_config.get('initialize_queue_at_reset', False)
+        self.random_init_day_at_reset = env_config.get('random_init_day_at_reset', False)
+        self.normalization_file = env_config.get('normalization_file', None)
         
+        # Load normalization values from the .pkl file
+        self.obs_mean = None
+        self.obs_std = None
+        self.reward_mean = None
+        self.reward_std = None
+        if self.normalization_file:
+            self._load_normalization(self.normalization_file)
         
         self.workload_baseline = env_config.get('workload_baseline', False)
         self.temperature_baseline = env_config.get('temperature_baseline', False)
@@ -200,7 +212,36 @@ class DCRL(gym.Env):
         self.actions_are_logits = env_config.get("actions_are_logits", False)
         
         self.seed = None
-                
+        
+    def _load_normalization(self, normalization_file):
+        """
+        Load normalization statistics from the VecNormalize .pkl file.
+        """
+        with open(normalization_file, "rb") as file:
+            vec_normalize_data = pickle.load(file)
+        
+        # Store the mean and std for observations and rewards
+        self.obs_mean = vec_normalize_data.obs_rms.mean
+        self.obs_std = vec_normalize_data.obs_rms.var ** 0.5
+        self.reward_mean = vec_normalize_data.ret_rms.mean
+        self.reward_std = vec_normalize_data.ret_rms.var ** 0.5
+
+    def normalize_obs(self, obs):
+        """
+        Normalize observations using precomputed mean and std.
+        """
+        if self.obs_mean is not None and self.obs_std is not None:
+            return (obs - self.obs_mean) / (self.obs_std + 1e-8)
+        return obs
+
+    def normalize_reward(self, reward):
+        """
+        Normalize rewards using precomputed mean and std.
+        """
+        if self.reward_mean is not None and self.reward_std is not None:
+            return (reward - self.reward_mean) / (self.reward_std + 1e-8)
+        return reward
+    
     def set_seed(self, seed=None):
         """Set the random seed for the environment."""
         self.seed = seed
@@ -221,18 +262,18 @@ class DCRL(gym.Env):
         if hasattr(self, 'observation_space') and hasattr(self.observation_space, 'seed'):
             self.observation_space.seed(seed)
 
-    def seed(self, seed=None):
-        """Set the random seed for the environment."""
-        self.set_seed(seed)
-        seed = seed or 1
-        np.random.seed(seed)
-        random.seed(seed)
-        if torch is not None:
-            torch.manual_seed(seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
+    # def seed(self, seed=None):
+    #     """Set the random seed for the environment."""
+    #     self.set_seed(seed)
+    #     seed = seed or 1
+    #     np.random.seed(seed)
+    #     random.seed(seed)
+    #     if torch is not None:
+    #         torch.manual_seed(seed)
+    #         if torch.cuda.is_available():
+    #             torch.cuda.manual_seed_all(seed)
 
-        self._seed_spaces()
+    #     self._seed_spaces()
 
     def extract_ci_features(self, ci_values, current_ci):
         # Calculate statistical measures
@@ -389,7 +430,7 @@ class DCRL(gym.Env):
         self.set_seed(seed)
 
 
-    def reset(self, seed=None, random_init_day=None, random_init_hour=None):
+    def reset(self, seed=None, random_init_day=0, random_init_hour=0):
         """
         Reset the environment.
 
@@ -404,8 +445,16 @@ class DCRL(gym.Env):
         if seed is not None:
             self.set_seed(seed)
         
-        random_init_day  = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1])) # self.init_day 
-        random_init_hour = random.randint(0, 23)
+        # Randomly initialize the day and hour at reset
+        if self.random_init_day_at_reset:
+            random_init_day  = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1])) # self.init_day 
+            random_init_hour = random.randint(0, 23)
+        
+        # If random_init_day is None, then use the default initialization day
+        elif random_init_day is None and random_init_hour is None:
+            random_init_day = self.init_day
+            random_init_hour = 0
+        # Else, use the provided initialization day and hour
         
         # Reset termination and reward flags for all agents
         self.ls_terminated = self.dc_terminated = self.bat_terminated = False
@@ -497,7 +546,7 @@ class DCRL(gym.Env):
         }
         available_actions = None
                 
-        return self.ls_state, self.infos 
+        return self.normalize_obs(self.ls_state), self.infos 
 
             
     
@@ -591,14 +640,14 @@ class DCRL(gym.Env):
         if terminal:
             self._handle_terminal(terminateds, truncateds)
 
-        return obs, self.ls_reward, terminateds['__all__'], truncateds['__all__'], info
+        return self.normalize_obs(obs), self.normalize_reward(self.ls_reward), terminateds['__all__'], truncateds['__all__'], info
 
 
     def _perform_actions(self, action_dict):
         """Execute actions for each agent and update their respective environments."""
         # Load shifting agent
         if "agent_ls" in self.agents:
-            action =  action_dict
+            action =  self.base_agents["agent_ls"].do_nothing_action()#action_dict
         else:
             action = self.base_agents["agent_ls"].do_nothing_action()
 

@@ -12,12 +12,15 @@ from sb3_contrib import RecurrentPPO
 
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecNormalize
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import VecFrameStack
+
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback
 
 # Import your custom environment (the code you posted)
 # Make sure your directory structure / imports allow this:
-from envs.dcrl_env_harl_partialobs import DCRL, EnvConfig
+from envs.dcrl_env_harl_partialobs_sb3 import DCRL, EnvConfig
 
 from utils.sb_callbacks import CO2WaterUsageCallback, TemporalLoadShiftingCallback
 
@@ -39,9 +42,11 @@ def make_env_ls_only(config, rank):
         ls_only_config['location'] = 'ca'
         ls_only_config['month'] = 6
         ls_only_config['initialize_queue_at_reset'] = True
-        
+        ls_only_config['random_init_day_at_reset'] = True
+        # ls_only_config['normalization_file'] = '/lustre/guillant/green-dcc/vec_normalize_56JL3O.pkl'
         
         env = DCRL(ls_only_config)  # Pass the modified config here
+        env.set_seed(rank)  # Set the seed
         # Wrap each environment with Monitor to record episode stats
         env = Monitor(env)
         return env
@@ -58,7 +63,7 @@ def my_custom_lr_schedule(progress_remaining: float) -> float:
 
 if __name__ == "__main__":
     # Number of parallel environments
-    n_envs = 12  # Adjust as needed for computational resources
+    n_envs = 64  # Adjust as needed for computational resources
 
     config = EnvConfig.DEFAULT_CONFIG.copy()
 
@@ -67,6 +72,9 @@ if __name__ == "__main__":
 
     # Build SubprocVecEnv (runs each env in its own process)
     vec_env = SubprocVecEnv(env_fns)
+    
+    # Apply the FrameStack wrapper
+    # vec_env = VecFrameStack(vec_env, n_stack=4)
     
     # Wrap the environment with VecNormalize for observation normalization
     # If you want to normalize actions (for continuous action spaces), set `norm_obs=False` and `norm_reward=False` as needed
@@ -80,6 +88,7 @@ if __name__ == "__main__":
             vf=[64, 64]   # Value network layers
         ),
         activation_fn=nn.ReLU,
+        # activation_fn=nn.Tanh,
     )
     # policy_kwargs = dict(
     # net_arch=[dict(pi=[64, 64], vf=[64, 64])],  # Policy and Value networks
@@ -94,15 +103,17 @@ if __name__ == "__main__":
     model = PPO(
         policy="MlpPolicy",     # We'll override the default MLP with our custom extractor
         env=vec_env,
-        device="cuda",             # <---- Force using GPU if available
+        device="cuda:0",             # <---- Force using GPU if available
+        # device="cpu",
         policy_kwargs=policy_kwargs,
         verbose=1,
-        n_steps=256,            # Number of steps to run for each environment per update
-        batch_size=128,
-        learning_rate=my_custom_lr_schedule,  # Custom learning rate schedule
+        n_steps=512,            # Number of steps to run for each environment per update
+        batch_size=512,
+        learning_rate=1e-4,  # Custom learning rate schedule
         gamma=0.995,
-        ent_coef=0.01,
+        ent_coef=0.05,
         tensorboard_log="./tb_logs/",   # <--- directory for TensorBoard logs
+        clip_range=0.2,
         # ... any other hyperparameters ...
     )
     # model = RecurrentPPO(
@@ -132,7 +143,7 @@ if __name__ == "__main__":
     
     # 4) Train the model
     model.learn(
-        total_timesteps=10_000_000,
+        total_timesteps=100_000_000,
         tb_log_name=f"ls_ppo_run_{run_name}",
         callback=[checkpoint_callback, custom_metrics_callback]
     )

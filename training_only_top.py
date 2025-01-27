@@ -51,7 +51,7 @@ if __name__ == "__main__":
     n_envs = 16
     
     # Set random_locations=True for training
-    random_locations_training = True
+    random_locations_training = False
     
     # Create a list of environment-building functions with random_locations=True
     env_fns = [make_env(DEFAULT_CONFIG, i, random_locations=random_locations_training) for i in range(n_envs)]
@@ -67,8 +67,8 @@ if __name__ == "__main__":
     policy_kwargs = dict(
         # Define network architecture for the actor and critic
         net_arch=dict(
-            pi=[16, 8],  # Policy network layers
-            vf=[16, 8]   # Value network layers
+            pi=[64, 64],  # Policy network layers
+            vf=[64, 64]   # Value network layers
         ),
         activation_fn=nn.ReLU,
     )
@@ -77,13 +77,13 @@ if __name__ == "__main__":
     model = PPO(
         policy="MlpPolicy",     # We'll override the default MLP with our custom extractor
         env=vec_env,
-        device="cuda",             # <---- Force using GPU if available
+        device="cpu",             # <---- Force using GPU if available
         policy_kwargs=policy_kwargs,
         verbose=1,
         n_steps=64,            # Number of steps to run for each environment per update
-        batch_size=256,
-        learning_rate=3e-4,
-        gamma=0.0,
+        batch_size=64,
+        learning_rate=3e-5,
+        gamma=0.99,
         ent_coef=0.01,
         tensorboard_log="./tb_logs/",   # <--- directory for TensorBoard logs
         # ... any other hyperparameters ...
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     
     # 4) Train the model
     model.learn(
-        total_timesteps=1_000_000,
+        total_timesteps=10_000_000,
         tb_log_name=f"transformer_ppo_run_{run_name}",
         callback=[checkpoint_callback, custom_metrics_callback]
     )

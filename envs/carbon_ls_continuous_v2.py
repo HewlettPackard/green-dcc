@@ -39,7 +39,11 @@ class CarbonLoadEnv(gym.Env):
         # -1: Defer all shiftable tasks
         # 0: Do nothing
         # 1: Process all DTQ tasks
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+        self.use_tanh = True
+        if self.use_tanh:
+            self.action_space = spaces.Box(low=-3.0, high=3.0, shape=(1,), dtype=np.float32)
+        else:
+            self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
         
         
         # State: [Sin(h), Cos(h), Sin(day_of_year), Cos(day_of_year), self.ls_state, ci_i_future (n_vars_ci), var_to_LS_energy (n_vars_energy), batSoC (n_vars_battery)], 
@@ -155,7 +159,7 @@ class CarbonLoadEnv(gym.Env):
     
         info = {"ls_original_workload": self.workload,
                 "ls_shifted_workload": self.workload, 
-                "action": 0,
+                "ls_action": 0,
                 "info_load_left": 0,
                 'ls_queue_max_len': self.queue_max_len,
                 "ls_tasks_dropped": 0,
@@ -195,14 +199,16 @@ class CarbonLoadEnv(gym.Env):
         shiftable_tasks     = int(math.floor(self.workload * self.shiftable_tasks_percentage * 100))
         tasks_dropped = 0  # Track the number of dropped tasks
         actual_tasks_processed = 0  # Track the number of processed tasks
-        action_value = np.clip(action, -1.0, 1.0)  # Clip the action to [-1, 1]  # Single continuous action
+        action_value = np.tanh(action)  # Convert the action to a value between -1 and 1 to work better in the continuous range of actions
+        # action_value = np.clip(action, -1.0, 1.0)  # Clip the action to [-1, 1]  # Single continuous action
+        max_capacity = 100  # Maximum capacity of the system
         
         # Handle overdue tasks
         overdue_tasks = [task for task in self.tasks_queue if (self.current_day - task['day']) * 24 + (self.current_hour - task['hour']) > 24]
         overdue_penalty = len(overdue_tasks)
 
         # Calculate initial available capacity
-        available_capacity = 90 - (non_shiftable_tasks + shiftable_tasks)  # Limit to 90% capacity
+        available_capacity = max_capacity - (non_shiftable_tasks + shiftable_tasks)  # Limit to max_capacity% capacity
 
         # Process overdue tasks if there's capacity
         overdue_tasks_to_process = 0
@@ -216,7 +222,7 @@ class CarbonLoadEnv(gym.Env):
 
         
         # Update available capacity after processing overdue tasks
-        available_capacity = 90 - (non_shiftable_tasks + shiftable_tasks + overdue_tasks_to_process)
+        available_capacity = max_capacity - (non_shiftable_tasks + shiftable_tasks + overdue_tasks_to_process)
 
         
         if action_value < 0:  # Defer a fraction of shiftable tasks
@@ -285,7 +291,10 @@ class CarbonLoadEnv(gym.Env):
             average_task_age = 0.0
         
         task_age_histogram = self.get_task_age_histogram(self.tasks_queue, self.current_day, self.current_hour)
-
+        
+        # if self.current_utilization > 0.7:
+            # print(f'WARNING, the utilization is over 70%, utilization: {self.current_utilization}')
+        
         info = {"ls_original_workload": original_workload,
                 "ls_shifted_workload": self.current_utilization, 
                 "ls_action": action, 

@@ -172,6 +172,8 @@ class dc_gymenv(gym.Env):
         self.dc.hot_water_temp = avg_CRAC_return_temp  # °C
         self.dc.cold_water_temp = self.raw_curr_stpt  # °C
         self.dc.wet_bulb_temp = self.ambient_temp #self.wet_bulb  # °C from weather data
+        
+        # print(f'Ambient Temp: {self.ambient_temp}, Wet Bulb Temp: {self.wet_bulb}')
 
         # Calculate the cooling tower water usage
         self.water_usage = self.dc.calculate_cooling_tower_water_usage()

@@ -1,4 +1,4 @@
-'''Code used to evaluate the High Level Only Baseline for the NeuirsIPS 2024 submission'''
+'''Code used to evaluate the High Level Only Baseline for the ICML 2025 submission'''
 #%%
 import torch
 import numpy as np
@@ -19,7 +19,7 @@ from baselines.rbc_baselines import RBCBaselines
 #%%
 # After calling model.learn(...)
 env = HeirarchicalDCRL(DEFAULT_CONFIG, random_locations=False)
-model = PPO.load("transformer_ppo_model_6DU7UP.zip", env=env)
+model = PPO.load("transformer_ppo_model_S2JBZG.zip", env=env)
 
 # Print a summary of the model (architecture)
 print(model.policy)
@@ -67,6 +67,11 @@ workload_DC1 = [[],[],[],[]]
 workload_DC2 = [[],[],[],[]]
 workload_DC3 = [[],[],[],[]]
 
+# Initialize lists to store the 'shifted_workload' metric
+shifted_workload_DC1 = [[],[],[],[]]
+shifted_workload_DC2 = [[],[],[],[]]
+shifted_workload_DC3 = [[],[],[],[]]
+
 # List to store the energy consumption
 energy_consumption_DC1 = [[],[],[],[]]
 energy_consumption_DC2 = [[],[],[],[]]
@@ -101,14 +106,16 @@ carbon_intensity = []
 # DEFAULT_CONFIG['config3']['location'] = 'ca'   # Workload baseline 0.2
 
 # Change the workload baseline for each datacenter
-DEFAULT_CONFIG['config1']['workload_baseline'] = 0.4
-DEFAULT_CONFIG['config2']['workload_baseline'] = -0.1
-DEFAULT_CONFIG['config3']['workload_baseline'] = 0.25
+# Parameters using for Figure comparison RBC: 0.0, -0.2, -0.1
+np.random.seed(5)
+DEFAULT_CONFIG['config1']['workload_baseline'] = 0.0#np.random.uniform(-0.4, 0.4)#0.4
+DEFAULT_CONFIG['config2']['workload_baseline'] = -0.2#np.random.uniform(-0.4, 0.4)#-0.1
+DEFAULT_CONFIG['config3']['workload_baseline'] = -0.1#np.random.uniform(-0.4, 0.4)#0.25
 
 # Change the temperature baseline for each datacenter
-DEFAULT_CONFIG['config1']['temperature_baseline'] = 0.0
-DEFAULT_CONFIG['config2']['temperature_baseline'] = 0.0
-DEFAULT_CONFIG['config3']['temperature_baseline'] = 5.0
+DEFAULT_CONFIG['config1']['temperature_baseline'] = 0#np.random.uniform(-5.0, 5.0)
+DEFAULT_CONFIG['config2']['temperature_baseline'] = 0#np.random.uniform(-5.0, 5.0)
+DEFAULT_CONFIG['config3']['temperature_baseline'] = 5.0#np.random.uniform(-5.0, 5.0) # 5.0
 
 # obtain the locations from DEFAULT_CONFIG
 dc_location_mapping = {
@@ -122,87 +129,92 @@ for i in [0, 1, 2, 3]:
     if i == 1 or i == 2:
         # Set the parameter 'max_util' in "DEFAULT_CONFIG" to 0.8 for the greedy optimizer
         # Otherwise, set the parameter to 1.0
-        DEFAULT_CONFIG['max_util'] = 0.9
+        DEFAULT_CONFIG['max_util'] = 0.7
     else:
         DEFAULT_CONFIG['max_util'] = 1.0
         
     env = HeirarchicalDCRL(DEFAULT_CONFIG, random_locations=False)
     
-    if i == 2 or i == 3:
+    if i ==1 or i == 2 or i == 3:
         rbc_baseline = RBCBaselines(env)
 
     done = False
     truncated = False
-    obs, _ = env.reset(seed=43)
+    obs, info = env.reset(seed=42)
 
     actions_list = []
     rewards_list = []
     total_reward = 0
     
-    with tqdm(total=max_iterations, ncols=150) as pbar:
-        while not done and not truncated:
-            if i == 0:
-                # print('RL')
-                # if obs = {'DC1': {'curr_workload': array([1.]), 'ci': array([-0.38324634])}, 'DC2': {'curr_workload': array([1.]), 'ci': array([0.73191553])}, 'DC3': {'curr_workload': array([0.]), 'ci': array([-0.55756748])}}, I want to explore the actions of the agents under random values of the observation
-                # obs = {'DC1': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))},
-                #        'DC2': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))},
-                #        'DC3': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))}
-                #        }
-                actions, _states = model.predict(obs, deterministic=True)
-                # print(actions)
-            elif i == 1:  # Temperature Greedy
-                actions = rbc_baseline.multi_step_greedy(variable='curr_temperature')
-            elif i == 2:  # CI Greedy
-                actions = rbc_baseline.multi_step_greedy(variable='ci')
-            # elif i == 3:
-            #     # Equal workload distribution
-            #     # Use the equal workload distribution method
-                # actions = rbc_baseline.fair_workload_distribution()
-            else:
-                # Do nothing
-                # Continuous action space
-                actions = np.zeros(3)  # All transfers are set to 0.0
-                # Random actions
-                # actions = np.random.uniform(-1, 1, size=(3,))
+    # with tqdm(total=max_iterations, ncols=150) as pbar:
+    while not done and not truncated:
+        if i == 0:
+            # print('RL')
+            # if obs = {'DC1': {'curr_workload': array([1.]), 'ci': array([-0.38324634])}, 'DC2': {'curr_workload': array([1.]), 'ci': array([0.73191553])}, 'DC3': {'curr_workload': array([0.]), 'ci': array([-0.55756748])}}, I want to explore the actions of the agents under random values of the observation
+            # obs = {'DC1': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))},
+            #        'DC2': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))},
+            #        'DC3': {'curr_workload': np.random.uniform(0, 1, size=(1,)), 'ci': np.random.uniform(-1, 1, size=(1,))}
+            #        }
+            actions, _states = model.predict(obs, deterministic=True)
+            # print(actions)
+        elif i == 1:  # Temperature Greedy
+            actions = rbc_baseline.multi_step_greedy(variable='curr_temperature', info_dict=info)
+        elif i == 2:  # CI Greedy
+            actions = rbc_baseline.multi_step_greedy(variable='ci', info_dict=info)
+        # elif i == 3:
+        #     # Equal workload distribution
+        #     # Use the equal workload distribution method
+            # actions = rbc_baseline.fair_workload_distribution()
+        else:
+            # Do nothing
+            # Continuous action space
+            actions = np.zeros(3)  # All transfers are set to 0.0
+            # Random actions
+            # actions = np.random.uniform(-1, 1, size=(3,))
 
-            obs, reward, done, truncated, info = env.step(actions)                # print(obs)
+        obs, reward, done, truncated, info = env.step(actions)                # print(obs)
 
-            # Obtain the 'current_workload' metric for each datacenter using the low_level_infos -> agent_ls -> ls_original_workload
-            workload_DC1[i].append(env.low_level_infos['DC1']['agent_ls']['ls_original_workload'])
-            workload_DC2[i].append(env.low_level_infos['DC2']['agent_ls']['ls_original_workload'])
-            workload_DC3[i].append(env.low_level_infos['DC3']['agent_ls']['ls_original_workload'])
-            
-            # Obtain the energy consumption
-            energy_consumption_DC1[i].append(env.low_level_infos['DC1']['agent_bat']['bat_total_energy_without_battery_KWh'])
-            energy_consumption_DC2[i].append(env.low_level_infos['DC2']['agent_bat']['bat_total_energy_without_battery_KWh'])
-            energy_consumption_DC3[i].append(env.low_level_infos['DC3']['agent_bat']['bat_total_energy_without_battery_KWh'])
+        # Obtain the 'current_workload' metric for each datacenter using the low_level_infos -> agent_ls -> ls_original_workload
+        workload_DC1[i].append(info['low_level_infos']['DC1']['agent_ls']['ls_original_workload'])
+        workload_DC2[i].append(info['low_level_infos']['DC2']['agent_ls']['ls_original_workload'])
+        workload_DC3[i].append(info['low_level_infos']['DC3']['agent_ls']['ls_original_workload'])
+        
+        # Obtain the 'shifted_workload' metric for each datacenter using the low_level_infos -> agent_ls -> ls_shifted_workload
+        shifted_workload_DC1[i].append(info['low_level_infos']['DC1']['agent_ls']['ls_shifted_workload'])
+        shifted_workload_DC2[i].append(info['low_level_infos']['DC2']['agent_ls']['ls_shifted_workload'])
+        shifted_workload_DC3[i].append(info['low_level_infos']['DC3']['agent_ls']['ls_shifted_workload'])
+        
+        # Obtain the energy consumption
+        energy_consumption_DC1[i].append(info['low_level_infos']['DC1']['agent_bat']['bat_total_energy_without_battery_KWh'])
+        energy_consumption_DC2[i].append(info['low_level_infos']['DC2']['agent_bat']['bat_total_energy_without_battery_KWh'])
+        energy_consumption_DC3[i].append(info['low_level_infos']['DC3']['agent_bat']['bat_total_energy_without_battery_KWh'])
 
-            # Obtain the 'carbon_emissions' metric for each datacenter using the low_level_infos -> agent_bat -> bat_CO2_footprint
-            carbon_emissions_DC1[i].append(env.low_level_infos['DC1']['agent_bat']['bat_CO2_footprint'])
-            carbon_emissions_DC2[i].append(env.low_level_infos['DC2']['agent_bat']['bat_CO2_footprint'])
-            carbon_emissions_DC3[i].append(env.low_level_infos['DC3']['agent_bat']['bat_CO2_footprint'])
+        # Obtain the 'carbon_emissions' metric for each datacenter using the low_level_infos -> agent_bat -> bat_CO2_footprint
+        carbon_emissions_DC1[i].append(info['low_level_infos']['DC1']['agent_bat']['bat_CO2_footprint'])
+        carbon_emissions_DC2[i].append(info['low_level_infos']['DC2']['agent_bat']['bat_CO2_footprint'])
+        carbon_emissions_DC3[i].append(info['low_level_infos']['DC3']['agent_bat']['bat_CO2_footprint'])
 
-            # Obtain the 'external_temperature' metric for each datacenter using the low_level_infos -> agent_dc -> dc_exterior_ambient_temp
-            external_temperature_DC1[i].append(env.low_level_infos['DC1']['agent_dc']['dc_exterior_ambient_temp'])
-            external_temperature_DC2[i].append(env.low_level_infos['DC2']['agent_dc']['dc_exterior_ambient_temp'])
-            external_temperature_DC3[i].append(env.low_level_infos['DC3']['agent_dc']['dc_exterior_ambient_temp'])
+        # Obtain the 'external_temperature' metric for each datacenter using the low_level_infos -> agent_dc -> dc_exterior_ambient_temp
+        external_temperature_DC1[i].append(info['low_level_infos']['DC1']['agent_dc']['dc_exterior_ambient_temp'])
+        external_temperature_DC2[i].append(info['low_level_infos']['DC2']['agent_dc']['dc_exterior_ambient_temp'])
+        external_temperature_DC3[i].append(info['low_level_infos']['DC3']['agent_dc']['dc_exterior_ambient_temp'])
+        
+        # Obtain the 'water_consumption' metric for each datacenter using the low_level_infos -> agent_dc -> dc_water_usage
+        water_consumption_DC1[i].append(info['low_level_infos']['DC1']['agent_dc']['dc_water_usage'])
+        water_consumption_DC2[i].append(info['low_level_infos']['DC2']['agent_dc']['dc_water_usage'])
+        water_consumption_DC3[i].append(info['low_level_infos']['DC3']['agent_dc']['dc_water_usage'])
+        
+        # Obtain the carbon intensity of each datacenter using the low_level_infos -> agent_bat -> bat_avg_CI
+        carbon_intensity_DC1[i].append(info['low_level_infos']['DC1']['agent_bat']['bat_avg_CI'])
+        carbon_intensity_DC2[i].append(info['low_level_infos']['DC2']['agent_bat']['bat_avg_CI'])
+        carbon_intensity_DC3[i].append(info['low_level_infos']['DC3']['agent_bat']['bat_avg_CI'])
+        
+        total_reward += reward
+
+        # actions_list.append(actions['transfer_1'])
+        rewards_list.append(reward)
             
-            # Obtain the 'water_consumption' metric for each datacenter using the low_level_infos -> agent_dc -> dc_water_usage
-            water_consumption_DC1[i].append(env.low_level_infos['DC1']['agent_dc']['dc_water_usage'])
-            water_consumption_DC2[i].append(env.low_level_infos['DC2']['agent_dc']['dc_water_usage'])
-            water_consumption_DC3[i].append(env.low_level_infos['DC3']['agent_dc']['dc_water_usage'])
-            
-            # Obtain the carbon intensity of each datacenter using the low_level_infos -> agent_bat -> bat_avg_CI
-            carbon_intensity_DC1[i].append(env.low_level_infos['DC1']['agent_bat']['bat_avg_CI'])
-            carbon_intensity_DC2[i].append(env.low_level_infos['DC2']['agent_bat']['bat_avg_CI'])
-            carbon_intensity_DC3[i].append(env.low_level_infos['DC3']['agent_bat']['bat_avg_CI'])
-            
-            total_reward += reward
-    
-            # actions_list.append(actions['transfer_1'])
-            rewards_list.append(reward)
-            
-            pbar.update(1)
+            # pbar.update(1)
 
     results_all.append((actions_list, rewards_list))
     # print(f'Not computed workload: {env.not_computed_workload:.2f}')
@@ -221,6 +233,10 @@ win_size = 8
 workload_DC1 = np.array(workload_DC1)
 workload_DC2 = np.array(workload_DC2)
 workload_DC3 = np.array(workload_DC3)
+
+shifted_workload_DC1 = np.array(shifted_workload_DC1)
+shifted_workload_DC2 = np.array(shifted_workload_DC2)
+shifted_workload_DC3 = np.array(shifted_workload_DC3)
 
 energy_consumption_DC1 = np.array(energy_consumption_DC1)
 energy_consumption_DC2 = np.array(energy_consumption_DC2)
@@ -244,6 +260,11 @@ from scipy.ndimage import uniform_filter1d
 smoothed_workload_DC1 = uniform_filter1d(workload_DC1, size=win_size, axis=1)
 smoothed_workload_DC2 = uniform_filter1d(workload_DC2, size=win_size, axis=1)
 smoothed_workload_DC3 = uniform_filter1d(workload_DC3, size=win_size, axis=1)
+
+# Smooth the 'shifted_workload' metric
+smoothed_shifted_workload_DC1 = uniform_filter1d(shifted_workload_DC1, size=win_size, axis=1)
+smoothed_shifted_workload_DC2 = uniform_filter1d(shifted_workload_DC2, size=win_size, axis=1)
+smoothed_shifted_workload_DC3 = uniform_filter1d(shifted_workload_DC3, size=win_size, axis=1)
 
 # Smooth the energy consumption metric
 energy_consumption_DC1 = uniform_filter1d(energy_consumption_DC1, size=win_size, axis=1)
@@ -513,6 +534,334 @@ plt.tight_layout(rect=[0, 0.0, 1, 0.95])  # Leave space at the bottom for text i
 plt.show()
 
 
+#%% 
+'''
+
+Figure for the ICML 2025 paper.
+Figure comparing the workload distribution for the "Local Computing" controller, the "CI Greedy" controller, and the "Temp. Greedy" controller.
+Create the figure with 3 subplots (3 row, 1 columns) with the following information.
+It should be in a column of a 2 column paper
+Save the figure as pdf in the Figures folder
+
+'''
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Assume these arrays exist from your previous code and each has shape (4, 672)
+# smoothed_workload_DC1, smoothed_workload_DC2, smoothed_workload_DC3
+# e.g. smoothed_workload_DC1[3] => local computing data for DC1, length 672
+# They should already be populated with your processed data.
+
+# Configuration parameters
+simulated_days = 7    # Number of simulated days to plot
+num_points = 4 * 24 * simulated_days  # 672 time steps (15-min intervals)
+start_day = 1
+
+# Indices for slicing, if you only want part of the data
+start_index = 0
+end_index = num_points  # e.g. 672
+
+# Extract the relevant segments for each controller
+# Local computing => index 3
+data_local_DC1 = smoothed_workload_DC1[3][start_index:end_index]
+data_local_DC2 = smoothed_workload_DC2[3][start_index:end_index]
+data_local_DC3 = smoothed_workload_DC3[3][start_index:end_index]
+
+# CI Greedy => index 2
+data_ci_DC1 = smoothed_workload_DC1[2][start_index:end_index]
+data_ci_DC2 = smoothed_workload_DC2[2][start_index:end_index]
+data_ci_DC3 = smoothed_workload_DC3[2][start_index:end_index]
+
+# Temp Greedy => index 1
+data_temp_DC1 = smoothed_workload_DC1[1][start_index:end_index]
+data_temp_DC2 = smoothed_workload_DC2[1][start_index:end_index]
+data_temp_DC3 = smoothed_workload_DC3[1][start_index:end_index]
+
+# Build an x-axis from 0..671
+time_in_hours = np.arange(end_index - start_index)
+
+# Create daily tick positions & labels
+# Each day = 24 hours, each hour = 4 timesteps => 96 steps per day
+tick_positions = [i * 24 * 4 for i in range(simulated_days + 1)]  # 0, 96, 192, ...
+tick_labels = [f"07-{start_day + i:02d}" for i in range(simulated_days + 1)]
+
+# Plot each figure in a 3-row layout
+fig, axs = plt.subplots(3, 1, figsize=(4.5, 8), dpi=100)
+
+########## 1) Local Computing (top) ##########
+axs[0].plot(time_in_hours, data_local_DC1 * 100, label=f'{dc_location_mapping["DC1"]}', linestyle='-', linewidth=2)
+axs[0].plot(time_in_hours, data_local_DC2 * 100, label=f'{dc_location_mapping["DC2"]}', linestyle='-', linewidth=2)
+axs[0].plot(time_in_hours, data_local_DC3 * 100, label=f'{dc_location_mapping["DC3"]}', linestyle='-', linewidth=2)
+
+axs[0].set_ylabel('Data Center Workload (%)')
+axs[0].set_xlabel('Simulated Days')
+axs[0].grid(True, linestyle='--', alpha=0.5)
+axs[0].set_ylim(-1, 101)
+axs[0].set_xlim(0, len(time_in_hours) - 1)
+axs[0].set_title('Local Computing Controller')
+axs[0].legend(loc='upper right')
+
+# Set daily ticks
+axs[0].set_xticks(tick_positions)
+axs[0].set_xticklabels(tick_labels)
+
+########## 2) CI Greedy (middle) ##########
+axs[1].plot(time_in_hours, data_ci_DC1 * 100, label=f'{dc_location_mapping["DC1"]}', linestyle='-', linewidth=2)
+axs[1].plot(time_in_hours, data_ci_DC2 * 100, label=f'{dc_location_mapping["DC2"]}', linestyle='-', linewidth=2)
+axs[1].plot(time_in_hours, data_ci_DC3 * 100, label=f'{dc_location_mapping["DC3"]}', linestyle='-', linewidth=2)
+
+axs[1].set_ylabel('Data Center Workload (%)')
+axs[1].set_xlabel('Simulated Days')
+axs[1].grid(True, linestyle='--', alpha=0.5)
+axs[1].set_ylim(-1, 101)
+axs[1].set_xlim(0, len(time_in_hours) - 1)
+axs[1].set_title('CI Greedy Controller')
+axs[1].legend(loc='upper right')
+
+axs[1].set_xticks(tick_positions)
+axs[1].set_xticklabels(tick_labels)
+
+########## 3) Temp Greedy (bottom) ##########
+axs[2].plot(time_in_hours, data_temp_DC1 * 100, label=f'{dc_location_mapping["DC1"]}', linestyle='-', linewidth=2)
+axs[2].plot(time_in_hours, data_temp_DC2 * 100, label=f'{dc_location_mapping["DC2"]}', linestyle='-', linewidth=2)
+axs[2].plot(time_in_hours, data_temp_DC3 * 100, label=f'{dc_location_mapping["DC3"]}', linestyle='-', linewidth=2)
+
+axs[2].set_ylabel('Data Center Workload (%)')
+axs[2].set_xlabel('Simulated Days')
+axs[2].grid(True, linestyle='--', alpha=0.5)
+axs[2].set_ylim(-1, 101)
+axs[2].set_xlim(0, len(time_in_hours) - 1)
+axs[2].set_title('Temp Greedy Controller')
+axs[2].legend(loc='upper right')
+
+axs[2].set_xticks(tick_positions)
+axs[2].set_xticklabels(tick_labels)
+
+plt.tight_layout()
+
+# plt.savefig('Figures/Workload_Comparison_RBC.pdf', format='pdf')
+
+plt.show()
+
 #%%
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# ----------------------------------------------------
+# 1) Configuration & data slicing
+# ----------------------------------------------------
+simulated_days = 7
+num_points = 4 * 24 * simulated_days  # 672 for 7 days @ 15 min intervals
+start_index = 0
+end_index = num_points
+
+# Indices for RBC controllers in shape (4, 672):
+#  0 => RL       (for example)
+#  1 => Temp Greedy
+#  2 => CI Greedy
+#  3 => Local Computing
+
+# If your arrays are named smoothed_carbon_intensity_DC1, etc., each shape (4, 672):
+# We'll pick i=2 for "CI Greedy" scenario, i=1 for "Temp Greedy".
+i_ci = 2
+i_temp = 1
+
+# Extract the relevant slices
+data_ci_DC1 = smoothed_carbon_intensity_DC1[i_ci][start_index:end_index]
+data_ci_DC2 = smoothed_carbon_intensity_DC2[i_ci][start_index:end_index]
+data_ci_DC3 = smoothed_carbon_intensity_DC3[i_ci][start_index:end_index]
+
+data_temp_DC1 = smoothed_external_temperature_DC1[i_temp][start_index:end_index]
+data_temp_DC2 = smoothed_external_temperature_DC2[i_temp][start_index:end_index]
+data_temp_DC3 = smoothed_external_temperature_DC3[i_temp][start_index:end_index]
+
+# X-axis array (0..671)
+time_axis = np.arange(end_index - start_index)
+
+# ----------------------------------------------------
+# 2) Create day-based ticks (one per day)
+# ----------------------------------------------------
+start_day = 1  # e.g. 09-01 if that’s your convention
+tick_positions = [d * 24 * 4 for d in range(simulated_days + 1)]  # [0, 96, 192, ... 672]
+tick_labels = [f"07-{start_day + i:02d}" for i in range(simulated_days + 1)]
+
+# ----------------------------------------------------
+# 3) Plot
+# ----------------------------------------------------
+fig, axs = plt.subplots(2, 1, figsize=(4.5, 5.3), dpi=100)
+
+# --------- TOP SUBPLOT: Carbon Intensity (CI Greedy) ---------
+axs[0].plot(time_axis, data_ci_DC1, label=f'{dc_location_mapping["DC1"]}', linewidth=2)
+axs[0].plot(time_axis, data_ci_DC2, label=f'{dc_location_mapping["DC2"]}', linewidth=2)
+axs[0].plot(time_axis, data_ci_DC3, label=f'{dc_location_mapping["DC3"]}', linewidth=2)
+
+axs[0].set_title('External Carbon Intensity (CI Greedy)')
+axs[0].set_ylabel('gCO2/kWh')  # or whatever units your data uses
+axs[0].grid(True, linestyle='--', alpha=0.5)
+axs[0].set_xlim(0, end_index - 1)
+
+# Day ticks
+axs[0].set_xticks(tick_positions)
+axs[0].set_xticklabels(tick_labels)
+axs[0].legend(loc='best')
+
+# --------- BOTTOM SUBPLOT: External Temperature (Temp Greedy) ---------
+axs[1].plot(time_axis, data_temp_DC1, label=f'{dc_location_mapping["DC1"]}', linewidth=2)
+axs[1].plot(time_axis, data_temp_DC2, label=f'{dc_location_mapping["DC2"]}', linewidth=2)
+axs[1].plot(time_axis, data_temp_DC3, label=f'{dc_location_mapping["DC3"]}', linewidth=2)
+
+axs[1].set_title('External Temperature (Temp Greedy)')
+axs[1].set_ylabel('°C')
+axs[1].grid(True, linestyle='--', alpha=0.5)
+axs[1].set_xlim(0, end_index - 1)
+
+# Same daily ticks
+axs[1].set_xticks(tick_positions)
+axs[1].set_xticklabels(tick_labels)
+axs[1].legend(loc='best')
+
+plt.tight_layout()
+
+# plt.savefig('Figures/External_Comparison_RBC.pdf', format='pdf')
+
+plt.show()
+#%%
+# Comparison of the RBC with the Top RL agent
+
+# Configuration parameters
+simulated_days = 7    # Number of simulated days to plot
+num_points = 4 * 24 * simulated_days  # 672 time steps (15-min intervals)
+start_day = 1
+
+# Indices for slicing, if you only want part of the data
+start_index = 0
+end_index = num_points  # e.g. 672
+
+# Extract the relevant segments for each controller
+# Local computing => index 3
+data_local_DC1 = smoothed_workload_DC1[3][start_index:end_index]
+data_local_DC2 = smoothed_workload_DC2[3][start_index:end_index]
+data_local_DC3 = smoothed_workload_DC3[3][start_index:end_index]
+
+# CI Greedy => index 2
+data_ci_DC1 = smoothed_workload_DC1[2][start_index:end_index]
+data_ci_DC2 = smoothed_workload_DC2[2][start_index:end_index]
+data_ci_DC3 = smoothed_workload_DC3[2][start_index:end_index]
+
+# Temp Greedy => index 1
+data_temp_DC1 = smoothed_workload_DC1[1][start_index:end_index]
+data_temp_DC2 = smoothed_workload_DC2[1][start_index:end_index]
+data_temp_DC3 = smoothed_workload_DC3[1][start_index:end_index]
+
+# RL controller => index 0
+data_rl_DC1 = smoothed_workload_DC1[0][start_index:end_index]
+data_rl_DC2 = smoothed_workload_DC2[0][start_index:end_index]
+data_rl_DC3 = smoothed_workload_DC3[0][start_index:end_index]
+
+# RL controller with temporal load shifting => index 0
+data_rl_temporal_DC1 = smoothed_shifted_workload_DC1[0][start_index:end_index]
+data_rl_temporal_DC2 = smoothed_shifted_workload_DC2[0][start_index:end_index]
+data_rl_temporal_DC3 = smoothed_shifted_workload_DC3[0][start_index:end_index]
+
+# Build an x-axis from 0..671
+time_in_hours = np.arange(end_index - start_index)
+
+# Create daily tick positions & labels
+# Each day = 24 hours, each hour = 4 timesteps => 96 steps per day
+tick_positions = [i * 24 * 4 for i in range(simulated_days + 1)]  # 0, 96, 192, ...
+tick_labels = [f"07-{start_day + i:02d}" for i in range(simulated_days + 1)]
+
+# Plot each figure in a 5-row layout
+fig, axs = plt.subplots(5, 1, figsize=(4.5, 12.5), dpi=100)
+
+########## 1) Local Computing (top) ##########
+axs[0].plot(time_in_hours, data_local_DC1 * 100, label=f'{dc_location_mapping["DC1"]}', linestyle='-', linewidth=2)
+axs[0].plot(time_in_hours, data_local_DC2 * 100, label=f'{dc_location_mapping["DC2"]}', linestyle='-', linewidth=2)
+axs[0].plot(time_in_hours, data_local_DC3 * 100, label=f'{dc_location_mapping["DC3"]}', linestyle='-', linewidth=2)
+
+axs[0].set_ylabel('Data Center Workload (%)')
+axs[0].set_xlabel('Simulated Days')
+axs[0].grid(True, linestyle='--', alpha=0.5)
+axs[0].set_ylim(-1, 101)
+axs[0].set_xlim(0, len(time_in_hours) - 1)
+axs[0].set_title('Local Computing Controller')
+axs[0].legend(loc='upper right')
+
+# Set daily ticks
+axs[0].set_xticks(tick_positions)
+axs[0].set_xticklabels(tick_labels)
+
+########## 2) CI Greedy (middle) ##########
+axs[1].plot(time_in_hours, data_ci_DC1 * 100, label=f'{dc_location_mapping["DC1"]}', linestyle='-', linewidth=2)
+axs[1].plot(time_in_hours, data_ci_DC2 * 100, label=f'{dc_location_mapping["DC2"]}', linestyle='-', linewidth=2)
+axs[1].plot(time_in_hours, data_ci_DC3 * 100, label=f'{dc_location_mapping["DC3"]}', linestyle='-', linewidth=2)
+
+axs[1].set_ylabel('Data Center Workload (%)')
+axs[1].set_xlabel('Simulated Days')
+axs[1].grid(True, linestyle='--', alpha=0.5)
+axs[1].set_ylim(-1, 101)
+axs[1].set_xlim(0, len(time_in_hours) - 1)
+axs[1].set_title('CI Greedy Controller')
+axs[1].legend(loc='upper right')
+
+axs[1].set_xticks(tick_positions)
+axs[1].set_xticklabels(tick_labels)
+
+########## 3) Temp Greedy (bottom) ##########
+axs[2].plot(time_in_hours, data_temp_DC1 * 100, label=f'{dc_location_mapping["DC1"]}', linestyle='-', linewidth=2)
+axs[2].plot(time_in_hours, data_temp_DC2 * 100, label=f'{dc_location_mapping["DC2"]}', linestyle='-', linewidth=2)
+axs[2].plot(time_in_hours, data_temp_DC3 * 100, label=f'{dc_location_mapping["DC3"]}', linestyle='-', linewidth=2)
+
+axs[2].set_ylabel('Data Center Workload (%)')
+axs[2].set_xlabel('Simulated Days')
+axs[2].grid(True, linestyle='--', alpha=0.5)
+axs[2].set_ylim(-1, 101)
+axs[2].set_xlim(0, len(time_in_hours) - 1)
+axs[2].set_title('Temp Greedy Controller')
+axs[2].legend(loc='upper right')
+
+axs[2].set_xticks(tick_positions)
+axs[2].set_xticklabels(tick_labels)
+
+########## 4) RL Controller (bottom) ##########
+axs[3].plot(time_in_hours, data_rl_DC1 * 100, label=f'{dc_location_mapping["DC1"]}', linestyle='-', linewidth=2)
+axs[3].plot(time_in_hours, data_rl_DC2 * 100, label=f'{dc_location_mapping["DC2"]}', linestyle='-', linewidth=2)
+axs[3].plot(time_in_hours, data_rl_DC3 * 100, label=f'{dc_location_mapping["DC3"]}', linestyle='-', linewidth=2)
+
+axs[3].set_ylabel('Data Center Workload (%)')
+axs[3].set_xlabel('Simulated Days')
+axs[3].grid(True, linestyle='--', alpha=0.5)
+axs[3].set_ylim(-1, 101)
+axs[3].set_xlim(0, len(time_in_hours) - 1)
+axs[3].set_title('Top Level Controller')
+axs[3].legend(loc='upper right')
+
+axs[3].set_xticks(tick_positions)
+axs[3].set_xticklabels(tick_labels)
+
+
+########## 5) RL Controller with temporal load shifting (bottom) ##########
+axs[4].plot(time_in_hours, data_rl_temporal_DC1 * 100, label=f'{dc_location_mapping["DC1"]}', linestyle='-', linewidth=2)
+axs[4].plot(time_in_hours, data_rl_temporal_DC2 * 100, label=f'{dc_location_mapping["DC2"]}', linestyle='-', linewidth=2)
+axs[4].plot(time_in_hours, data_rl_temporal_DC3 * 100, label=f'{dc_location_mapping["DC3"]}', linestyle='-', linewidth=2)
+
+axs[4].set_ylabel('Data Center Workload (%)')
+axs[4].set_xlabel('Simulated Days')
+axs[4].grid(True, linestyle='--', alpha=0.5)
+axs[4].set_ylim(-1, 101)
+axs[4].set_xlim(0, len(time_in_hours) - 1)
+axs[4].set_title('Top Level Controller with Temporal Load Shifting')
+axs[4].legend(loc='upper right')
+
+axs[4].set_xticks(tick_positions)
+axs[4].set_xticklabels(tick_labels)
+
+plt.tight_layout()
+
+plt.savefig('Figures/Workload_Comparison_RL_Top_Bottom_and_RBC.pdf', format='pdf')
+
+plt.show()
 
 #%%
