@@ -1,0 +1,41 @@
+# VSCode settings
+.vscode/
+
+# History plugin or backup files
+.history/
+
+# Model checkpoints
+checkpoints/
+
+# Logs
+logs/
+
+# Tensorboard runs
+runs/
+
+# Raw data inside any subfolder of data/
+data/*/raw/
+
+# Any file with "deprecated" in its name
+*deprecated*
+
+# Catch folders with "deprecated" in their name:
+*deprecated*/
+
+# General Python-related
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.pyd
+
+# Ignore raw data
+data/workload/alibaba_2020_dataset/*.csv
+*.pkl
+*.log
+*.tar.gz
+*.gz
+*.zip
+*.egg
+*.whl
+*.header
