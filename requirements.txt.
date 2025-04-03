@@ -3,3 +3,5 @@ matplotlib
 seaborn
 tqdm
 psychrolib
+gymnasium
+torch
