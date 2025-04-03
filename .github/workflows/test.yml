@@ -25,6 +25,10 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      - name: Unzip dataset
+        run: |
+          unzip data/workload/alibaba_2020_dataset/result_df_full_year_2020.zip -d data/workload/alibaba_2020_dataset/
+
       - name: Run tests
         run: |
           pytest tests/
