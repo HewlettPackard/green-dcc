@@ -3,5 +3,7 @@ matplotlib
 seaborn
 tqdm
 psychrolib
-gymnasium
 torch
+gymnasium
+pytest
+tensorboard
