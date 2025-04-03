@@ -81,7 +81,7 @@ BATCH_SIZE = 256
 TAU = 0.005
 REPLAY_SIZE = 1_000_000
 WARMUP_STEPS = 1_000
-TOTAL_STEPS = 100_000
+TOTAL_STEPS = int(1e7)
 UPDATE_FREQ = 1
 POLICY_UPDATE_FREQ = 2
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -155,7 +155,8 @@ def make_env():
 
     # === Workload data ===
     tasks_file_path = "data/workload/alibaba_2020_dataset/result_df_full_year_2020.pkl"
-
+    # task_file_path = "data/workload/alibaba_2020_dataset/result_df_cropped_with_bandwidth.pkl"
+    
     # === Create cluster manager ===
     cluster_manager = DatacenterClusterManager(
         config_list=datacenter_configs,

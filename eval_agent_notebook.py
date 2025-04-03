@@ -92,6 +92,8 @@ def make_eval_env(eval_mode=True):
         }
     ]
     tasks_file_path = "data/workload/alibaba_2020_dataset/result_df_full_year_2020.pkl"
+    # tasks_file_path = "data/workload/alibaba_2020_dataset/result_df_cropped.pkl"
+
 
     cluster_manager = DatacenterClusterManager(
         config_list=datacenter_configs,
@@ -102,8 +104,8 @@ def make_eval_env(eval_mode=True):
         # strategy="lowest_price",
         tasks_file_path=tasks_file_path,
         shuffle_datacenter_order=not eval_mode  # shuffle only during training
-
     )
+    
     cluster_manager.logger = logger
     env = TaskSchedulingEnv(
         cluster_manager=cluster_manager,
@@ -114,9 +116,9 @@ def make_eval_env(eval_mode=True):
     return env
 
 
-#%%
+
 # Load trained actor model
-checkpoint_path = "checkpoints/train_20250402_183100/checkpoint_step_25000.pth"  # Adjust path
+checkpoint_path = "checkpoints/train_20250402_225152/checkpoint_step_1210000.pth"  # Adjust path
 env = make_eval_env()
 obs, _ = env.reset(seed=123)
 obs_dim = env.observation_space.shape[0]

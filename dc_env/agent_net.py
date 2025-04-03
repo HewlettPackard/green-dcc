@@ -8,6 +8,8 @@ class ActorNet(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(obs_dim, hidden_dim),
             nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
             nn.Linear(hidden_dim, act_dim)  # one output per DC
         )
 
