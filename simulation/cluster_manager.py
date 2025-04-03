@@ -1,11 +1,11 @@
 import random
 from collections import defaultdict
-from dc_env.dc_env import SustainDC
+from envs.sustaindc.sustaindc_env import SustainDC
 from utils.task_assignment_strategies import (distribute_most_available, distribute_random, distribute_priority_order,
                                      distribute_least_pending, distribute_lowest_carbon, distribute_round_robin, distribute_lowest_price)
 import numpy as np
 import pandas as pd
-from simulation.task import Task
+from rl_components.task import Task
 
 
 def assign_task_origins(tasks, datacenter_configs, current_time_utc, logger=None):

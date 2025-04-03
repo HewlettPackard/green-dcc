@@ -6,11 +6,11 @@ from gymnasium import spaces
 import numpy as np
 import pandas as pd
 
-from envs.bat_env_fwd_view import BatteryEnvFwd as battery_env_fwd
-from envs.carbon_ls import CarbonLoadEnv
-from envs.dc_gym import dc_gymenv
+from envs.sustaindc.battery_env import BatteryEnvFwd as battery_env_fwd
+from envs.sustaindc.timeloadshifting_env import CarbonLoadEnv
+from envs.sustaindc.dc_gym import dc_gymenv
 
-import envs.datacenter as DataCenter
+import envs.sustaindc.datacenter_model as DataCenter
 from utils.dc_config_reader import DC_Config
 
 import itertools

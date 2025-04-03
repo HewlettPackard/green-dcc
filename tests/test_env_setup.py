@@ -1,6 +1,6 @@
 import pytest
-from dc_env.dc_scheduling_env import TaskSchedulingEnv
-from simulation.datacenter_cluster_manager import DatacenterClusterManager
+from envs.task_scheduling_env import TaskSchedulingEnv
+from simulation.cluster_manager import DatacenterClusterManager
 
 def test_environment_runs():
     from train_rl_agent import make_env

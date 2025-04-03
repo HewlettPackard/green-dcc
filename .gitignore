@@ -28,6 +28,7 @@ __pycache__/
 *.so
 *.egg-info/
 *.pyd
+*.pyc
 
 # Ignore raw data
 data/workload/alibaba_2020_dataset/*.csv
@@ -39,3 +40,8 @@ data/workload/alibaba_2020_dataset/*.csv
 *.egg
 *.whl
 *.header
+*.0
+
+# Auto added
+filtered_file_list.txt
+.pytest_cache

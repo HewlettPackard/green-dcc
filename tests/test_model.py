@@ -1,5 +1,5 @@
 import torch
-from dc_env.agent_net import ActorNet, CriticNet
+from rl_components.agent_net import ActorNet, CriticNet
 
 def test_actor_critic_forward():
     obs_dim = 10

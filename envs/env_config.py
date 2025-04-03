@@ -24,12 +24,6 @@ def get_default_config():
         # Data center configuration file
         'dc_config_file': 'dc_config.json',
 
-        # Reward blending (individual/collaborative)
-        'individual_reward_weight': 0.8,
-
-        # Flexible load ratio of the total workload
-        'flexible_load': 0.1,
-
         # Reward methods
         'ls_reward': 'default_ls_reward',
         'dc_reward': 'default_dc_reward',

@@ -2,29 +2,20 @@ import os
 import sys
 import random
 import datetime
+from collections import deque
 from typing import Optional, Tuple, Union
 
-import torch
+import gymnasium as gym
 import numpy as np
 import pandas as pd
-import gymnasium as gym
-
+import torch
 from gymnasium import spaces
-from utils import dc_internal_reward_creator
-from dc_internal_agents.base_agents import (BaseBatteryAgent, BaseHVACAgent,
-                               BaseLoadShiftingAgent)
-from utils.make_envs_pyenv import (make_bat_fwd_env, make_dc_env,
-                                   make_ls_env)
-from utils.managers import CI_Manager, Time_Manager, Weather_Manager, ElectricityPrice_Manager
+
+from utils.make_envs import make_bat_fwd_env, make_dc_env, make_ls_env
+from utils.managers import CI_Manager, ElectricityPrice_Manager, Time_Manager, Weather_Manager
 from utils.utils_cf import get_energy_variables, get_init_day, obtain_paths
 
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg  # For reading images
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
-from .env_config import EnvConfig
-
-from collections import deque
+from ..env_config import EnvConfig
 
 MAX_WAIT_INTERVALS = 60*24 # NUMS OF TIME INTERVALS (15 MINUTES)
 class SustainDC(gym.Env):
@@ -56,11 +47,7 @@ class SustainDC(gym.Env):
         self.workload_file = env_config['workload_file']
         
         self.max_bat_cap_Mw = env_config['max_bat_cap_Mw']
-        self.indv_reward = env_config['individual_reward_weight']
-        self.collab_reward = (1 - self.indv_reward) / 2
         
-        self.flexible_load = env_config['flexible_load']
-
         self.datacenter_capacity_mw = env_config['datacenter_capacity_mw']
         self.dc_config_file = env_config['dc_config_file']
         self.timezone_shift = env_config['timezone_shift']
@@ -76,27 +63,11 @@ class SustainDC(gym.Env):
 
         self._agent_ids = set(self.agents)
         
-        ls_reward_method = 'default_ls_reward' if not 'ls_reward' in env_config.keys() else env_config['ls_reward']
-        self.ls_reward_method = dc_internal_reward_creator.get_reward_method(ls_reward_method)
-
-        dc_reward_method =  'default_dc_reward' if not 'dc_reward' in env_config.keys() else env_config['dc_reward']
-        self.dc_reward_method = dc_internal_reward_creator.get_reward_method(dc_reward_method)
-        
-        bat_reward_method = 'default_bat_reward' if not 'bat_reward' in env_config.keys() else env_config['bat_reward']
-        self.bat_reward_method = dc_internal_reward_creator.get_reward_method(bat_reward_method)
-        
         n_vars_energy, n_vars_battery = 0, 0  # For partial observability (for p.o.)
         n_vars_ci = 8
 
         # **✅ Pick a random simulation year for variability**
-        self.simulation_year = None # random.choice([2021, 2022, 2023, 2024])
-
-        # **✅ Construct paths dynamically**
-        # self.ci_file = f"data/carbon_intensity/{self.location}/{self.simulation_year}/{self.location}_{self.simulation_year}_hourly.csv"
-        # self.weather_file = f"data/weather/{self.location}/{self.simulation_year}.json"
-
-        # Create the managers: date/hour/time manager, workload manager, weather manager, and CI manager.
-        # self.init_day = get_init_day(self.weather_file, self.month - 1) # (0-based index)
+        self.simulation_year = None 
 
         self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, 
                                   n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=1000)
@@ -115,27 +86,6 @@ class SustainDC(gym.Env):
         
         self.observation_space = []
         self.action_space = []
-        
-        # Do nothing controllers
-        self.base_agents = {}
-        
-        flexible_load = 0
-        
-        # Create the observation/action space if the agent is used for training.
-        # Otherwise, create the base agent for the environment.
-        self.base_agents["agent_ls"] = BaseLoadShiftingAgent()
-        self.base_agents["agent_dc"] = BaseHVACAgent()
-        self.base_agents["agent_bat"] = BaseBatteryAgent()
-            
-        # ls_state[0:10]->10 variables
-        # dc_state[4:9] & bat_state[5]->5+1 variables
-
-
-        # self.ranges_day = [max(0, self.init_day - 7), min(364, self.init_day + 7)]
-        # self.t_m = Time_Manager(self.init_day, timezone_shift=self.timezone_shift, days_per_episode=self.days_per_episode)
-        # self.price_manager = ElectricityPrice_Manager(location=self.location, simulation_year=self.simulation_year, timezone_shift=self.timezone_shift)
-        # self.ci_manager = CI_Manager(location=self.location, simulation_year=self.simulation_year, timezone_shift=self.timezone_shift)
-        # self.weather_manager = Weather_Manager(location=self.location, simulation_year=self.simulation_year, timezone_shift=self.timezone_shift)
 
         # Get resource capacities from config, provide default values if not specified
         self.total_cpus = env_config.get('total_cpus', 2000)
@@ -295,7 +245,6 @@ class SustainDC(gym.Env):
         # Reset termination and reward flags for all agents
         self.ls_terminated = self.dc_terminated = self.bat_terminated = False
         self.ls_truncated = self.dc_truncated = self.bat_truncated = False
-        self.ls_reward = self.dc_reward = self.bat_reward = 0
 
         # Reset the managers
         # if init_day is None:
@@ -451,16 +400,6 @@ class SustainDC(gym.Env):
         # Populate observation dictionary based on updated states
         obs = self._populate_observation_dict()
 
-        # Calculate rewards for all agents based on the updated state
-        reward_params = self._calculate_reward_params(workload, temp, ci_i, ci_i_future, day, hour, terminal)
-        self.ls_reward, self.dc_reward, self.bat_reward = self.calculate_reward(reward_params)
-
-        # Update rewards, terminations, and truncations for each agent
-        self._update_reward_and_termination(rew, terminateds, truncateds)
-
-        # Populate info dictionary with additional information
-        info = self._populate_info_dict(reward_params)
-
         # Update the self.infos dictionary, similar to how it's done in the reset method
         self.infos = {
             'agent_ls': self.ls_info,
@@ -472,11 +411,6 @@ class SustainDC(gym.Env):
                 'weather': temp,
                 'ci': ci_i_denorm,
                 'price_USD_kwh': price_i,
-                # 'states': {
-                #     'agent_ls': self.ls_state,
-                #     'agent_dc': self.dc_state,
-                #     'agent_bat': self.bat_state
-                # }
             }
         }
         
@@ -534,20 +468,22 @@ class SustainDC(gym.Env):
 
 
     def _perform_actions(self, action_dict):
-        """Execute actions for each agent and update their respective environments."""
-        action = self.base_agents["agent_ls"].do_nothing_action()
+        # Use fixed "do nothing" actions:
+        DO_NOTHING_LOAD_SHIFTING = 1
+        DO_NOTHING_HVAC = 1
+        DO_NOTHING_BATTERY = 2
 
-        # call step method of the load shifting environment with the action and the workload for the rest of the day
-        self.ls_state, _, self.ls_terminated, self.ls_truncated, self.ls_info = self.ls_env.step(action)
+        # For load shifting environment:
+        self.ls_state, _, self.ls_terminated, self.ls_truncated, self.ls_info = self.ls_env.step(DO_NOTHING_LOAD_SHIFTING)
 
-        action = self.base_agents["agent_dc"].do_nothing_action()
+        # For HVAC / data center environment:
         self.dc_env.set_shifted_wklds(self.ls_info['ls_shifted_workload'])
-        self.dc_state, _, self.dc_terminated, self.dc_truncated, self.dc_info = self.dc_env.step(action)
+        self.dc_state, _, self.dc_terminated, self.dc_truncated, self.dc_info = self.dc_env.step(DO_NOTHING_HVAC)
 
-        action = self.base_agents["agent_bat"].do_nothing_action()
-            
+        # For battery environment:
         self.bat_env.set_dcload(self.dc_info['dc_total_power_kW'] / 1e3)
-        self.bat_state, _, self.bat_terminated, self.bat_truncated, self.bat_info = self.bat_env.step(action)
+        self.bat_state, _, self.bat_terminated, self.bat_truncated, self.bat_info = self.bat_env.step(DO_NOTHING_BATTERY)
+
 
 
     def _update_environments(self, workload, temp, wet_bulb, ci_i_denorm, ci_i_future, current_day, current_hour):
@@ -570,43 +506,6 @@ class SustainDC(gym.Env):
         return obs
 
 
-    def _calculate_reward_params(self, workload, temp, ci_i, ci_i_future, day, hour, terminal):
-        """Create the parameters needed to calculate rewards."""
-        return {
-            **self.bat_info, **self.ls_info, **self.dc_info,
-            "outside_temp": temp, "day": day, "hour": hour,
-            "norm_CI": ci_i_future[0], "forecast_CI": ci_i_future,
-            "isterminal": terminal
-        }
-
-
-    def _update_reward_and_termination(self, rew, terminateds, truncateds):
-        """Update the rewards, termination, and truncation flags for all agents."""
-        if "agent_ls" in self.agents:
-            rew["agent_ls"] = self.ls_reward
-            terminateds["agent_ls"] = self.ls_terminated
-            truncateds["agent_ls"] = self.ls_truncated
-        if "agent_dc" in self.agents:
-            rew["agent_dc"] = self.dc_reward
-            terminateds["agent_dc"] = self.dc_terminated
-            truncateds["agent_dc"] = self.dc_truncated
-        if "agent_bat" in self.agents:
-            rew["agent_bat"] = self.bat_reward
-            terminateds["agent_bat"] = self.bat_terminated
-            truncateds["agent_bat"] = self.bat_truncated
-
-
-    def _populate_info_dict(self, reward_params):
-        """Generate the info dictionary for all agents and common info."""
-        info = {
-            "agent_ls": {**self.dc_info, **self.ls_info, **self.bat_info, **reward_params},
-            "agent_dc": {**self.dc_info, **self.ls_info, **self.bat_info, **reward_params},
-            "agent_bat": {**self.dc_info, **self.ls_info, **self.bat_info, **reward_params},
-            "__common__": reward_params
-        }
-        return info
-
-
     def _handle_terminal(self, terminateds, truncateds):
         """Handle the terminal state of the environment."""
         terminateds["__all__"] = False
@@ -615,24 +514,6 @@ class SustainDC(gym.Env):
             truncateds[agent] = True
     
     
-    def calculate_reward(self, params):
-        """
-        Calculate the individual reward for each agent.
-
-        Args:
-            params (dict): Dictionary of parameters to calculate the reward.
-
-        Returns:
-            ls_reward (float): Individual reward for the load shifting agent.
-            dc_reward (float): Individual reward for the data center agent.
-            bat_reward (float): Individual reward for the battery agent.
-        """
-
-        ls_reward = self.ls_reward_method(params)
-        dc_reward = self.dc_reward_method(params)
-        bat_reward = self.bat_reward_method(params)
-        return ls_reward, dc_reward, bat_reward
-
     def state(self):
         """
         Get the state of the environment.
@@ -640,6 +521,7 @@ class SustainDC(gym.Env):
         Returns:
             np.ndarray: State of the environment.
         """
+        print('Calling the method state() of SustainDC')
         states = tuple(
             self.scenario.observation(  # pylint: disable=no-member
                 self.world.agents[self._index_map[agent]], self.world  # pylint: disable=no-member

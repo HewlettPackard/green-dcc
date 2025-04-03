@@ -4,10 +4,11 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import seaborn as sns
 
-from dc_env.agent_net import ActorNet
-from dc_env.dc_scheduling_env import TaskSchedulingEnv
-from simulation.datacenter_cluster_manager import DatacenterClusterManager
+from rl_components.agent_net import ActorNet
+from envs.task_scheduling_env import TaskSchedulingEnv
+from simulation.cluster_manager import DatacenterClusterManager
 
 import datetime
 import logging
@@ -21,7 +22,7 @@ logger = logging.getLogger("eval_logger")
 logger.setLevel(logging.INFO)  # File handler will capture INFO+
 
 # === File handler (full log)
-file_handler = logging.FileHandler(log_path, mode="w")
+file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(logging.Formatter(
     "%(asctime)s - %(levelname)s - %(message)s",
@@ -235,10 +236,6 @@ summary.columns = [
 ]
 
 summary
-
-#%%
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 #%%
 # Energy price per kWh plot

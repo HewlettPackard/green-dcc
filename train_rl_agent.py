@@ -4,10 +4,10 @@ import numpy as np
 import gymnasium as gym
 from tqdm import trange
 
-from dc_env.dc_scheduling_env import TaskSchedulingEnv
-from dc_env.agent_net import ActorNet, CriticNet
-from dc_env.replay_buffer import ReplayBuffer
-from dc_env.replay_buffer import PrioritizedReplayBuffer
+from envs.task_scheduling_env import TaskSchedulingEnv
+from rl_components.agent_net import ActorNet, CriticNet
+from rl_components.replay_buffer import ReplayBuffer
+from rl_components.replay_buffer import PrioritizedReplayBuffer
 
 import logging
 import os
@@ -94,8 +94,8 @@ print(f"Using device: {DEVICE}")
 def make_env():
     import pandas as pd
     import datetime
-    from simulation.datacenter_cluster_manager import DatacenterClusterManager
-    from dc_env.dc_scheduling_env import TaskSchedulingEnv
+    from simulation.cluster_manager import DatacenterClusterManager
+    from envs.task_scheduling_env import TaskSchedulingEnv
 
     # === Simulation time range ===
     simulation_year = 2023

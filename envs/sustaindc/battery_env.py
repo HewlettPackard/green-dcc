@@ -2,7 +2,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-import envs.battery_model as batt
+import envs.sustaindc.battery_model as batt
 from utils import dc_internal_reward_creator
 
 class BatteryEnvFwd(gym.Env):
