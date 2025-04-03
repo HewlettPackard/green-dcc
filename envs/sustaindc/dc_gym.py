@@ -7,7 +7,6 @@ from gymnasium import spaces
 from collections import deque
 
 import envs.sustaindc.datacenter_model as DataCenter
-from utils import dc_internal_reward_creator
 
 class dc_gymenv(gym.Env):
     

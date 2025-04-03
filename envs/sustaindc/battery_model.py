@@ -4,42 +4,6 @@
 
 import numpy as np
 
-# class Battery:
-#     capacity = 0 # Max MWh storage capacity
-#     current_load = 0 # Current load in the battery, in MWh
-
-#     def __init__(self, capacity, current_load=0):
-#         self.capacity = capacity
-#         self.current_load = current_load
-
-#     # charge the battery based on an hourly load
-#     # returns the total load after charging with input_load
-#     def charge(self, input_load):
-#         self.current_load = self.current_load + input_load
-#         if(self.current_load > self.capacity):
-#             self.current_load = self.capacity
-#         return self.current_load
-
-#     # returns how much energy is discharged when
-#     # output_load is drawn from the battery in an hour
-#     def discharge(self, output_load):
-#         self.current_load = self.current_load - output_load
-#         if(self.current_load < 0): # not enough battery load
-#             lacking_amount = self.current_load
-#             self.current_load = 0
-#             return output_load + lacking_amount
-#         return output_load
-
-#     def is_full(self):
-#         return (self.capacity == self.current_load)
-    
-#     # calculate the minimum battery capacity required
-#     # to be able to charge it with input_load
-#     # amount of energy within an hour and
-#     # expand the existing capacity with that amount
-#     def find_and_init_capacity(self, input_load):
-#         self.capacity = self.capacity + input_load
-
 # Battery model that includes efficiency and 
 # linear charging/discharging rate limits with respect to battery capacity
 # refer to C/L/C model in following reference for details: 

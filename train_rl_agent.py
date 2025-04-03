@@ -8,6 +8,8 @@ from envs.task_scheduling_env import TaskSchedulingEnv
 from rl_components.agent_net import ActorNet, CriticNet
 from rl_components.replay_buffer import ReplayBuffer
 from rl_components.replay_buffer import PrioritizedReplayBuffer
+from rewards.predefined.energy_price_reward import EnergyPriceReward
+from rewards.predefined.composite_reward import CompositeReward
 
 import logging
 import os
@@ -75,7 +77,7 @@ logger = None#logging.getLogger("train_logger")
 
 # === CONFIG ===
 GAMMA = 0.99
-ALPHA = 0.01
+ALPHA = 0.1
 LR = 1e-4
 BATCH_SIZE = 256
 TAU = 0.005
@@ -155,7 +157,6 @@ def make_env():
 
     # === Workload data ===
     tasks_file_path = "data/workload/alibaba_2020_dataset/result_df_full_year_2020.pkl"
-    # task_file_path = "data/workload/alibaba_2020_dataset/result_df_cropped_with_bandwidth.pkl"
     
     # === Create cluster manager ===
     cluster_manager = DatacenterClusterManager(
@@ -171,11 +172,29 @@ def make_env():
     cluster_manager.logger = logger
 
     # === Wrap into Gym environment ===
+    # reward_fn = EnergyPriceReward(normalize_factor=100000)
+    reward_fn = CompositeReward(
+        components={
+            "energy_price": {
+                "weight": 0.5,
+                "args": {"normalize_factor": 100000}
+            },
+            "carbon_emissions": {
+                "weight": 0.3,
+                "args": {"normalize_factor": 100}
+            },
+            "sla_penalty": {
+                "weight": 0.2,
+                "args": {"penalty_per_violation": 5.0}
+            }
+        }
+    )
+
     env = TaskSchedulingEnv(
         cluster_manager=cluster_manager,
         start_time=start_time,
         end_time=end_time,
-        carbon_price_per_kg=0.1  # tweak if needed
+        reward_fn=reward_fn,
     )
 
     return env

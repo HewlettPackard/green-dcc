@@ -2,9 +2,10 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 import pandas as pd
+from rewards.base_reward import BaseReward
 
 class TaskSchedulingEnv(gym.Env):
-    def __init__(self, cluster_manager, start_time, end_time, carbon_price_per_kg=0.1):
+    def __init__(self, cluster_manager, start_time, end_time, reward_fn: BaseReward):
         super().__init__()
         self.cluster_manager = cluster_manager
         self.logger = getattr(self.cluster_manager, "logger", None)
@@ -12,8 +13,8 @@ class TaskSchedulingEnv(gym.Env):
         self.end_time = end_time
         self.time_step = pd.Timedelta(minutes=15)
         self.current_time = self.start_time
-        self.carbon_price_per_kg = carbon_price_per_kg
-
+        self.reward_fn = reward_fn 
+        
         self.pending_tasks = []
         self.current_task = None
 
@@ -70,32 +71,37 @@ class TaskSchedulingEnv(gym.Env):
         # === Compute emissions and total energy ===
         emissions_total = 0.0
         energy_total = 0.0
-        energy_cost_total = 0.0
-        sla_met = 0
-        sla_violated = 0
+        # energy_cost_total = 0.0
+        # sla_met = 0
+        # sla_violated = 0
         
-        for dc_name, info in results["datacenter_infos"].items():
-            ci = info["__common__"]["ci"]
-            energy_kwh = info["__common__"]["energy_consumption_kwh"]
-            emissions_kg = info["__common__"]["carbon_emissions_kg"]
-            energy_cost_usd = info["__common__"]["energy_cost_USD"]
+        # for dc_name, info in results["datacenter_infos"].items():
+        #     ci = info["__common__"]["ci"]
+        #     energy_kwh = info["__common__"]["energy_consumption_kwh"]
+        #     emissions_kg = info["__common__"]["carbon_emissions_kg"]
+        #     energy_cost_usd = info["__common__"]["energy_cost_USD"]
 
-            energy_total += energy_kwh
-            emissions_total += emissions_kg
-            energy_cost_total += energy_cost_usd
+        #     energy_total += energy_kwh
+        #     emissions_total += emissions_kg
+        #     energy_cost_total += energy_cost_usd
             
-            sla_met += info["__common__"]["__sla__"].get("met", 0)
-            sla_violated += info["__common__"]["__sla__"].get("violated", 0)
-        # reward = 1.0 - (energy_cost_total/100)
+        #     sla_met += info["__common__"]["__sla__"].get("met", 0)
+        #     sla_violated += info["__common__"]["__sla__"].get("violated", 0)
+        # # reward = 1.0 - (energy_cost_total/100)
 
-        total_task_cost = 0.0
-        for task in self.current_tasks:
-            dest_dc = task.dest_dc  # based on agent action
-            task_energy = task.cpu_req * task.duration
-            task_cost = task_energy * dest_dc.price_manager.get_current_price()
-            total_task_cost += task_cost
+        # total_task_cost = 0.0
+        # for task in self.current_tasks:
+        #     dest_dc = task.dest_dc  # based on agent action
+        #     task_energy = task.cpu_req * task.duration
+        #     task_cost = task_energy * dest_dc.price_manager.get_current_price()
+        #     total_task_cost += task_cost
 
-        reward = -total_task_cost/100000 # Normalize reward
+        # reward = -total_task_cost/100000 # Normalize reward
+        reward = self.reward_fn(
+                                cluster_info=results,
+                                current_tasks=self.current_tasks,
+                                current_time=self.current_time
+                            )
 
 
         # === Advance time by 15 minutes and load next tasks ===

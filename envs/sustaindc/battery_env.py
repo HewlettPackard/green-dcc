@@ -3,7 +3,6 @@ import gymnasium as gym
 from gymnasium import spaces
 
 import envs.sustaindc.battery_model as batt
-from utils import dc_internal_reward_creator
 
 class BatteryEnvFwd(gym.Env):
     def __init__(self, env_config) -> None:
