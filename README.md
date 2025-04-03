@@ -128,6 +128,19 @@ You can evaluate different controllers by plugging them into the DatacenterClust
 
 ---
 
+## ✅ Google Colab Evaluation
+
+A ready-to-run Google Colab notebook is available for testing and evaluation:
+
+👉 **[Run it here](https://colab.research.google.com/drive/1LLw313sG56l2I29E0Q9zh6KM0q5Z23WX)**
+
+The notebook supports:
+- Uploading a trained agent checkpoint
+- Running simulation for 7 days
+- Comparing with a rule-based controller
+- Visualizing energy, carbon, and resource usage
+
+---
 ## TODO / Roadmap
 
 - Add transmission cost and delay matrices
@@ -135,6 +148,7 @@ You can evaluate different controllers by plugging them into the DatacenterClust
 - More rule-based controllers for baseline comparison
 - Modular reward builder
 - Task delay & deferral logic
+- Improve the Google colab notebook
 
 ---
 
