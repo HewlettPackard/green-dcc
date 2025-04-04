@@ -296,7 +296,7 @@ You can evaluate different controllers by plugging them into the DatacenterClust
 
 A ready-to-run Google Colab notebook is available for testing and evaluation:
 
-👉 **[Run it here](https://colab.research.google.com/drive/1LLw313sG56l2I29E0Q9zh6KM0q5Z23WX)**
+👉 **[Run it here](https://colab.research.google.com/drive/1LLw313sG56l2I29E0Q9zh6KM0q5Z23WX?usp=sharing)**
 
 The notebook supports:
 - Uploading a trained agent checkpoint

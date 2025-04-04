@@ -361,12 +361,14 @@ class SustainDC(gym.Env):
         finished_tasks = self.release_resources(self.current_time_task, logger)
 
         num_tasks_assigned = 0
+        routed_tasks_this_step = []
         # **2. Try scheduling pending tasks (FIFO order)**
         for _ in range(len(self.pending_tasks)):  # Process each task once
             task = self.pending_tasks.popleft()  # Take the first task from the queue
             scheduled = self.try_to_schedule_task(task, self.current_time_task, logger)  # Let schedule_task() handle scheduling or re-queuing
             if scheduled:
                 num_tasks_assigned += 1
+                routed_tasks_this_step.append(task)
 
 
         # **3. Log resource utilization**
@@ -411,6 +413,7 @@ class SustainDC(gym.Env):
                 'weather': temp,
                 'ci': ci_i_denorm,
                 'price_USD_kwh': price_i,
+                'routed_tasks_this_step': routed_tasks_this_step,
             }
         }
         

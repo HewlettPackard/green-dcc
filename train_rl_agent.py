@@ -17,6 +17,7 @@ import datetime
 
 from torch.utils.tensorboard import SummaryWriter
 
+from collections import deque
 
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -77,9 +78,9 @@ logger = None#logging.getLogger("train_logger")
 
 # === CONFIG ===
 GAMMA = 0.99
-ALPHA = 0.1
+ALPHA = 0.01
 LR = 1e-4
-BATCH_SIZE = 256
+BATCH_SIZE = 512
 TAU = 0.005
 REPLAY_SIZE = 1_000_000
 WARMUP_STEPS = 1_000
@@ -166,7 +167,8 @@ def make_env():
         init_hour=init_hour,
         strategy="manual_rl",
         tasks_file_path=tasks_file_path,
-        shuffle_datacenter_order=True  # shuffle only during training
+        shuffle_datacenter_order=False,  # shuffle only during training
+        cloud_provider='gcp',
     )
     
     cluster_manager.logger = logger
@@ -181,13 +183,18 @@ def make_env():
             },
             "carbon_emissions": {
                 "weight": 0.3,
-                "args": {"normalize_factor": 100}
+                "args": {"normalize_factor": 10}
             },
-            "sla_penalty": {
-                "weight": 0.2,
-                "args": {"penalty_per_violation": 5.0}
-            }
-        }
+            # "sla_penalty": {
+            #     "weight": 0.2,
+            #     "args": {"penalty_per_violation": 5.0}
+            # }
+            "transmission_cost": {
+                "weight": 0.3,
+                "args": {"normalize_factor": 1}
+            },
+        },
+        normalize=False
     )
 
     env = TaskSchedulingEnv(
@@ -195,6 +202,7 @@ def make_env():
         start_time=start_time,
         end_time=end_time,
         reward_fn=reward_fn,
+        writer=writer,
     )
 
     return env
@@ -224,6 +232,7 @@ def train():
     # 1) Create environment
     env = make_env()
     reward_stats = RunningStats()
+    episode_reward_buffer = deque(maxlen=10)
 
     # 2) Dynamically detect obs_dim
     # We'll do a dummy reset to get the shape from the first obs.
@@ -318,16 +327,23 @@ def train():
         episode_steps += 1
         if done_flag:
             avg_reward = episode_reward / episode_steps
+            episode_reward_buffer.append(avg_reward)
+
             if logger:
                 logger.info(f"[Episode End] total_reward={avg_reward:.2f}")
             pbar.write(f"[Episode End] total_reward={avg_reward:.2f}")
             writer.add_scalar("Reward/Episode_Reward", avg_reward, global_step)
 
             
-            if avg_reward > best_reward:
-                best_reward = avg_reward
-                save_checkpoint(global_step, actor, critic, actor_opt, critic_opt, best=True)
-                pbar.write(f"[BEST] Saved checkpoint at step {global_step} (avg reward={avg_reward:.2f})")
+            if len(episode_reward_buffer) == 10:
+                rolling_avg_reward = sum(episode_reward_buffer) / 10
+                writer.add_scalar("Reward/Avg10", rolling_avg_reward, global_step)
+
+                if rolling_avg_reward > best_reward and global_step > 10 * WARMUP_STEPS:
+                    best_reward = rolling_avg_reward
+                    save_checkpoint(global_step, actor, critic, actor_opt, critic_opt, best=True)
+                    pbar.write(f"[BEST] Saved checkpoint at step {global_step} (avg10 reward={rolling_avg_reward:.2f})")
+
 
 
             obs, _ = env.reset()

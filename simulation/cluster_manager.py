@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 from rl_components.task import Task
 
+from utils.transmission_cost_loader import load_transmission_matrix
+from utils.transmission_region_mapper import map_location_to_region
 
 def assign_task_origins(tasks, datacenter_configs, current_time_utc, logger=None):
     """
@@ -106,7 +108,8 @@ def extract_tasks_from_row(row, scale=1, datacenter_configs=None, current_time_u
     return tasks
 
 class DatacenterClusterManager:
-    def __init__(self, config_list, simulation_year, init_day, init_hour, strategy="priority_order", tasks_file_path=None, shuffle_datacenter_order=True):
+    def __init__(self, config_list, simulation_year, init_day, init_hour, strategy="priority_order", 
+                 tasks_file_path=None, shuffle_datacenter_order=True, cloud_provider="gcp"):
         """
         Initializes multiple datacenters using SustainDC and loads tasks.
 
@@ -129,6 +132,9 @@ class DatacenterClusterManager:
         self.init_day = init_day
         self.init_hour = init_hour
         self.shuffle_datacenter_order = shuffle_datacenter_order
+        
+        self.cloud_provider = cloud_provider
+        self.transmission_matrix = load_transmission_matrix(cloud_provider)
 
         # Load tasks if a file path is provided; otherwise, self.tasks remains None
         if tasks_file_path:
@@ -277,7 +283,7 @@ class DatacenterClusterManager:
 
             # STEP 2.2: Assign tasks to datacenters using rule-based strategy
             dc_id_to_name = {dc.dc_id: name for name, dc in self.datacenters.items()}
-
+            
             for task in tasks:
                 assigned_dc_id = self.distribute_workload(task, current_time, logger)
                 if assigned_dc_id is not None:
@@ -322,9 +328,40 @@ class DatacenterClusterManager:
                 logger.info(f"[{current_time}] {dc_name} - Running Tasks: {len(dc.running_tasks)}, "
                             f"Pending Tasks: {len(dc.pending_tasks)}")
 
-        # STEP 4. Return aggregated results from all datacenters
+        # === STEP 4: Compute total transmission cost ===
+        transmission_cost_total = 0.0
+
+        for dc_name, dc in self.datacenters.items():
+            dc_info = results["datacenter_infos"][dc_name]
+            routed_tasks = dc_info["__common__"].get("routed_tasks_this_step", [])
+
+            for task in routed_tasks:
+                origin_loc = self.get_dc_location(task.origin_dc_id)
+                dest_loc = self.get_dc_location(task.dest_dc_id)
+
+                origin_region = map_location_to_region(origin_loc, self.cloud_provider)
+                dest_region = map_location_to_region(dest_loc, self.cloud_provider)
+
+                if origin_region and dest_region:
+                    try:
+                        cost_per_gb = self.transmission_matrix.loc[origin_region, dest_region]
+                        transmission_cost_total += cost_per_gb * task.bandwidth_gb
+                        if logger:
+                            logger.info(f"[{current_time}] Task: {task.job_name}, Transmission cost from {origin_region} to {dest_region}: "
+                                        f"${cost_per_gb:.4f}/GB, Cost: ${cost_per_gb * task.bandwidth_gb:.4f}")
+                    except KeyError:
+                        print(f"[WARNING] Transmission cost not found between {origin_region} and {dest_region}")
+
+        results["transmission_cost_total_usd"] = transmission_cost_total
+
+        # FINAL STEP. Return aggregated results from all datacenters
         return results
 
+    def get_dc_location(self, dc_id):
+        for dc in self.datacenters.values():
+            if dc.dc_id == dc_id:
+                return dc.location
+        return None
 
 
     def get_config_list(self):

@@ -459,8 +459,8 @@ class ElectricityPrice_Manager:
         self.original_prices = df["Price (USD/MWh)"].values
         
         # Remove outliers using IQR
-        Q1 = np.percentile(self.original_prices, 5)
-        Q3 = np.percentile(self.original_prices, 95)
+        Q1 = np.percentile(self.original_prices, 15)
+        Q3 = np.percentile(self.original_prices, 85)
         IQR = Q3 - Q1
         lower = Q1 - 1.5 * IQR
         upper = Q3 + 1.5 * IQR

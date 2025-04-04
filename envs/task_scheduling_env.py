@@ -3,9 +3,10 @@ import numpy as np
 from gymnasium import spaces
 import pandas as pd
 from rewards.base_reward import BaseReward
+from torch.utils.tensorboard import SummaryWriter  # if not already imported
 
 class TaskSchedulingEnv(gym.Env):
-    def __init__(self, cluster_manager, start_time, end_time, reward_fn: BaseReward):
+    def __init__(self, cluster_manager, start_time, end_time, reward_fn: BaseReward, writer: SummaryWriter = None,):
         super().__init__()
         self.cluster_manager = cluster_manager
         self.logger = getattr(self.cluster_manager, "logger", None)
@@ -14,13 +15,15 @@ class TaskSchedulingEnv(gym.Env):
         self.time_step = pd.Timedelta(minutes=15)
         self.current_time = self.start_time
         self.reward_fn = reward_fn 
-        
+        self.writer = writer
+
         self.pending_tasks = []
         self.current_task = None
+        self.global_step = 0  # Used to track time for TensorBoard logs
 
         # Set dynamically based on number of DCs
         self.num_dcs = len(self.cluster_manager.datacenters)
-        obs_dim = 3+4*self.num_dcs + self.num_dcs # 1 for task origin DC + 4 features per datacenter + One hot for cheapest DC
+        obs_dim = 3+5*self.num_dcs + self.num_dcs # 1 for task origin DC + 4 features per datacenter + One hot for cheapest DC
         self.observation_space = spaces.Box(
             low=0,
             high=np.inf,
@@ -71,37 +74,26 @@ class TaskSchedulingEnv(gym.Env):
         # === Compute emissions and total energy ===
         emissions_total = 0.0
         energy_total = 0.0
-        # energy_cost_total = 0.0
-        # sla_met = 0
-        # sla_violated = 0
-        
-        # for dc_name, info in results["datacenter_infos"].items():
-        #     ci = info["__common__"]["ci"]
-        #     energy_kwh = info["__common__"]["energy_consumption_kwh"]
-        #     emissions_kg = info["__common__"]["carbon_emissions_kg"]
-        #     energy_cost_usd = info["__common__"]["energy_cost_USD"]
 
-        #     energy_total += energy_kwh
-        #     emissions_total += emissions_kg
-        #     energy_cost_total += energy_cost_usd
-            
-        #     sla_met += info["__common__"]["__sla__"].get("met", 0)
-        #     sla_violated += info["__common__"]["__sla__"].get("violated", 0)
-        # # reward = 1.0 - (energy_cost_total/100)
+        if self.reward_fn:
+            reward = self.reward_fn(
+                cluster_info=results,
+                current_tasks=self.current_tasks,
+                current_time=self.current_time
+            )
+        else:
+            reward = 0.0
 
-        # total_task_cost = 0.0
-        # for task in self.current_tasks:
-        #     dest_dc = task.dest_dc  # based on agent action
-        #     task_energy = task.cpu_req * task.duration
-        #     task_cost = task_energy * dest_dc.price_manager.get_current_price()
-        #     total_task_cost += task_cost
 
-        # reward = -total_task_cost/100000 # Normalize reward
-        reward = self.reward_fn(
-                                cluster_info=results,
-                                current_tasks=self.current_tasks,
-                                current_time=self.current_time
-                            )
+        # Log the individual rewards components in the tensorboard
+        # === TensorBoard logging ===
+        if self.writer and self.reward_fn:
+            if hasattr(self.reward_fn, "get_last_components"): # Composite reward
+                for name, value in self.reward_fn.get_last_components().items():
+                    self.writer.add_scalar(f"RewardComponents/{name}", value, self.global_step)
+            elif hasattr(self.reward_fn, "get_last_value"): # Individual reward
+                self.writer.add_scalar(f"Reward/{str(self.reward_fn)}", self.reward_fn.get_last_value(), self.global_step)
+            self.global_step += 1
 
 
         # === Advance time by 15 minutes and load next tasks ===
@@ -117,6 +109,7 @@ class TaskSchedulingEnv(gym.Env):
             "total_emissions_kg": emissions_total,
             "scheduled_tasks": len(actions),
             "datacenter_infos": results["datacenter_infos"],
+            "transmission_cost_total_usd" : results["transmission_cost_total_usd"],
         }
 
         return obs, reward, done, truncated, info
@@ -186,7 +179,7 @@ class TaskSchedulingEnv(gym.Env):
                 dc.available_cpus / dc.total_cpus,
                 dc.available_gpus / dc.total_gpus,
                 dc.available_mem / dc.total_mem,
-                # float(dc.ci_manager.get_current_ci(norm=False)/1000),  # carbon intensity
+                float(dc.ci_manager.get_current_ci(norm=False)/1000),  # carbon intensity
                 float(dc.price_manager.get_current_price())/100,  # energy price
             ])
 

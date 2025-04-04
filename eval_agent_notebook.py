@@ -112,14 +112,15 @@ def make_eval_env(eval_mode=True):
         cluster_manager=cluster_manager,
         start_time=start_time,
         end_time=end_time,
-        carbon_price_per_kg=0.1
+        reward_fn=None,
+        writer=None,
     )
     return env
 
 
 
 # Load trained actor model
-checkpoint_path = "checkpoints/train_20250402_225152/checkpoint_step_1210000.pth"  # Adjust path
+checkpoint_path = "checkpoints/train_20250404_173840/best_checkpoint.pth"  # Adjust path
 env = make_eval_env()
 obs, _ = env.reset(seed=123)
 obs_dim = env.observation_space.shape[0]
@@ -136,6 +137,7 @@ else:
     
 
 infos_list = []
+common_info_list = []
 rewards = []
 steps = 7 * 96  # 7 days of 15-min intervals
 
@@ -156,6 +158,7 @@ for step in tqdm(range(steps)):
 
     obs, reward, done, truncated, info = env.step(actions)
     infos_list.append(info["datacenter_infos"])
+    common_info_list.append(info["transmission_cost_total_usd"])
     rewards.append(reward)
 
     if done or truncated:
@@ -188,6 +191,7 @@ for t, timestep_info in enumerate(infos_list):
             "tasks_assigned": dc_info["__common__"].get("tasks_assigned", 0),
             "sla_met": dc_info["__common__"]['__sla__'].get("met", 0),
             "sla_violated": dc_info["__common__"]['__sla__'].get("violated", 0),
+            # "transmission_cost": dc_info["__common__"].get("transmission_cost_total_usd", 0.0),
         }
         flat_records.append(record)
 
@@ -236,6 +240,10 @@ summary.columns = [
 ]
 
 summary
+
+#%%
+total_cost = sum(common_info_list)
+print(f"Total Transmission Cost (USD) for 7 Days: {total_cost:.2f}")
 
 #%%
 # Energy price per kWh plot
@@ -294,10 +302,17 @@ plt.ylabel("gCO₂/kWh")
 plt.grid(True)
 plt.show()
 
+#%%
+plt.figure(figsize=(12, 6))
+plt.plot(common_info_list)
+plt.title("Total Transmission Cost (USD) Over Time")
+plt.xlabel("Timestep")
+plt.ylabel("Transmission Cost (USD)")
+plt.grid(True)
+plt.show()
+
 
 #%%
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 fig, axes = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
 
