@@ -1,26 +1,28 @@
 
 # Multi-Data Center Geographical Scheduling Benchmark
 
-A high-fidelity benchmark for multi-objective scheduling across globally distributed data centers, optimized for energy efficiency, carbon footprint, transfer cost, and operational sustainability.
+A high-fidelity simulation benchmark for **sustainable task scheduling** across globally distributed data centers. Optimize AI workloads based on **carbon emissions**, **energy cost**, **resource efficiency**, **transmission costs**, and **SLA guarantees**.
 
-> Goal: Given real-world AI workloads originating from multiple datacenters, assign each task to the best destination datacenter, balancing multiple sustainability and operational trade-offs.
+> **Goal**: Assign each incoming task to the best datacenter considering real-world sustainability and operational trade-offs.
 
 ---
 
 ## Features
 
-- Centralized global scheduler with distributed task generation
-- Realistic simulation using real-world datasets (Alibaba, ElectricityMaps, Open-Meteo)
-- Transfer-aware task routing with bandwidth cost and latency modeling
-- Dynamic sustainability metrics:
-  - Carbon intensity
-  - Energy prices
-  - Weather (temperature, cooling)
-  - Water use (via proxies)
-- Modular design with support for:
+- **Centralized global scheduler** with decentralized task generation
+- Real-world data from Alibaba, Electricity Maps, Open-Meteo, AWS/GCP/Azure
+- Transfer-aware routing (latency, bandwidth, transmission cost)
+- Detailed simulation of:
+  - Energy use
+  - Carbon emissions
+  - Cooling (temperature-based proxy)
+  - Transmission overheads
+- Supports:
   - Rule-based controllers
-  - Reinforcement learning (SAC-based implemented)
-- Easy to extend and evaluate new scheduling strategies
+  - Deep RL agents (SAC pre-implemented)
+- Modular reward function system
+- RL-ready Gym-compatible environments
+- Fully extensible and interpretable
 
 ---
 
@@ -40,17 +42,18 @@ At every 15-minute timestep:
 
 ---
 
-## Objectives to Optimize
+## Supported Optimization Objectives
 
-- Energy efficiency
-- Carbon footprint
-- Water usage (proxy via temperature/cooling)
-- Bandwidth and latency
-- Economic cost (price per kWh, transfer fees)
+- Total energy cost (USD)
+- Carbon emissions (kg CO₂)
+- Energy consumption (kWh)
+- SLA violations
+- Inter-datacenter transmission costs
+- Multi-objective trade-offs (via composite rewards)
 
 ---
 
-## Datasets Used
+## Real-World Datasets
 
 | Type               | Source                                                                 |
 |--------------------|------------------------------------------------------------------------|
@@ -58,6 +61,7 @@ At every 15-minute timestep:
 | Weather Data       | Open-Meteo                                                             |
 | Carbon Intensity   | Electricity Maps                                                       |
 | Energy Prices      | Mixed sources: Electricity Maps, GridStatus, Open APIs (per country)   |
+| Transmission Costs | AWS, GCP, Azure (per region)                                           |
 
 ---
 
@@ -69,9 +73,10 @@ interval_15m | tasks_matrix
 -------------|----------------------------------------  
 2020-03-01   | [[job1, tstart, tend, cpu, gpu, mem, bw], ...]
 
-Task fields:
-- cpu_usage, gpu_util, mem, bandwidth_gb
-- origin_dc_id assigned using hybrid population × local-time logic
+Each task:
+- Normalized CPU, GPU, MEM usage
+- Bandwidth (GB)
+- Dynamically assigned origin DC using local time + population logic
 
 ---
 
@@ -92,6 +97,35 @@ Each DC: local environment with
 - Resource tracking
 - Energy & carbon simulation
 - Scheduling queue
+
+---
+
+## Supported Locations
+
+These are valid `location` codes to use when defining datacenters in your simulation:
+
+| Code         | Region / Market                          |
+|--------------|------------------------------------------|
+| US-NY-NYIS   | New York (NYISO)                         |
+| US-CAL-CISO  | California (CAISO)                       |
+| US-TEX-ERCO  | Texas (ERCOT)                            |
+| DE-LU        | Germany + Luxembourg (ENTSO-E)           |
+| FR           | France (ENTSO-E)                         |
+| SG           | Singapore (USEP)                         |
+| JP-TK        | Japan - Tokyo Area (JEPX)                |
+| IN           | India (POSOCO)                           |
+| AU-NSW       | Australia - New South Wales (AEMO)       |
+| BR           | Brazil (ONS)                             |
+| ZA           | South Africa (Eskom)                     |
+| PT           | Portugal (OMIE)                          |
+| ES           | Spain (OMIE)                             |
+| BE           | Belgium (ENTSO-E)                        |
+| CH           | Switzerland (ENTSO-E)                    |
+| KR           | South Korea (KPX)                        |
+| CA-ON        | Ontario (IESO)                           |
+| CL-SIC       | Chile (CDEC-SIC)                         |
+| AT           | Austria (ENTSO-E)                        |
+| NL           | Netherlands (ENTSO-E)                    |
 
 ---
 
@@ -124,6 +158,19 @@ rl_components/               # RL agent logic and training utilities
 └── task.py                  # Task class (job ID, resource needs, SLA, etc.)
 ```
 
+```
+rewards/                     # Reward function system
+├── base_reward.py           # Reward interface
+├── reward_registry.py       # Auto-loading and registry
+└── predefined/              # All predefined rewards
+    ├── energy_price_reward.py       # Energy price reward
+    ├── carbon_emissions_reward.py   # Carbon emissions reward
+    ├── energy_consumption_reward.py # Energy consumption reward
+    ├── sla_penalty_reward.py        # SLA penalty reward
+    ├── efficiency_reward.py         # Efficiency reward
+    └── composite_reward.py          # Composite reward for multiple objectives
+
+```
 ```
 utils/                       # Utilities and managers
 ├── make_envs_pyenv.py       # Functions to construct internal envs
@@ -158,23 +205,17 @@ Datacenter DC2:
 
 ---
 
-# ⚙️ Modular Reward System
+## Modular Reward System
 
-We provide a **flexible reward function framework** so users can optimize scheduling policies for **their own sustainability goals** — whether that’s minimizing energy cost, reducing carbon footprint, improving SLA, or a combination.
+GreenDCC comes with a powerful modular reward engine. You can:
 
-## Why this matters
+- Optimize for **single** or **multiple** objectives
+- Use built-in rewards like `energy_price`, `carbon_emissions`, `transmission_cost`
+- Create **custom rewards** easily
+- Combine multiple rewards with weights using `CompositeReward`
 
-Not all users have the same priorities:
 
-- **Cloud providers** might care about minimizing **energy price** and **resource efficiency**.
-- **Sustainability-focused** deployments may want to reduce **carbon emissions** or **energy consumption**.
-- Others may want to enforce strict **SLA guarantees**.
-
-With our modular system, you can **define custom reward combinations** that align with your specific optimization objectives.
-
----
-
-## ✅ Built-in Reward Functions
+## Built-in Reward Functions
 
 The following reward components are already available:
 
@@ -187,11 +228,12 @@ The following reward components are already available:
 | `sla_penalty`      | Penalizes number of SLA violations               | `penalty_per_violation`    |
 | `composite`        | Combines multiple reward components              | See below                  |
 
+
+👉 [See full reward documentation here »](rewards/README.md)
+
 ---
 
-## 🔧 Example: Composite Reward
-
-To combine multiple goals (e.g. cost, carbon, SLA), use `CompositeReward`:
+## 📊 Example Composite Reward
 
 ```python
 from rewards.predefined.composite_reward import CompositeReward
@@ -214,69 +256,56 @@ reward_fn = CompositeReward(
 )
 ```
 
-Then pass it to the environment:
-
-```python
-env = TaskSchedulingEnv(
-    cluster_manager=cluster_manager,
-    start_time=start_time,
-    end_time=end_time,
-    reward_fn=reward_fn
-)
-```
 
 ---
 
-## 📁 Reward Folder Structure
+## 🕒 SLA Modeling
 
-All reward logic lives under:
+GreenDCC includes built-in SLA (Service-Level Agreement) constraints to evaluate how well policies meet time-sensitive requirements.
 
-```
-rewards/
-├── base_reward.py               # Reward interface
-├── reward_registry.py           # Auto-registers reward classes
-├── registry_utils.py            # Registry implementation
-├── predefined/
-│   ├── energy_price_reward.py
-│   ├── carbon_emissions_reward.py
-│   ├── energy_consumption_reward.py
-│   ├── sla_penalty_reward.py
-│   ├── efficiency_reward.py
-│   └── composite_reward.py
-```
+Each task has a **deadline** computed as:
 
-Each reward is automatically registered using decorators like:
 
 ```python
-@register_reward("energy_price")
-class EnergyPriceReward(BaseReward):
-    ...
+SLA Deadline = task_start_time + SLA_FACTOR x task_duration
 ```
 
-This allows easy instantiation anywhere via:
+
+By default, `SLA_FACTOR = 1.2`, which means tasks are expected to finish **within 20% of their nominal runtime**.
+
+This approach is inspired by the methodology used in:
+
+> *Sustainable AIGC Workload Scheduling of Geo-Distributed Data Centers: A Multi-Agent Reinforcement Learning Approach*  
+> [https://arxiv.org/abs/2304.07948](https://arxiv.org/abs/2304.07948)
+
+In that paper, the authors simulate job slack times proportional to job duration — a structure also mirrored here.
+
+### SLA Violation Penalty
+
+You can include an `sla_penalty` reward to penalize missed deadlines:
 
 ```python
-from rewards.reward_registry import get_reward_function
-
-reward_fn = get_reward_function("energy_price", normalize_factor=100000)
+"sla_penalty": {
+    "weight": 0.2,
+    "args": {"penalty_per_violation": 5.0}
+}
 ```
+This allows policies to be evaluated based on both sustainability **and** reliability metrics.
+
 
 ---
 
-## ✍️ Custom Rewards
 
-You can add your own reward in `rewards/predefined/`:
+## Why this matters
 
-```python
-@register_reward("my_custom_reward")
-class MyReward(BaseReward):
-    def __call__(self, cluster_info, current_tasks, current_time):
-        ...
-```
+Not all users have the same priorities:
 
-It becomes available automatically via `get_reward_function("my_custom_reward")`.
+- **Cloud providers** might care about minimizing **energy price** and **resource efficiency**.
+- **Sustainability-focused** deployments may want to reduce **carbon emissions** or **energy consumption**.
+- Others may want to enforce strict **SLA guarantees**.
 
----
+With our modular system, you can **define custom reward combinations** that align with your specific optimization objectives.
+
 
 ## Evaluation Modes
 

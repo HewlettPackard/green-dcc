@@ -56,25 +56,26 @@ os.makedirs("logs", exist_ok=True)
 log_path = f"logs/train_{timestamp}.log"
 
 # === Root logger
-logger = None#logging.getLogger("train_logger")
-# logger.setLevel(logging.INFO)  # File handler will capture INFO+
+logger = None#
+logger = logging.getLogger("train_logger")
+logger.setLevel(logging.INFO)  # File handler will capture INFO+
 
-# # === File handler (full log)
-# file_handler = logging.FileHandler(log_path, mode="w")
-# file_handler.setLevel(logging.INFO)
-# file_handler.setFormatter(logging.Formatter(
-#     "%(asctime)s - %(levelname)s - %(message)s",
-#     datefmt="%Y-%m-%d %H:%M:%S"
-# ))
-# logger.addHandler(file_handler)
+# === File handler (full log)
+file_handler = logging.FileHandler(log_path, mode="w")
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter(
+    "%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+))
+logger.addHandler(file_handler)
 
-# # === Console handler (only warnings and errors)
-# console_handler = logging.StreamHandler()
-# console_handler.setLevel(logging.WARNING)  # Only show warnings+errors in terminal
-# console_handler.setFormatter(logging.Formatter(
-#     "[%(levelname)s] %(message)s"
-# ))
-# logger.addHandler(console_handler)
+# === Console handler (only warnings and errors)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.WARNING)  # Only show warnings+errors in terminal
+console_handler.setFormatter(logging.Formatter(
+    "[%(levelname)s] %(message)s"
+))
+logger.addHandler(console_handler)
 
 # === CONFIG ===
 GAMMA = 0.99
@@ -169,9 +170,10 @@ def make_env():
         tasks_file_path=tasks_file_path,
         shuffle_datacenter_order=False,  # shuffle only during training
         cloud_provider='gcp',
+        logger=logger,
     )
     
-    cluster_manager.logger = logger
+    # cluster_manager.logger = logger
 
     # === Wrap into Gym environment ===
     # reward_fn = EnergyPriceReward(normalize_factor=100000)
@@ -254,7 +256,7 @@ def train():
     # logger.info(f"Detected obs_dim={obs_dim}. Using max_tasks={max_tasks}.")
 
     # 3) Create actor & critic networks
-    hidden_dim = 64
+    hidden_dim = 16
     actor = ActorNet(obs_dim, env.num_dcs, hidden_dim=hidden_dim).to(DEVICE)
     critic = CriticNet(obs_dim, env.num_dcs, hidden_dim=hidden_dim).to(DEVICE)
     target_critic = CriticNet(obs_dim, env.num_dcs, hidden_dim=hidden_dim).to(DEVICE)

@@ -1,4 +1,6 @@
 import random
+import os
+import zipfile
 from collections import defaultdict
 from envs.sustaindc.sustaindc_env import SustainDC
 from utils.task_assignment_strategies import (distribute_most_available, distribute_random, distribute_priority_order,
@@ -9,107 +11,11 @@ from rl_components.task import Task
 
 from utils.transmission_cost_loader import load_transmission_matrix
 from utils.transmission_region_mapper import map_location_to_region
-
-def assign_task_origins(tasks, datacenter_configs, current_time_utc, logger=None):
-    """
-    Assigns an origin DC to each task based on population-weighted + time-zone-aware probability.
-
-    Args:
-        tasks (List[Task]): Tasks to assign origin DC.
-        datacenter_configs (List[dict]): DC configurations.
-        current_time_utc (datetime): Current simulation time in UTC.
-        logger (logging.Logger or None): Optional logger for debug statements.
-    """
-    def compute_activity_score(local_hour):
-        return 1.0 if 8 <= local_hour < 20 else 0.3  # Business hours: high score; otherwise low score
-
-    scores = {}
-    for config in datacenter_configs:
-        dc_id = config['dc_id']
-        # Retrieve the population weight from the config; default to 0.1 if not provided.
-        pop_weight = config.get('population_weight', 0.1)
-        timezone_shift = config.get('timezone_shift', 0)
-        tz_hour = (current_time_utc + pd.Timedelta(hours=timezone_shift)).hour
-        time_score = compute_activity_score(tz_hour)
-        scores[dc_id] = pop_weight * time_score
-
-    total_score = sum(scores.values())
-    probabilities = {dc_id: (score / total_score) for dc_id, score in scores.items()}
-    dc_ids = list(probabilities.keys())
-    probs = list(probabilities.values())
-
-    for task in tasks:
-        chosen_origin = int(np.random.choice(dc_ids, p=probs))
-        task.origin_dc_id = chosen_origin
-        # if logger:
-            # logger.info(f"   assign_task_origins: Set origin DC{chosen_origin} for task {task.job_name}.")
-
-
-def extract_tasks_from_row(row, scale=1, datacenter_configs=None, current_time_utc=None, logger=None):
-    """
-    Convert a row from task_df into a list of Task objects, scaling the number of tasks if needed.
-
-    Args:
-        row (pd.Series): A row from task_df containing 'tasks_matrix'.
-        scale (int): Scaling factor for task duplication.
-        datacenter_configs (List[dict]): DC configurations for assigning task origins.
-        current_time_utc (datetime): Current simulation time in UTC.
-        logger (logging.Logger or None): Optional logger for debug statements.
-
-    Returns:
-        List[Task]: A list of Task objects extracted and scaled from the row.
-    """
-    tasks = []
-    for task_data in row['tasks_matrix']:
-        job_name = task_data[0]
-        arrival_time = current_time_utc  # Task arrival time
-        duration = float(task_data[4])
-        cpu_req = float(task_data[5]) / 100.0   # Convert percentage to CPU cores.
-        gpu_req = float(task_data[6]) / 100.0   # Convert percentage to fraction of GPUs count.
-        mem_req = float(task_data[7])           # Memory in GB
-        bandwidth_gb = float(task_data[8])      # Bandwidth in GB
-
-        # Create the base task
-        task = Task(job_name, arrival_time, duration, cpu_req, gpu_req, mem_req, bandwidth_gb)
-        tasks.append(task)
-
-        # Scale the number of tasks
-        for i in range(scale - 1):
-            # Introduce random variation in CPU, GPU, Memory, and Bandwidth requirements
-            varied_cpu = max(0.5, cpu_req * np.random.uniform(0.8, 1.2))  # ±20% variation
-            varied_gpu = max(0.0, gpu_req * np.random.uniform(0.8, 1.2))  # Ensure GPU usage isn't negative
-            varied_mem = max(0.5, mem_req * np.random.uniform(0.8, 1.2))
-            varied_bw = max(0.1, bandwidth_gb * np.random.uniform(0.8, 1.2))
-
-            # Create new task with variations
-            new_task = Task(
-                f"{job_name}_scaled_{i}",
-                arrival_time,
-                duration,
-                varied_cpu,
-                varied_gpu,
-                varied_mem,
-                varied_bw
-            )
-            tasks.append(new_task)
-
-    # Assign origin datacenter
-    if datacenter_configs and current_time_utc:
-        # We'll pass in the same logger for debug prints
-        assign_task_origins(tasks, datacenter_configs, current_time_utc, logger=logger)
-
-    if logger:
-        logger.info(f"extract_tasks_from_row: Created {len(tasks)} tasks at time {current_time_utc}.")
-        for idx, t in enumerate(tasks):
-            logger.info(f"   Task[{idx}]: {t.job_name}, origin=DC{t.origin_dc_id}, "
-                        f"cpu={t.cpu_req:.2f}, gpu={t.gpu_req:.2f}, mem={t.mem_req:.2f}, "
-                        f"bandwidth={t.bandwidth_gb:.2f}, dur={t.duration:.2f}")
-
-    return tasks
+from utils.workload_utils import assign_task_origins, extract_tasks_from_row
 
 class DatacenterClusterManager:
     def __init__(self, config_list, simulation_year, init_day, init_hour, strategy="priority_order", 
-                 tasks_file_path=None, shuffle_datacenter_order=True, cloud_provider="gcp"):
+                 tasks_file_path=None, shuffle_datacenter_order=True, cloud_provider="gcp", logger=None):
         """
         Initializes multiple datacenters using SustainDC and loads tasks.
 
@@ -135,16 +41,17 @@ class DatacenterClusterManager:
         
         self.cloud_provider = cloud_provider
         self.transmission_matrix = load_transmission_matrix(cloud_provider)
+        self.logger = logger
 
         # Load tasks if a file path is provided; otherwise, self.tasks remains None
+        # Load tasks with fallback unzip logic
         if tasks_file_path:
-            self.tasks = pd.read_pickle(tasks_file_path)
-            # Convert the timestamp to UTC (if needed)
-            self.tasks['interval_15m'] = self.tasks['interval_15m'].dt.tz_convert('UTC')
+            self.tasks = self._load_or_extract_tasks_file(tasks_file_path)
         else:
-            # Raise an error if no file path is provided
             raise ValueError("No tasks file path provided. Please provide a valid path to the tasks pickle file.")
 
+
+        # Strategies for RBC task assignment
         self.strategy = strategy
         self.strategy_map = {
             "most_available": distribute_most_available,
@@ -366,3 +273,30 @@ class DatacenterClusterManager:
 
     def get_config_list(self):
         return [dc.env_config for dc in self.datacenters.values()]
+
+    def _load_or_extract_tasks_file(self, tasks_file_path: str) -> pd.DataFrame:
+        if os.path.exists(tasks_file_path):
+            if hasattr(self, "logger") and self.logger:
+                self.logger.info(f"Loading workload from: {tasks_file_path}")
+            df = pd.read_pickle(tasks_file_path)
+        else:
+            zip_path = tasks_file_path.replace(".pkl", ".zip")
+            if os.path.exists(zip_path):
+                if hasattr(self, "logger") and self.logger:
+                    self.logger.info(f"Workload .pkl not found. Extracting zip: {zip_path}")
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(os.path.dirname(tasks_file_path))
+
+                if not os.path.exists(tasks_file_path):
+                    raise FileNotFoundError(f"Unzipped file not found: {tasks_file_path}")
+
+                df = pd.read_pickle(tasks_file_path)
+            else:
+                raise FileNotFoundError(
+                    f"Workload file not found: {tasks_file_path} or zip version: {zip_path}"
+                )
+
+        # Ensure timestamps are in UTC
+        df['interval_15m'] = df['interval_15m'].dt.tz_convert('UTC')
+        return df
+
