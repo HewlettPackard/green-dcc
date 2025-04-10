@@ -19,7 +19,7 @@ class TaskSchedulingEnv(gym.Env):
         self.writer = writer
 
         self.pending_tasks = []
-        self.delayed_task_buffer = []
+        self.deferred_tasks = []
 
         self.current_task = None
         self.global_step = 0  # Used to track time for TensorBoard logs
@@ -78,7 +78,7 @@ class TaskSchedulingEnv(gym.Env):
             
             # === Temporal deferral ===
             if action == 0:
-                self.delayed_task_buffer.append(task)
+                self.deferred_tasks.append(task)
                 task.temporarily_deferred = True
                 if self.logger:
                     self.logger.info(f"[{self.current_time}] Task {task.job_name} deferred in time (not assigned).")
@@ -144,8 +144,8 @@ class TaskSchedulingEnv(gym.Env):
     def _load_new_tasks(self):
         """Load tasks for the current time step."""
         
-        self.current_tasks = self.delayed_task_buffer  # first pick leftovers
-        self.delayed_task_buffer = []
+        self.current_tasks = self.deferred_tasks  # first pick leftovers
+        self.deferred_tasks = []
         # Only load tasks manually if using RL agent
         if self.cluster_manager.strategy == "manual_rl":
             new_tasks = self.cluster_manager.get_tasks_for_timestep(self.current_time)
@@ -206,13 +206,13 @@ class TaskSchedulingEnv(gym.Env):
                 float(dc.price_manager.get_current_price())/100,       # energy price
             ])
 
-        flat_dc_info = [value for dc_info in dc_infos for value in dc_info]
+        dc_state_features = [value for dc_info in dc_infos for value in dc_info]
 
         # === Step 5: Build observation per task ===
         for task in self.current_tasks:
             time_to_deadline = max(0.0, (task.sla_deadline - self.current_time).total_seconds() / 60.0)
 
-            task_vec = [
+            task_features = [
                 task.origin_dc_id,
                 task.cpu_req,
                 task.duration,
@@ -221,8 +221,8 @@ class TaskSchedulingEnv(gym.Env):
 
             full_obs = (
                 [day_sin, day_cos, hour_sin, hour_cos] +
-                task_vec +
-                flat_dc_info
+                task_features +
+                dc_state_features
             )
             obs.append(full_obs)
 

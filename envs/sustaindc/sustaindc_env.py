@@ -17,7 +17,8 @@ from utils.utils_cf import get_energy_variables, get_init_day, obtain_paths
 
 from ..env_config import EnvConfig
 
-MAX_WAIT_INTERVALS = 60*24 # NUMS OF TIME INTERVALS (15 MINUTES)
+MAX_WAIT_TIMESTEPS = 4 * 8  # 8 hours, with 15-minute intervals = 32 timesteps
+
 class SustainDC(gym.Env):
     def __init__(self, env_config):
         '''
@@ -44,7 +45,6 @@ class SustainDC(gym.Env):
         
         self.ci_file = env_config['cintensity_file']
         self.weather_file = env_config['weather_file']
-        self.workload_file = env_config['workload_file']
         
         self.max_bat_cap_Mw = env_config['max_bat_cap_Mw']
         
@@ -185,9 +185,9 @@ class SustainDC(gym.Env):
             return True
         else:
             # **Task couldn't be scheduled - track wait time**
-            task.increment_wait_time()
-            if task.wait_time > MAX_WAIT_INTERVALS:
-                log_warn(f"[{current_time}] Task {task.job_name} dropped after waiting too long.")
+            task.increment_wait_intervals()
+            if task.wait_intervals > MAX_WAIT_INTERVALS:
+                log_warn(f"[{current_time}] Task {task.job_name} dropped after waiting too long. IGNORED")
                 # Simulating the drop by not re-adding the task to the pending queue
             else:
                 self.pending_tasks.append(task)  # Re-add task to queue for next cycle (The task is added to the end of the queue [right side])

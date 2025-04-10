@@ -118,7 +118,7 @@ def make_env():
         {
             'location': 'US-NY-NYIS', 'dc_id': 1, 'agents': [], 'timezone_shift': -5,
             'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv', 'month': simulated_month,
+            'month': simulated_month,
             'datacenter_capacity_mw': 1.5, 'max_bat_cap_Mw': 3.0, 'days_per_episode': 30,
             'network_cost_per_gb': 0.08, 'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.25,
@@ -126,7 +126,7 @@ def make_env():
         {
             'location': 'DE-LU', 'dc_id': 2, 'agents': [], 'timezone_shift': 1,
             'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv', 'month': simulated_month,
+            'month': simulated_month,
             'datacenter_capacity_mw': 1.2, 'max_bat_cap_Mw': 2.5, 'days_per_episode': 30,
             'network_cost_per_gb': 0.07, 'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.22,
@@ -134,7 +134,7 @@ def make_env():
         {
             'location': 'ZA', 'dc_id': 3, 'agents': [], 'timezone_shift': 2,
             'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv', 'month': simulated_month,
+            'month': simulated_month,
             'datacenter_capacity_mw': 1.0, 'max_bat_cap_Mw': 2.0, 'days_per_episode': 30,
             'network_cost_per_gb': 0.06, 'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.13,
@@ -142,7 +142,7 @@ def make_env():
         {
             'location': 'SG', 'dc_id': 4, 'agents': [], 'timezone_shift': 8,
             'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv', 'month': simulated_month,
+            'month': simulated_month,
             'datacenter_capacity_mw': 1.8, 'max_bat_cap_Mw': 3.5, 'days_per_episode': 30,
             'network_cost_per_gb': 0.09, 'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.25,
@@ -150,7 +150,7 @@ def make_env():
         {
             'location': 'AU-NSW', 'dc_id': 5, 'agents': [], 'timezone_shift': 11,
             'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'workload_file': 'Alibaba_CPU_Data_Hourly_1.csv', 'month': simulated_month,
+            'month': simulated_month,
             'datacenter_capacity_mw': 1.4, 'max_bat_cap_Mw': 2.8, 'days_per_episode': 30,
             'network_cost_per_gb': 0.10, 'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.15,

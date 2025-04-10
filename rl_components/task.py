@@ -3,27 +3,34 @@ from typing import Optional, Any
 import random
 import pandas as pd
 
-SLA_FACTOR = 1.2  # e.g., SLA is 20% longer than duration
-
 class Task:
     """
     Represents a computing task in a datacenter scheduling system.
+    
+    Each task is assigned resource requirements, timing attributes, and an SLA deadline.
+    Tasks can be deferred if they are not immediately scheduled, and they are tracked until
+    they complete execution.
 
     Attributes:
-        job_name (str): Unique identifier or name of the job.
-        arrival_time (datetime): The timestamp when the task enters the system.
-        duration (float): Execution time required for the task (in minutes).
+        job_name (str): Unique identifier for the task.
+        arrival_time (datetime): Timestamp when the task enters the system.
+        duration (float): Required execution time (in minutes).
         cpu_req (float): Number of CPU cores required.
         gpu_req (float): Number of GPU units required.
         mem_req (float): Memory required (in GB).
         bandwidth_gb (float): Bandwidth required (in GB).
-        start_time (Optional[datetime]): Timestamp when the task starts execution (None if not started).
-        finish_time (Optional[datetime]): Expected completion time of the task (None if not scheduled).
-        wait_time (int): Time the task has spent waiting in the queue (in steps).
-        origin_dc_id (Optional[int]): ID of the data center where the task originated.
-        extra_info (Optional[Any]): Additional metadata related to the task.
+        start_time (Optional[datetime]): When the task begins execution.
+        finish_time (Optional[datetime]): Expected completion time post-scheduling.
+        sla_deadline (datetime): Deadline computed as `arrival_time + sla_multiplier * duration`.
+        sla_met (bool): Indicator whether the task met its SLA.
+        wait_intervals (int): Timestep counter for how long the task has been waiting.
+        origin_dc_id (Optional[int]): ID of the datacenter where the task originated.
+        dest_dc_id (Optional[int]): ID of the assigned destination datacenter.
+        dest_dc (Optional[Any]): Reference to the destination datacenter.
+        temporarily_deferred (bool): Flag indicating if the task is deferred for later assignment.
+        sla_multiplier (int): Multiplier for SLA deadline calculation.
     """
-
+    
     def __init__(
         self,
         job_name: str,
@@ -33,23 +40,10 @@ class Task:
         gpu_req: float,
         mem_req: float,
         bandwidth_gb: float,
-        extra_info: Optional[Any] = None,
-        origin_dc_id: Optional[int] = None
+        origin_dc_id: Optional[int] = None,
+        sla_multiplier: float = 1.2  # Default SLA multiplier
     ) -> None:
-        """
-        Initializes a new task with required computing resources.
-
-        Args:
-            job_name (str): Unique identifier or name of the job.
-            arrival_time (datetime): Timestamp when the task enters the system.
-            duration (float): Execution time required for the task (in minutes).
-            cpu_req (float): Number of CPU cores required.
-            gpu_req (float): Number of GPU units required.
-            mem_req (float): Memory required (in GB).
-            bandwidth_gb (float): Bandwidth required (in GB).
-            extra_info (Optional[Any]): Additional metadata related to the task (default: None).
-            origin_dc_id (Optional[int]): ID of the data center where the task originated (default: None).
-        """
+        # Initialize task properties
         self.job_name = job_name
         self.arrival_time = arrival_time
         self.duration = duration
@@ -57,20 +51,31 @@ class Task:
         self.gpu_req = gpu_req
         self.mem_req = mem_req
         self.bandwidth_gb = bandwidth_gb
-        self.start_time: Optional[datetime] = None  # Set when task starts execution
-        self.finish_time: Optional[datetime] = None  # Set when task is scheduled
-        self.sla_deadline = arrival_time + pd.Timedelta(minutes=SLA_FACTOR * duration)
-        self.sla_met = False  # Indicates if the SLA was met
-        self.wait_time: int = 0  # Tracks time the task spends in the queue
-        self.extra_info = extra_info  # Optional metadata for extended functionality
-        self.origin_dc_id = origin_dc_id  # ID of the data center where the task originated
-        self.dest_dc_id: Optional[int] = None  # ID of the data center where the task is sent
-        self.dest_dc: Optional[int] = None
-        self.temporarily_deferred = False  # Indicates task is waiting for assignment
-
         
-        # Append to the job_name a random number to make it unique
-        self.job_name += f"_{(random.randint(0, 10000))}"
+        # Timing properties: to be set upon scheduling by the global scheduler
+        self.start_time: Optional[datetime] = None
+        self.finish_time: Optional[datetime] = None
+        
+        # Compute the SLA deadline based on a fixed factor
+        self.sla_multiplier = sla_multiplier
+        self.sla_deadline = arrival_time + pd.Timedelta(minutes=self.sla_multiplier * duration)
+        self.sla_met = False
+        
+        # Initialize wait time counter
+        self.wait_intervals: int = 0
+        
+        # Record the origin datacenter
+        self.origin_dc_id = origin_dc_id
+        
+        # Destination information will be assigned when the task is routed
+        self.dest_dc_id: Optional[int] = None
+        self.dest_dc: Optional[Any] = None
+        
+        # Flag to indicate if the task is deferred for future scheduling
+        self.temporarily_deferred = False
+        
+        # Ensure unique identification by appending a random number
+        self.job_name += f"_{random.randint(0, 10000)}"
 
     def __repr__(self) -> str:
         """
@@ -83,15 +88,22 @@ class Task:
             f"Task(job_name='{self.job_name}', arrival_time={self.arrival_time}, "
             f"duration={self.duration}, cpu_req={self.cpu_req}, gpu_req={self.gpu_req}, "
             f"mem_req={self.mem_req}, bandwidth_gb={self.bandwidth_gb}, start_time={self.start_time}, "
-            f"finish_time={self.finish_time}, wait_time={self.wait_time}, origin_dc_id={self.origin_dc_id})"
+            f"finish_time={self.finish_time}, wait_intervals={self.wait_intervals}, origin_dc_id={self.origin_dc_id})"
         )
 
-    def increment_wait_time(self) -> None:
-        """ Increments the wait time counter when the task remains in the queue. """
-        self.wait_time += 1
+    def increment_wait_intervals(self) -> None:
+        """
+        Increments the wait time counter by 1 timestep.
+        """
+        self.wait_intervals += 1
 
     def is_scheduled(self) -> bool:
-        """ Checks if the task has been scheduled (i.e., has a start time). """
+        """
+        Checks if the task has been scheduled (i.e., if a start time is defined).
+
+        Returns:
+            bool: True if scheduled, False otherwise.
+        """
         return self.start_time is not None
 
     def is_completed(self, current_time: datetime) -> bool:

@@ -99,6 +99,39 @@ Each DC: local environment with
 - Scheduling queue
 
 ---
+## 🧠 Action Space: How the Agent Makes Decisions
+
+In this benchmark, at every decision step, the agent (**Global Scheduler**) is presented with a list of pending tasks. It must decide, for each task, what to do next.
+
+The **action space** is defined as:
+
+```python
+action ∈ {0, 1, 2, ..., N}
+```
+
+Where:
+- **N** is the total number of datacenters in the simulation (e.g., 5).
+- The **action** is an integer that represents the decision for a given task.
+
+### What Each Action Means
+
+| Action Value | Meaning |
+|--------------|---------|
+| `0`          | **Defer the task**: Temporarily hold the task to be reconsidered in the next time step. This allows the agent to wait for better scheduling conditions (e.g., cheaper, greener, or less loaded datacenter). |
+| `1` to `N`   | **Assign to datacenter `i`**: Send the task to the selected datacenter (e.g., `1 = DC1`, `2 = DC2`, ...). The task will enter that datacenter’s scheduling queue and execute when resources are available. |
+
+### Why Deferring Matters
+
+Deferring (action `0`) enables **temporal flexibility**. It gives the agent an option to wait for:
+- **Lower carbon intensity**
+- **Cheaper electricity prices**
+- **Higher resource availability**
+
+However, every task has a **deadline (SLA)**. If it waits too long, it will **violate the SLA** and may incur a penalty.
+
+This flexible action space supports **more intelligent and sustainability-aware scheduling strategies**.
+
+---
 
 ## Supported Locations
 
@@ -292,10 +325,6 @@ You can include an `sla_penalty` reward to penalize missed deadlines:
 ```
 This allows policies to be evaluated based on both sustainability **and** reliability metrics.
 
-
----
-
-
 ## Why this matters
 
 Not all users have the same priorities:
@@ -305,9 +334,66 @@ Not all users have the same priorities:
 - Others may want to enforce strict **SLA guarantees**.
 
 With our modular system, you can **define custom reward combinations** that align with your specific optimization objectives.
+This flexibility allows you to tailor the training process to your unique needs, whether you're focused on cost, carbon emissions, etc. or a combination of multiple factors.
+
+---
+
+## Installation
+### Requirements
+```bash
+pip install -r requirements.txt
+```
+### Environment Setup
+```bash
+conda create -n green-dcc python=3.10
+conda activate green-dcc
+pip install -r requirements.txt
+```
+
+---
+
+## Training the RL Agent
+### Training using SAC
+```bash
+python train_rl_agent.py
+```
+
+## 📈 Tracking Training with TensorBoard
+
+GreenDCC logs all major training metrics to **TensorBoard**, including:
+
+- Total and per-step rewards
+- Actor policy entropy
+- Q-value estimates and loss
+- Policy gradients and loss
+- Reward component breakdowns (for composite rewards)
+
+### 🏁 How to Launch
+
+From the root directory:
+
+```bash
+tensorboard --logdir runs/
+```
+
+Then navigate to:
+
+👉 http://localhost:6006
+
+Each run logs to:
+
+```
+runs/train_<timestamp>/
+```
+
+You can compare multiple runs simultaneously for performance diagnostics or ablations.
+
+---
 
 
-## Evaluation Modes
+## Evaluation
+
+### Evaluation using Rule-based Controllers or RL Agents
 
 You can evaluate different controllers by plugging them into the DatacenterClusterManager. Available strategies:
 
@@ -318,6 +404,15 @@ You can evaluate different controllers by plugging them into the DatacenterClust
 - lowest_carbon
 - lowest_price
 - manual_rl (custom RL policy)
+
+To run the evaluation, take a look to:
+
+```bash
+python eval_agent_notebook.py
+```
+This will run a simulation for 7 days and compare the performance of the selected controller against a rule-based controller.
+You need to specify the controller you want to evaluate in the `controller` variable.
+Also you need to specify the checkpoint if using a RL agent.
 
 ---
 

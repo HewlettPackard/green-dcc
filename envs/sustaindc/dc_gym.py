@@ -43,7 +43,8 @@ class dc_gymenv(gym.Env):
             episode_length_in_time (pd.Timedelta, optional): The maximum length after which the done flag should be True. Defaults to None. 
                                                             Setting none causes done to be True after data set is exausted.
         """
-        
+        super().__init__()
+
         self.observation_variables = observation_variables
         self.observation_space = observation_space
         self.action_variables = action_variables
@@ -86,37 +87,36 @@ class dc_gymenv(gym.Env):
         self.power_lb_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][0] + self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]) / 1e3
         self.power_ub_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1] + self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1]) / 1e3
         
-        super().__init__()
     
-    def release_resources(self, current_time):
-        """
-        Releases resources from completed tasks.
-        """
-        finished_tasks = [task for task in self.running_tasks if task.finish_time <= current_time]
-        for task in finished_tasks:
-            self.available_cpu += task.cpu_req
-            self.available_gpu += task.gpu_req
-            self.available_mem += task.mem_req
-        self.running_tasks = [task for task in self.running_tasks if task.finish_time > current_time]
+    # def release_resources(self, current_time):
+    #     """
+    #     Releases resources from completed tasks.
+    #     """
+    #     finished_tasks = [task for task in self.running_tasks if task.finish_time <= current_time]
+    #     for task in finished_tasks:
+    #         self.available_cpu += task.cpu_req
+    #         self.available_gpu += task.gpu_req
+    #         self.available_mem += task.mem_req
+    #     self.running_tasks = [task for task in self.running_tasks if task.finish_time > current_time]
 
-    def can_schedule(self, task):
-        return task.cpu_req <= self.available_cpu and task.gpu_req <= self.available_gpu and task.mem_req <= self.available_mem
+    # def can_schedule(self, task):
+    #     return task.cpu_req <= self.available_cpu and task.gpu_req <= self.available_gpu and task.mem_req <= self.available_mem
 
-    def schedule_task(self, task, current_time):
-        """
-        Tries to schedule a task in this datacenter.
-        """
-        if self.can_schedule(task):
-            self.available_cpu -= task.cpu_req
-            self.available_gpu -= task.gpu_req
-            self.available_mem -= task.mem_req
-            task.start_time = current_time
-            task.finish_time = current_time + pd.Timedelta(minutes=task.duration)
-            self.running_tasks.append(task)
-            return True
-        else:
-            self.pending_tasks.append(task)
-            return False
+    # def schedule_task(self, task, current_time):
+    #     """
+    #     Tries to schedule a task in this datacenter.
+    #     """
+    #     if self.can_schedule(task):
+    #         self.available_cpu -= task.cpu_req
+    #         self.available_gpu -= task.gpu_req
+    #         self.available_mem -= task.mem_req
+    #         task.start_time = current_time
+    #         task.finish_time = current_time + pd.Timedelta(minutes=task.duration)
+    #         self.running_tasks.append(task)
+    #         return True
+    #     else:
+    #         self.pending_tasks.append(task)
+    #         return False
         
     def reset(self, *, seed=None, options=None):
 
