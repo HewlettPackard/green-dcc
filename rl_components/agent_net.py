@@ -36,10 +36,14 @@ class CriticNet(nn.Module):
         self.q1 = nn.Sequential(
             nn.Linear(obs_dim, hidden_dim),
             nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
             nn.Linear(hidden_dim, act_dim)
         )
         self.q2 = nn.Sequential(
             nn.Linear(obs_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, act_dim)
         )
@@ -51,6 +55,8 @@ class CriticNet(nn.Module):
         """
         q1_all = self.q1(obs_batch)  # [T, act_dim]
         q2_all = self.q2(obs_batch)  # [T, act_dim]
+        
+        assert ((actions >= 0) & (actions < q1_all.shape[1])).all(), "Action index out of bounds"
 
         q1 = q1_all.gather(1, actions.unsqueeze(-1)).squeeze(-1)  # [T]
         q2 = q2_all.gather(1, actions.unsqueeze(-1)).squeeze(-1)  # [T]

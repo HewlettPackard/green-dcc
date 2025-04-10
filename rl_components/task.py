@@ -66,6 +66,8 @@ class Task:
         self.origin_dc_id = origin_dc_id  # ID of the data center where the task originated
         self.dest_dc_id: Optional[int] = None  # ID of the data center where the task is sent
         self.dest_dc: Optional[int] = None
+        self.temporarily_deferred = False  # Indicates task is waiting for assignment
+
         
         # Append to the job_name a random number to make it unique
         self.job_name += f"_{(random.randint(0, 10000))}"

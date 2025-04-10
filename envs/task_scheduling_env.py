@@ -1,7 +1,8 @@
-import gymnasium as gym
 import numpy as np
-from gymnasium import spaces
 import pandas as pd
+from datetime import datetime
+import gymnasium as gym
+from gymnasium import spaces
 from rewards.base_reward import BaseReward
 from torch.utils.tensorboard import SummaryWriter  # if not already imported
 
@@ -18,12 +19,17 @@ class TaskSchedulingEnv(gym.Env):
         self.writer = writer
 
         self.pending_tasks = []
+        self.delayed_task_buffer = []
+
         self.current_task = None
         self.global_step = 0  # Used to track time for TensorBoard logs
 
         # Set dynamically based on number of DCs
         self.num_dcs = len(self.cluster_manager.datacenters)
-        obs_dim = 3+5*self.num_dcs + self.num_dcs # 1 for task origin DC + 4 features per datacenter + One hot for cheapest DC
+        
+        # Observation space: [4 sin/cos features, 4 task features features, 5 * num_dcs task features]
+        obs_dim = 4 + 4 + 5 * self.num_dcs
+
         self.observation_space = spaces.Box(
             low=0,
             high=np.inf,
@@ -58,7 +64,28 @@ class TaskSchedulingEnv(gym.Env):
 
         # === Route each task to its assigned destination DC ===
         for task, action in zip(self.current_tasks, actions):
-            dest_dc = dc_list[action]
+            
+            # Check if the task has exceeded its SLA deadline
+            if self.current_time > task.sla_deadline:
+                # Enforce computation at origin datacenter
+                origin_dc = next(dc for dc in self.cluster_manager.datacenters.values() if dc.dc_id == task.origin_dc_id)
+                origin_dc.pending_tasks.append(task)
+                task.dest_dc_id = origin_dc.dc_id
+                task.dest_dc = origin_dc
+                if self.logger:
+                    self.logger.info(f"[{self.current_time}] Task {task.job_name} exceeded SLA deadline. Forced to origin DC{origin_dc.dc_id}.")
+                continue
+            
+            # === Temporal deferral ===
+            if action == 0:
+                self.delayed_task_buffer.append(task)
+                task.temporarily_deferred = True
+                if self.logger:
+                    self.logger.info(f"[{self.current_time}] Task {task.job_name} deferred in time (not assigned).")
+                continue
+            
+            # === Geographical routing ===
+            dest_dc = dc_list[action - 1]  # Now action ∈ [1..num_dcs]
             dest_dc.pending_tasks.append(task)
             # Assign the destination to the task info
             task.dest_dc_id = dest_dc.dc_id
@@ -116,12 +143,15 @@ class TaskSchedulingEnv(gym.Env):
 
     def _load_new_tasks(self):
         """Load tasks for the current time step."""
-
+        
+        self.current_tasks = self.delayed_task_buffer  # first pick leftovers
+        self.delayed_task_buffer = []
         # Only load tasks manually if using RL agent
         if self.cluster_manager.strategy == "manual_rl":
-            self.current_tasks = self.cluster_manager.get_tasks_for_timestep(self.current_time)
+            new_tasks = self.cluster_manager.get_tasks_for_timestep(self.current_time)
+            self.current_tasks += new_tasks
             if self.logger:
-                self.logger.info(f"[{self.current_time}] Loaded {len(self.current_tasks)} tasks to use RL agent")
+                self.logger.info(f"[{self.current_time}] Loaded {len(new_tasks)} new tasks + {len(self.current_tasks) - len(new_tasks)} total.")
         else:
             # RBC loads and handles tasks internally
             self.current_tasks = []
@@ -142,7 +172,17 @@ class TaskSchedulingEnv(gym.Env):
     def _get_obs(self):
         obs = []
         dc_infos = []
-        # # === Step 1: Extract current prices ===
+
+        # === Step 1: Time encoding (sine/cosine of day of year and hour) ===
+        day_of_year = self.current_time.dayofyear
+        hour_of_day = self.current_time.hour + self.current_time.minute / 60.0
+
+        day_sin = np.sin(2 * np.pi * day_of_year / 365.0)
+        day_cos = np.cos(2 * np.pi * day_of_year / 365.0)
+        hour_sin = np.sin(2 * np.pi * hour_of_day / 24.0)
+        hour_cos = np.cos(2 * np.pi * hour_of_day / 24.0)
+
+        # === Step 2: Extract current prices ===
         prices = []
         for dc in self.cluster_manager.datacenters.values():
             price = float(dc.price_manager.get_current_price()) / 100  # Normalize
@@ -151,56 +191,43 @@ class TaskSchedulingEnv(gym.Env):
         prices = np.array(prices, dtype=np.float32)
         num_dcs = len(prices)
 
-        # === Step 2: One-hot encode the cheapest DC ===
-        cheapest_idx = int(np.argmin(prices))
-        one_hot_cheapest = np.zeros(num_dcs, dtype=np.float32)
-        one_hot_cheapest[cheapest_idx] = 1.0
+        # === Step 3: One-hot encode the cheapest DC ===
+        # cheapest_idx = int(np.argmin(prices))
+        # one_hot_cheapest = np.zeros(num_dcs, dtype=np.float32)
+        # one_hot_cheapest[cheapest_idx] = 1.0
 
-        # # === Step 3: Relative price differences ===
-        # price_diffs = prices - prices[cheapest_idx]
-
-        # # === Step 4: Build observation per task ===
-        # for task in self.current_tasks:
-        #     task_vec = [task.origin_dc_id]  # You can add more task-level features here
-
-        #     full_obs = (
-        #         prices.tolist() +                 # [DC1_price, DC2_price, DC3_price]
-        #         one_hot_cheapest.tolist() +       # [0, 1, 0]
-        #         price_diffs.tolist()              # [Δprice_1, Δprice_2, Δprice_3]
-        #     )
-
-        #     # print(f"Task {task.job_name} observation: {full_obs}")
-        #     obs.append(full_obs)
-        
-
-        # Extract datacenter states (same for all tasks in the step)
+        # === Step 4: Extract DC resource and sustainability info ===
         for dc in self.cluster_manager.datacenters.values():
             dc_infos.append([
                 dc.available_cpus / dc.total_cpus,
                 dc.available_gpus / dc.total_gpus,
                 dc.available_mem / dc.total_mem,
                 float(dc.ci_manager.get_current_ci(norm=False)/1000),  # carbon intensity
-                float(dc.price_manager.get_current_price())/100,  # energy price
+                float(dc.price_manager.get_current_price())/100,       # energy price
             ])
 
-        # Flatten all DC features into one list
         flat_dc_info = [value for dc_info in dc_infos for value in dc_info]
 
+        # === Step 5: Build observation per task ===
         for task in self.current_tasks:
+            time_to_deadline = max(0.0, (task.sla_deadline - self.current_time).total_seconds() / 60.0)
+
             task_vec = [
                 task.origin_dc_id,
                 task.cpu_req,
-                # task.gpu_req,
-                # task.mem_req,
                 task.duration,
-                # task.bandwidth_gb,
+                time_to_deadline
             ]
-            obs.append(task_vec + flat_dc_info + one_hot_cheapest.tolist())
 
-        # Print a warning if the observation len is higher tan 32 tasks
-        # if len(obs) > 200:
-            # print(f"Warning: Observation length exceeds 200 tasks. Current length: {len(obs)}")
+            full_obs = (
+                [day_sin, day_cos, hour_sin, hour_cos] +
+                task_vec +
+                flat_dc_info
+            )
+            obs.append(full_obs)
+
         return obs
+
 
 
     def render(self):

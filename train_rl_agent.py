@@ -6,7 +6,7 @@ from tqdm import trange
 
 from envs.task_scheduling_env import TaskSchedulingEnv
 from rl_components.agent_net import ActorNet, CriticNet
-from rl_components.replay_buffer import ReplayBuffer
+from rl_components.replay_buffer import ReplayBuffer, FastReplayBuffer
 from rl_components.replay_buffer import PrioritizedReplayBuffer
 from rewards.predefined.energy_price_reward import EnergyPriceReward
 from rewards.predefined.composite_reward import CompositeReward
@@ -57,25 +57,25 @@ log_path = f"logs/train_{timestamp}.log"
 
 # === Root logger
 logger = None#
-logger = logging.getLogger("train_logger")
-logger.setLevel(logging.INFO)  # File handler will capture INFO+
+# logger = logging.getLogger("train_logger")
+# logger.setLevel(logging.INFO)  # File handler will capture INFO+
 
-# === File handler (full log)
-file_handler = logging.FileHandler(log_path, mode="w")
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter(
-    "%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-))
-logger.addHandler(file_handler)
+# # === File handler (full log)
+# file_handler = logging.FileHandler(log_path, mode="w")
+# file_handler.setLevel(logging.INFO)
+# file_handler.setFormatter(logging.Formatter(
+#     "%(asctime)s - %(levelname)s - %(message)s",
+#     datefmt="%Y-%m-%d %H:%M:%S"
+# ))
+# logger.addHandler(file_handler)
 
-# === Console handler (only warnings and errors)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.WARNING)  # Only show warnings+errors in terminal
-console_handler.setFormatter(logging.Formatter(
-    "[%(levelname)s] %(message)s"
-))
-logger.addHandler(console_handler)
+# # === Console handler (only warnings and errors)
+# console_handler = logging.StreamHandler()
+# console_handler.setLevel(logging.WARNING)  # Only show warnings+errors in terminal
+# console_handler.setFormatter(logging.Formatter(
+#     "[%(levelname)s] %(message)s"
+# ))
+# logger.addHandler(console_handler)
 
 # === CONFIG ===
 GAMMA = 0.99
@@ -83,8 +83,8 @@ ALPHA = 0.01
 LR = 1e-4
 BATCH_SIZE = 512
 TAU = 0.005
-REPLAY_SIZE = 1_000_000
-WARMUP_STEPS = 1_000
+REPLAY_SIZE = int(1e5)
+WARMUP_STEPS = 1000
 TOTAL_STEPS = int(1e7)
 UPDATE_FREQ = 1
 POLICY_UPDATE_FREQ = 2
@@ -250,23 +250,35 @@ def train():
             obs, _ = env.reset()
 
     obs_dim = len(obs[0])  # Number of features per task
-    max_tasks = 300
+    max_tasks = 500
     if logger:
         logger.info(f"Detected obs_dim={obs_dim}. Using max_tasks={max_tasks}.")
     # logger.info(f"Detected obs_dim={obs_dim}. Using max_tasks={max_tasks}.")
 
     # 3) Create actor & critic networks
-    hidden_dim = 16
-    actor = ActorNet(obs_dim, env.num_dcs, hidden_dim=hidden_dim).to(DEVICE)
-    critic = CriticNet(obs_dim, env.num_dcs, hidden_dim=hidden_dim).to(DEVICE)
-    target_critic = CriticNet(obs_dim, env.num_dcs, hidden_dim=hidden_dim).to(DEVICE)
+    hidden_dim = 64
+    # For the action: 
+        # Each element ∈ [0, num_dcs]
+            # where 0 = "defer task"
+            # and [1, num_dcs] = assign to DC (1-based index)
+    act_dim = env.num_dcs + 1
+
+    actor = ActorNet(obs_dim, act_dim, hidden_dim=hidden_dim).to(DEVICE)
+    critic = CriticNet(obs_dim, act_dim, hidden_dim=hidden_dim).to(DEVICE)
+    target_critic = CriticNet(obs_dim, act_dim, hidden_dim=hidden_dim).to(DEVICE)
+
     target_critic.load_state_dict(critic.state_dict())
 
     actor_opt = torch.optim.Adam(actor.parameters(), lr=LR)
     critic_opt = torch.optim.Adam(critic.parameters(), lr=LR)
 
     # 4) Create replay buffer
-    buffer = ReplayBuffer(
+    # buffer = ReplayBuffer(
+    #     capacity=REPLAY_SIZE,
+    #     max_tasks=max_tasks,
+    #     obs_dim=obs_dim
+    # )
+    buffer = FastReplayBuffer(
         capacity=REPLAY_SIZE,
         max_tasks=max_tasks,
         obs_dim=obs_dim
@@ -296,17 +308,22 @@ def train():
         if len(obs) == 0:
             # no tasks => do an empty action list.
             actions = []
+            if global_step % log_interval == 0:
+                writer.add_scalar("Meta/EmptyObs", int(len(obs) == 0), global_step)
         else:
             # 5) Choose actions
             obs_tensor = torch.FloatTensor(obs).to(DEVICE)
             if global_step < WARMUP_STEPS:
-                actions = [np.random.randint(env.num_dcs) for _ in obs]
+                actions = [np.random.randint(env.num_dcs + 1) for _ in obs]
             else:
                 with torch.no_grad():
                     logits = actor(obs_tensor)  # shape (N, act_dim)
                     probs = F.softmax(logits, dim=-1)
                     dist = torch.distributions.Categorical(probs)
                     actions = dist.sample().cpu().numpy().tolist()
+                    
+                    assert all(0 <= a < act_dim for a in actions), f"Sampled invalid action: {actions}"
+
                     
                 writer.add_histogram("Actor/logits", logits, global_step)
                 writer.add_histogram("Actor/probs", probs, global_step)
@@ -348,13 +365,15 @@ def train():
 
 
 
-            obs, _ = env.reset()
+            obs, _ = env.reset(seed=global_step)
             episode_reward = 0
             episode_steps = 0
 
         # 7) RL updates
         if global_step >= WARMUP_STEPS and global_step % UPDATE_FREQ == 0:
             if len(buffer) < BATCH_SIZE:
+                if global_step % log_interval == 0:
+                    print(f"[Buffer] Skipping update at step {global_step}. Buffer has only {len(buffer)} samples.")
                 continue  # Skip update if not enough data
             # sample from buffer
             (obs_b, act_b, rew_b, next_obs_b, done_b,
@@ -375,9 +394,9 @@ def train():
             act_flat = act_b.view(B*T)
             mask_obs_flat = mask_obs_b.view(B*T)
             
-            if (act_flat >= env.num_dcs).any() or (act_flat < -1).any():
-                print("Invalid action index detected:", act_flat.min().item(), act_flat.max().item())
-
+            masked_actions = act_flat[mask_obs_flat.bool()]
+            if (masked_actions > act_dim).any() or (masked_actions < 0).any():
+                print("Invalid action index detected:", masked_actions.min().item(), masked_actions.max().item())
 
             # Flatten next obs
             next_flat = next_obs_b.view(B*T, D)
@@ -399,7 +418,7 @@ def train():
                 q_target = rew_b.unsqueeze(1) + GAMMA * (1 - done_b.unsqueeze(1)) * v_next
 
             # compute Q values for actual (obs, action) pairs
-            valid_idx = act_flat >= 0
+            valid_idx = (act_flat >= 0) & (act_flat < act_dim)
             obs_valid = obs_flat[valid_idx]
             act_valid = act_flat[valid_idx]
 

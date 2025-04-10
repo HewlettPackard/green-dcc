@@ -120,15 +120,17 @@ def make_eval_env(eval_mode=True):
 
 
 # Load trained actor model
-checkpoint_path = "checkpoints/train_20250404_173840/best_checkpoint.pth"  # Adjust path
+checkpoint_path = "checkpoints/train_20250409_154131/best_checkpoint.pth"  # Adjust path
 env = make_eval_env()
 obs, _ = env.reset(seed=123)
 obs_dim = env.observation_space.shape[0]
 # Detect the strategy (manual_rl = agent, else = RBC)
 use_actor = env.cluster_manager.strategy == "manual_rl"
+act_dim = env.num_dcs + 1
+
 if use_actor:
     logger.info("Using trained actor model for evaluation.")
-    actor = ActorNet(obs_dim, env.num_dcs, hidden_dim=64)
+    actor = ActorNet(obs_dim, act_dim, hidden_dim=64)
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
     actor.load_state_dict(checkpoint["actor_state_dict"])
     actor.eval()
@@ -140,6 +142,7 @@ infos_list = []
 common_info_list = []
 rewards = []
 steps = 7 * 96  # 7 days of 15-min intervals
+delayed_task_counts = [] 
 
 for step in tqdm(range(steps)):
     if len(obs) == 0:
@@ -152,9 +155,12 @@ for step in tqdm(range(steps)):
             probs = torch.softmax(logits, dim=-1)
             dist = torch.distributions.Categorical(probs)
             actions = dist.sample().numpy().tolist()
+        delayed_count = sum(1 for a in actions if a == 0)
+        delayed_task_counts.append(delayed_count)
     else:
         # If RBC is used, actions must be empty → internal logic assigns them
         actions = []
+        delayed_task_counts.append(0)  # No delayed logic in RBC
 
     obs, reward, done, truncated, info = env.step(actions)
     infos_list.append(info["datacenter_infos"])
@@ -308,6 +314,25 @@ plt.plot(common_info_list)
 plt.title("Total Transmission Cost (USD) Over Time")
 plt.xlabel("Timestep")
 plt.ylabel("Transmission Cost (USD)")
+plt.grid(True)
+plt.show()
+
+#%%
+plt.figure(figsize=(12, 6))
+plt.plot(delayed_task_counts, label="Delayed Tasks", color="orange")
+plt.title("Number of Delayed Tasks per Timestep")
+plt.xlabel("Timestep")
+plt.ylabel("Number of Delayed Tasks")
+plt.grid(True)
+plt.legend()
+plt.show()
+
+#%% Plot the external temperature
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df, x="timestep", y="weather", hue="datacenter")
+plt.title("External Temperature (°C) over Time")
+plt.xlabel("Timestep")
+plt.ylabel("Temperature (°C)")
 plt.grid(True)
 plt.show()
 

@@ -126,7 +126,71 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
 
+class FastReplayBuffer:
+    def __init__(self, capacity=100_000, max_tasks=32, obs_dim=7):
+        self.capacity = capacity
+        self.max_tasks = max_tasks
+        self.obs_dim = obs_dim
 
+        self.obs_buf = np.zeros((capacity, max_tasks, obs_dim), dtype=np.float32)
+        self.next_obs_buf = np.zeros((capacity, max_tasks, obs_dim), dtype=np.float32)
+        self.act_buf = np.full((capacity, max_tasks), -1, dtype=np.int64)
+        self.rew_buf = np.zeros((capacity,), dtype=np.float32)
+        self.done_buf = np.zeros((capacity,), dtype=np.float32)
+        self.mask_obs_buf = np.zeros((capacity, max_tasks), dtype=np.float32)
+        self.mask_next_buf = np.zeros((capacity, max_tasks), dtype=np.float32)
+
+        self.pos = 0
+        self.size = 0
+
+    def add(self, obs, actions, reward, next_obs, done):
+        N = len(obs)
+        M = len(next_obs)
+
+        obs_padded = np.zeros((self.max_tasks, self.obs_dim), dtype=np.float32)
+        next_obs_padded = np.zeros((self.max_tasks, self.obs_dim), dtype=np.float32)
+        act_padded = np.full((self.max_tasks,), -1, dtype=np.int64)
+        mask_obs = np.zeros((self.max_tasks,), dtype=np.float32)
+        mask_next = np.zeros((self.max_tasks,), dtype=np.float32)
+
+        if N > 0:
+            obs_arr = np.array(obs, dtype=np.float32)
+            act_arr = np.array(actions, dtype=np.int64)
+            obs_padded[:N] = obs_arr
+            act_padded[:N] = act_arr
+            mask_obs[:N] = 1.0
+
+        if M > 0:
+            next_obs_arr = np.array(next_obs, dtype=np.float32)
+            next_obs_padded[:M] = next_obs_arr
+            mask_next[:M] = 1.0
+
+        self.obs_buf[self.pos] = obs_padded
+        self.next_obs_buf[self.pos] = next_obs_padded
+        self.act_buf[self.pos] = act_padded
+        self.rew_buf[self.pos] = reward
+        self.done_buf[self.pos] = float(done)
+        self.mask_obs_buf[self.pos] = mask_obs
+        self.mask_next_buf[self.pos] = mask_next
+
+        self.pos = (self.pos + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
+
+    def sample(self, batch_size):
+        idx = np.random.randint(0, self.size, size=batch_size)
+        obs_b = torch.from_numpy(self.obs_buf[idx])
+        act_b = torch.from_numpy(self.act_buf[idx])
+        rew_b = torch.from_numpy(self.rew_buf[idx])
+        next_obs_b = torch.from_numpy(self.next_obs_buf[idx])
+        done_b = torch.from_numpy(self.done_buf[idx])
+        mask_obs_b = torch.from_numpy(self.mask_obs_buf[idx])
+        mask_next_b = torch.from_numpy(self.mask_next_buf[idx])
+
+        return obs_b, act_b, rew_b, next_obs_b, done_b, mask_obs_b, mask_next_b
+
+    def __len__(self):
+        return self.size
+    
 class PrioritizedReplayBuffer:
     """
     Simple proportional Prioritized Experience Replay (PER) buffer.
