@@ -351,12 +351,101 @@ pip install -r requirements.txt
 ```
 
 ---
+# 🏋️‍♂️ Training the RL Agent in GreenDCC
 
-## Training the RL Agent
-### Training using SAC
+GreenDCC supports training Deep Reinforcement Learning agents using **Soft Actor-Critic (SAC)**. The training loop is fully configurable via YAML files and supports easy experimentation across different sustainability and efficiency goals.
+
+---
+
+## 📁 Configuration Overview
+
+Training is driven by four modular config files:
+
+| Config File | Purpose |
+|-------------|---------|
+| `sim_config.yaml` | Simulation time, strategy, task sources |
+| `datacenters.yaml` | DCs with location, resource specs, energy model |
+| `reward_config.yaml` | Reward weights for carbon, cost, SLA, etc. |
+| `algorithm_config.yaml` | RL hyperparameters (batch size, learning rate, etc.) |
+
+---
+
+## 🚀 Start Training
+
+Default:
+
 ```bash
 python train_rl_agent.py
 ```
+
+With custom paths:
+
+```bash
+python train_rl_agent.py \
+    --sim-config configs/env/sim_config.yaml \
+    --dc-config configs/env/datacenters.yaml \
+    --reward-config configs/env/reward_config.yaml \
+    --algo-config configs/env/algorithm_config.yaml \
+    --tag my_experiment
+```
+
+Use `--checkpoint-path` to resume from a previous run.
+
+---
+
+## 🧠 RL Algorithm
+
+The default training method is **Soft Actor-Critic (SAC)**, which features:
+
+- Stable off-policy learning
+- Entropy-based exploration
+- Replay buffer optimization
+
+The agent learns to **defer or route tasks** for better long-term trade-offs in carbon, cost, and load balancing.
+
+---
+
+## 📦 Checkpointing
+
+Model checkpoints are saved in:
+
+```
+checkpoints/train_<timestamp>/
+├── checkpoint_step_5000.pth
+├── checkpoint_step_10000.pth
+└── best_checkpoint.pth
+```
+
+Use them to resume training or for evaluation.
+
+---
+
+## 📈 Monitoring with TensorBoard
+
+```bash
+tensorboard --logdir runs/
+```
+
+Key logs include:
+
+- Reward trends
+- Q-loss and policy loss
+- Entropy over time
+- Reward components breakdown (carbon, price, SLA, etc.)
+
+---
+
+## 🔧 Customize Everything
+
+Want to test a new reward? Just edit `reward_config.yaml`.
+
+Want a different datacenter mix? Update `datacenters.yaml`.
+
+Want faster updates or a longer warmup? Modify `algorithm_config.yaml`.
+
+GreenDCC’s config-driven design makes it easy to explore new ideas.
+
+---
 
 ## 📈 Tracking Training with TensorBoard
 
@@ -389,7 +478,17 @@ runs/train_<timestamp>/
 You can compare multiple runs simultaneously for performance diagnostics or ablations.
 
 ---
+## Customize Everything
 
+Want to test a new reward? Just edit `reward_config.yaml`.
+
+Want a different datacenter mix? Update `datacenters.yaml`.
+
+Want faster updates or a longer warmup? Modify `algorithm_config.yaml`.
+
+GreenDCC’s config-driven design makes it easy to explore new ideas.
+
+---
 
 ## Evaluation
 

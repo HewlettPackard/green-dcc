@@ -5,7 +5,7 @@ This module maps real-world datacenter location codes to cloud-specific transmis
 
 Supported providers: "gcp", "aws", "azure", and "custom"
 
-📌 To define a custom cost matrix:
+To define a custom cost matrix:
 1. Add your mapping in `location_to_custom_region`
 2. Save your transmission cost CSV in: `data/transmission_costs/custom_transmission_cost_matrix.csv`
    - Format: rows and columns must match your custom region names

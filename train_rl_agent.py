@@ -1,213 +1,23 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-import gymnasium as gym
 from tqdm import trange
+import logging
+import os
+from collections import deque
+import argparse
+import datetime
 
 from envs.task_scheduling_env import TaskSchedulingEnv
 from rl_components.agent_net import ActorNet, CriticNet
-from rl_components.replay_buffer import ReplayBuffer, FastReplayBuffer
-from rl_components.replay_buffer import PrioritizedReplayBuffer
-from rewards.predefined.energy_price_reward import EnergyPriceReward
+from rl_components.replay_buffer import FastReplayBuffer
 from rewards.predefined.composite_reward import CompositeReward
 
-import logging
-import os
-import datetime
-
+from utils.checkpoint_manager import save_checkpoint, load_checkpoint
+from utils.config_loader import load_yaml
+from utils.config_logger import setup_logger
 from torch.utils.tensorboard import SummaryWriter
 
-from collections import deque
-
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-CHECKPOINT_DIR = f"checkpoints/train_{timestamp}"
-os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-
-def save_checkpoint(step, actor, critic, actor_opt, critic_opt, best=False):
-    checkpoint = {
-        "step": step,
-        "actor_state_dict": actor.state_dict(),
-        "critic_state_dict": critic.state_dict(),
-        "actor_optimizer_state_dict": actor_opt.state_dict(),
-        "critic_optimizer_state_dict": critic_opt.state_dict(),
-    }
-    print(f"Saving checkpoint at step {step} to {CHECKPOINT_DIR}")
-    if best:
-        torch.save(checkpoint, os.path.join(CHECKPOINT_DIR, "best_checkpoint.pth"))
-    else:
-        torch.save(checkpoint, os.path.join(CHECKPOINT_DIR, f"checkpoint_step_{step}.pth"))
-
-def load_checkpoint(path, actor, critic, actor_opt=None, critic_opt=None):
-    checkpoint = torch.load(path, map_location=DEVICE)
-    actor.load_state_dict(checkpoint["actor_state_dict"])
-    critic.load_state_dict(checkpoint["critic_state_dict"])
-    if actor_opt and critic_opt:
-        actor_opt.load_state_dict(checkpoint["actor_optimizer_state_dict"])
-        critic_opt.load_state_dict(checkpoint["critic_optimizer_state_dict"])
-    return checkpoint.get("step", 0)
-
-
-# === Set up TensorBoard ===
-writer = SummaryWriter(log_dir=f"runs/train_{timestamp}")
-
-# === Set up logger ===
-os.makedirs("logs", exist_ok=True)
-log_path = f"logs/train_{timestamp}.log"
-
-# === Root logger
-logger = None#
-# logger = logging.getLogger("train_logger")
-# logger.setLevel(logging.INFO)  # File handler will capture INFO+
-
-# # === File handler (full log)
-# file_handler = logging.FileHandler(log_path, mode="w")
-# file_handler.setLevel(logging.INFO)
-# file_handler.setFormatter(logging.Formatter(
-#     "%(asctime)s - %(levelname)s - %(message)s",
-#     datefmt="%Y-%m-%d %H:%M:%S"
-# ))
-# logger.addHandler(file_handler)
-
-# # === Console handler (only warnings and errors)
-# console_handler = logging.StreamHandler()
-# console_handler.setLevel(logging.WARNING)  # Only show warnings+errors in terminal
-# console_handler.setFormatter(logging.Formatter(
-#     "[%(levelname)s] %(message)s"
-# ))
-# logger.addHandler(console_handler)
-
-# === CONFIG ===
-GAMMA = 0.99
-ALPHA = 0.01
-LR = 1e-4
-BATCH_SIZE = 512
-TAU = 0.005
-REPLAY_SIZE = int(1e5)
-WARMUP_STEPS = 1000
-TOTAL_STEPS = int(1e7)
-UPDATE_FREQ = 1
-POLICY_UPDATE_FREQ = 2
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-SAVE_INTERVAL = 5000  # Save every 5k steps
-
-print(f"Using device: {DEVICE}")
-
-
-# === INIT ENV (Replace this with your real cluster manager setup) ===
-def make_env():
-    import pandas as pd
-    import datetime
-    from simulation.cluster_manager import DatacenterClusterManager
-    from envs.task_scheduling_env import TaskSchedulingEnv
-
-    # === Simulation time range ===
-    simulation_year = 2023
-    simulated_month = 8
-    init_day_month = 1
-    init_hour = 5
-    init_minute = 0
-
-    start_time = datetime.datetime(simulation_year, simulated_month, init_day_month, init_hour, init_minute, tzinfo=datetime.timezone.utc)
-    end_time = start_time + datetime.timedelta(days=7)
-    start_time = pd.Timestamp(start_time)
-    end_time = pd.Timestamp(end_time)
-
-    # === Datacenter configurations ===
-    datacenter_configs = [
-        {
-            'location': 'US-NY-NYIS', 'dc_id': 1, 'agents': [], 'timezone_shift': -5,
-            'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'month': simulated_month,
-            'datacenter_capacity_mw': 1.5, 'max_bat_cap_Mw': 3.0, 'days_per_episode': 30,
-            'network_cost_per_gb': 0.08, 'total_cpus': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.25,
-        },
-        {
-            'location': 'DE-LU', 'dc_id': 2, 'agents': [], 'timezone_shift': 1,
-            'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'month': simulated_month,
-            'datacenter_capacity_mw': 1.2, 'max_bat_cap_Mw': 2.5, 'days_per_episode': 30,
-            'network_cost_per_gb': 0.07, 'total_cpus': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.22,
-        },
-        {
-            'location': 'ZA', 'dc_id': 3, 'agents': [], 'timezone_shift': 2,
-            'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'month': simulated_month,
-            'datacenter_capacity_mw': 1.0, 'max_bat_cap_Mw': 2.0, 'days_per_episode': 30,
-            'network_cost_per_gb': 0.06, 'total_cpus': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.13,
-        },
-        {
-            'location': 'SG', 'dc_id': 4, 'agents': [], 'timezone_shift': 8,
-            'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'month': simulated_month,
-            'datacenter_capacity_mw': 1.8, 'max_bat_cap_Mw': 3.5, 'days_per_episode': 30,
-            'network_cost_per_gb': 0.09, 'total_cpus': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.25,
-        },
-        {
-            'location': 'AU-NSW', 'dc_id': 5, 'agents': [], 'timezone_shift': 11,
-            'dc_config_file': 'dc_config.json', 'weather_file': None, 'cintensity_file': None,
-            'month': simulated_month,
-            'datacenter_capacity_mw': 1.4, 'max_bat_cap_Mw': 2.8, 'days_per_episode': 30,
-            'network_cost_per_gb': 0.10, 'total_cpus': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.15,
-        }
-    ]
-
-    # === Workload data ===
-    tasks_file_path = "data/workload/alibaba_2020_dataset/result_df_full_year_2020.pkl"
-    
-    # === Create cluster manager ===
-    cluster_manager = DatacenterClusterManager(
-        config_list=datacenter_configs,
-        simulation_year=simulation_year,
-        init_day=int(simulated_month*30.5),
-        init_hour=init_hour,
-        strategy="manual_rl",
-        tasks_file_path=tasks_file_path,
-        shuffle_datacenter_order=False,  # shuffle only during training
-        cloud_provider='gcp',
-        logger=logger,
-    )
-    
-    # cluster_manager.logger = logger
-
-    # === Wrap into Gym environment ===
-    # reward_fn = EnergyPriceReward(normalize_factor=100000)
-    reward_fn = CompositeReward(
-        components={
-            "energy_price": {
-                "weight": 0.5,
-                "args": {"normalize_factor": 100000}
-            },
-            "carbon_emissions": {
-                "weight": 0.3,
-                "args": {"normalize_factor": 10}
-            },
-            # "sla_penalty": {
-            #     "weight": 0.2,
-            #     "args": {"penalty_per_violation": 5.0}
-            # }
-            "transmission_cost": {
-                "weight": 0.3,
-                "args": {"normalize_factor": 1}
-            },
-        },
-        normalize=False
-    )
-
-    env = TaskSchedulingEnv(
-        cluster_manager=cluster_manager,
-        start_time=start_time,
-        end_time=end_time,
-        reward_fn=reward_fn,
-        writer=writer,
-    )
-
-    return env
 
 class RunningStats:
     def __init__(self, eps=1e-5):
@@ -227,158 +37,166 @@ class RunningStats:
         return (x - self.mean) / std
 
 
-############################
-# Main training loop
-############################
+def parse_args():
+    parser = argparse.ArgumentParser(description="GreenDCC Training")
+    parser.add_argument("--sim-config", type=str, default="configs/env/sim_config.yaml")
+    parser.add_argument("--reward-config", type=str, default="configs/env/reward_config.yaml")
+    parser.add_argument("--dc-config", type=str, default="configs/env/datacenters.yaml")
+    parser.add_argument("--algo-config", type=str, default="configs/env/algorithm_config.yaml")
+    parser.add_argument("--checkpoint-path", type=str, default=None)
+    parser.add_argument("--tag", type=str, default="", help="Optional run tag")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--enable-logger", type=bool, default=True, help="Enable logger")
+    return parser.parse_args()
+
+
+def make_env(sim_cfg_path, dc_cfg_path, reward_cfg_path, writer=None, logger=None):
+    import pandas as pd
+    import datetime
+    from simulation.cluster_manager import DatacenterClusterManager
+
+    sim_cfg = load_yaml(sim_cfg_path)["simulation"]
+    dc_cfg = load_yaml(dc_cfg_path)["datacenters"]
+    reward_cfg = load_yaml(reward_cfg_path)["reward"]
+
+    start = pd.Timestamp(datetime.datetime(sim_cfg["year"], sim_cfg["month"], sim_cfg["init_day"],
+                                           sim_cfg["init_hour"], 0, tzinfo=datetime.timezone.utc))
+    end = start + datetime.timedelta(days=sim_cfg["duration_days"])
+
+    cluster = DatacenterClusterManager(
+        config_list=dc_cfg,
+        simulation_year=sim_cfg["year"],
+        init_day=int(sim_cfg["month"] * 30.5),
+        init_hour=sim_cfg["init_hour"],
+        strategy=sim_cfg["strategy"],
+        tasks_file_path=sim_cfg["workload_path"],
+        shuffle_datacenter_order=sim_cfg["shuffle_datacenters"],
+        cloud_provider=sim_cfg["cloud_provider"],
+        logger=logger
+    )
+
+    reward_fn = CompositeReward(
+        components=reward_cfg["components"],
+        normalize=reward_cfg.get("normalize", False)
+    )
+
+    return TaskSchedulingEnv(
+        cluster_manager=cluster,
+        start_time=start,
+        end_time=end,
+        reward_fn=reward_fn,
+        writer=writer if sim_cfg.get("use_tensorboard", False) else None
+    )
+
+
 def train():
-    # 1) Create environment
-    env = make_env()
-    reward_stats = RunningStats()
-    episode_reward_buffer = deque(maxlen=10)
+    args = parse_args()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_id = f"{args.tag}_{timestamp}" if args.tag else f"{timestamp}"
 
-    # 2) Dynamically detect obs_dim
-    # We'll do a dummy reset to get the shape from the first obs.
-    # obs is a list of shape (N, obs_dim). If no tasks, we retry steps.
-    obs, _ = env.reset()
+    log_dir = f"runs/train_{run_id}"
+    ckpt_dir = f"checkpoints/train_{run_id}"
+    os.makedirs(ckpt_dir, exist_ok=True)
+    writer = SummaryWriter(log_dir=log_dir)
+    
+    logger = setup_logger(log_dir, enable_logger=args.enable_logger)
+
+    algo_cfg = load_yaml(args.algo_config)["algorithm"]
+    DEVICE = torch.device("cuda" if algo_cfg["device"] == "auto" and torch.cuda.is_available() else algo_cfg["device"])
+
+    env = make_env(args.sim_config, args.dc_config, args.reward_config, writer, logger)
+
+    obs, _ = env.reset(seed=args.seed)
     while len(obs) == 0:
-        # If zero tasks, step the env with an empty action
-        # Or do something minimal.
-        # We'll just step forward with an empty list.
-        next_obs, _, done, _, _ = env.step([])
-        obs = next_obs
+        obs, _, done, _, _ = env.step([])
         if done:
-            obs, _ = env.reset()
+            obs, _ = env.reset(seed=args.seed)
 
-    obs_dim = len(obs[0])  # Number of features per task
-    max_tasks = 500
-    if logger:
-        logger.info(f"Detected obs_dim={obs_dim}. Using max_tasks={max_tasks}.")
-    # logger.info(f"Detected obs_dim={obs_dim}. Using max_tasks={max_tasks}.")
-
-    # 3) Create actor & critic networks
-    hidden_dim = 64
-    # For the action: 
-        # Each element ∈ [0, num_dcs]
-            # where 0 = "defer task"
-            # and [1, num_dcs] = assign to DC (1-based index)
+    obs_dim = len(obs[0])
     act_dim = env.num_dcs + 1
 
-    actor = ActorNet(obs_dim, act_dim, hidden_dim=hidden_dim).to(DEVICE)
-    critic = CriticNet(obs_dim, act_dim, hidden_dim=hidden_dim).to(DEVICE)
-    target_critic = CriticNet(obs_dim, act_dim, hidden_dim=hidden_dim).to(DEVICE)
-
+    actor = ActorNet(obs_dim, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
+    critic = CriticNet(obs_dim, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
+    target_critic = CriticNet(obs_dim, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
     target_critic.load_state_dict(critic.state_dict())
 
-    actor_opt = torch.optim.Adam(actor.parameters(), lr=LR)
-    critic_opt = torch.optim.Adam(critic.parameters(), lr=LR)
+    actor_opt = torch.optim.Adam(actor.parameters(), lr=float(algo_cfg["actor_learning_rate"]))
+    critic_opt = torch.optim.Adam(critic.parameters(), lr=float(algo_cfg["critic_learning_rate"]))
 
-    # 4) Create replay buffer
-    # buffer = ReplayBuffer(
-    #     capacity=REPLAY_SIZE,
-    #     max_tasks=max_tasks,
-    #     obs_dim=obs_dim
-    # )
     buffer = FastReplayBuffer(
-        capacity=REPLAY_SIZE,
-        max_tasks=max_tasks,
+        capacity=algo_cfg["replay_buffer_size"],
+        max_tasks=algo_cfg["max_tasks"],
         obs_dim=obs_dim
     )
-    # buffer = PrioritizedReplayBuffer(
-        #     capacity=REPLAY_SIZE,
-        #     max_tasks=max_tasks,
-        #     obs_dim=obs_dim,
-        #     alpha=0.6  # Level of prioritization
-        # )
 
-    # Since we already called env.reset above, we can proceed.
-    log_interval = 100
+    reward_stats = RunningStats()
     episode_reward = 0
     episode_steps = 0
-    best_reward = float("-inf")
-
-    # We'll define a variable for the step:
-    global_step = 0
-    
+    episode_reward_buffer = deque(maxlen=10)
+    best_avg_reward = float("-inf")
     q_loss = None
     policy_loss = None
-    pbar = trange(TOTAL_STEPS)
+
+    pbar = trange(algo_cfg["total_steps"])
 
     for global_step in pbar:
-        # We have obs => shape (N, obs_dim)
+        obs_tensor = torch.FloatTensor(obs).to(DEVICE)
         if len(obs) == 0:
-            # no tasks => do an empty action list.
             actions = []
-            if global_step % log_interval == 0:
-                writer.add_scalar("Meta/EmptyObs", int(len(obs) == 0), global_step)
+        elif global_step < algo_cfg["warmup_steps"]:
+            actions = [np.random.randint(act_dim) for _ in obs]
         else:
-            # 5) Choose actions
-            obs_tensor = torch.FloatTensor(obs).to(DEVICE)
-            if global_step < WARMUP_STEPS:
-                actions = [np.random.randint(env.num_dcs + 1) for _ in obs]
-            else:
-                with torch.no_grad():
-                    logits = actor(obs_tensor)  # shape (N, act_dim)
-                    probs = F.softmax(logits, dim=-1)
-                    dist = torch.distributions.Categorical(probs)
-                    actions = dist.sample().cpu().numpy().tolist()
-                    
-                    assert all(0 <= a < act_dim for a in actions), f"Sampled invalid action: {actions}"
-
-                    
+            with torch.no_grad():
+                logits = actor(obs_tensor)
+                probs = F.softmax(logits, dim=-1)
+                dist = torch.distributions.Categorical(probs)
+                actions = dist.sample().cpu().numpy().tolist()
                 writer.add_histogram("Actor/logits", logits, global_step)
                 writer.add_histogram("Actor/probs", probs, global_step)
+                
+                assert all(0 <= a < act_dim for a in actions), f"Sampled invalid action: {actions}"
         
         # 6) Step environment
         next_obs, reward, done, truncated, _ = env.step(actions)
         reward_stats.update(reward)
         normalized_reward = reward_stats.normalize(reward)
 
-        # === Skip buffer update if no real tasks (i.e., no actions taken)
-        if len(actions) == 0:
-            obs = next_obs
-            continue
-
-        done_flag = done or truncated
-        buffer.add(obs, actions, normalized_reward, next_obs, done_flag)
+        if len(actions) > 0:
+            buffer.add(obs, actions, normalized_reward, next_obs, done or truncated)
 
         obs = next_obs
         episode_reward += reward
         episode_steps += 1
-        if done_flag:
-            avg_reward = episode_reward / episode_steps
-            episode_reward_buffer.append(avg_reward)
 
-            if logger:
-                logger.info(f"[Episode End] total_reward={avg_reward:.2f}")
-            pbar.write(f"[Episode End] total_reward={avg_reward:.2f}")
-            writer.add_scalar("Reward/Episode_Reward", avg_reward, global_step)
-
+        if done or truncated:
+            avg = episode_reward / episode_steps
+            episode_reward_buffer.append(avg)
             
-            if len(episode_reward_buffer) == 10:
-                rolling_avg_reward = sum(episode_reward_buffer) / 10
-                writer.add_scalar("Reward/Avg10", rolling_avg_reward, global_step)
-
-                if rolling_avg_reward > best_reward and global_step > 10 * WARMUP_STEPS:
-                    best_reward = rolling_avg_reward
-                    save_checkpoint(global_step, actor, critic, actor_opt, critic_opt, best=True)
-                    pbar.write(f"[BEST] Saved checkpoint at step {global_step} (avg10 reward={rolling_avg_reward:.2f})")
-
-
-
-            obs, _ = env.reset(seed=global_step)
+            if logger:
+                logger.info(f"[Episode End] total_reward={avg:.2f}")
+                
+            writer.add_scalar("Reward/Episode", avg, global_step)
+            pbar.write(f"Episode reward: {avg:.2f} (steps: {episode_steps})")
+            obs, _ = env.reset(seed=args.seed+global_step)
             episode_reward = 0
             episode_steps = 0
+            if len(episode_reward_buffer) == 10:
+                avg_reward = np.mean(episode_reward_buffer)
+                writer.add_scalar("Reward/Avg10", avg_reward, global_step)
+
+                pbar.write(f"Avg reward: {avg_reward:.2f}")
+                if avg_reward > best_avg_reward:
+                    best_avg_reward = avg_reward
+                    save_checkpoint(global_step, actor, critic, actor_opt, critic_opt, ckpt_dir, best=True)
+                    pbar.write(f"[BEST] Saved checkpoint at step {global_step} (avg10 reward={avg_reward:.2f})")
 
         # 7) RL updates
-        if global_step >= WARMUP_STEPS and global_step % UPDATE_FREQ == 0:
-            if len(buffer) < BATCH_SIZE:
-                if global_step % log_interval == 0:
-                    print(f"[Buffer] Skipping update at step {global_step}. Buffer has only {len(buffer)} samples.")
-                continue  # Skip update if not enough data
-            # sample from buffer
+        if global_step >= algo_cfg["warmup_steps"] and global_step % algo_cfg["update_frequency"] == 0:
+            if len(buffer) < algo_cfg["batch_size"]:
+                continue
             (obs_b, act_b, rew_b, next_obs_b, done_b,
-             mask_obs_b, mask_next_b) = buffer.sample(BATCH_SIZE)
-
+             mask_obs_b, mask_next_b) = buffer.sample(algo_cfg["batch_size"])
+        
             obs_b = obs_b.to(DEVICE)         # [B, max_tasks, obs_dim]
             act_b = act_b.to(DEVICE)         # [B, max_tasks]
             rew_b = rew_b.to(DEVICE)         # [B]
@@ -401,7 +219,6 @@ def train():
             # Flatten next obs
             next_flat = next_obs_b.view(B*T, D)
             mask_next_flat = mask_next_b.view(B*T)
-
             with torch.no_grad():
                 next_logits = actor(next_flat)
                 next_probs = F.softmax(next_logits, dim=-1)
@@ -409,13 +226,13 @@ def train():
                 q1_next, q2_next = target_critic.forward_all(next_flat)
                 q_next = torch.min(q1_next, q2_next)
                 # v_next shape: (B*T,)
-                v_next = (next_probs * (q_next - ALPHA * next_log_probs)).sum(dim=-1)
+                v_next = (next_probs * (q_next - algo_cfg["alpha"] * next_log_probs)).sum(dim=-1)
                 v_next = v_next * mask_next_flat
                 # reshape to (B, T)
                 v_next = v_next.view(B, T)
 
                 # q_target shape: (B, T)
-                q_target = rew_b.unsqueeze(1) + GAMMA * (1 - done_b.unsqueeze(1)) * v_next
+                q_target = rew_b.unsqueeze(1) + algo_cfg["gamma"] * (1 - done_b.unsqueeze(1)) * v_next
 
             # compute Q values for actual (obs, action) pairs
             valid_idx = (act_flat >= 0) & (act_flat < act_dim)
@@ -455,7 +272,7 @@ def train():
             critic_opt.step()
 
             # === Update policy
-            if global_step % POLICY_UPDATE_FREQ == 0:
+            if global_step % algo_cfg["policy_update_frequency"] == 0:
                 logits = actor(obs_flat)
                 probs = F.softmax(logits, dim=-1)
                 log_probs = F.log_softmax(logits, dim=-1)
@@ -464,7 +281,7 @@ def train():
 
                 # shape of probs, q_eval, log_probs => (B*T, act_dim)
                 # compute the policy loss with mask
-                policy_loss = (probs * (ALPHA * log_probs - q_eval)).sum(dim=-1)
+                policy_loss = (probs * (algo_cfg["alpha"] * log_probs - q_eval)).sum(dim=-1)
                 policy_loss = policy_loss * mask_obs_flat
                 policy_loss = policy_loss.sum() / mask_obs_flat.sum()
                 
@@ -478,9 +295,9 @@ def train():
 
                 # soft update
                 for p, tp in zip(critic.parameters(), target_critic.parameters()):
-                    tp.data.copy_(TAU * p.data + (1 - TAU) * tp.data)
+                    tp.data.copy_(algo_cfg["tau"] * p.data + (1 - algo_cfg["tau"]) * tp.data)
 
-        if global_step % log_interval == 0 and global_step > 0:
+        if global_step % algo_cfg["log_interval"] == 0 and q_loss and policy_loss:
             if q_loss is not None and policy_loss is not None:
                 writer.add_scalar("Loss/Q_Loss", q_loss.item(), global_step)
                 writer.add_scalar("Loss/Policy_Loss", policy_loss.item(), global_step)
@@ -493,11 +310,12 @@ def train():
                     logger.info(f"[Step {global_step}] Skipping logging — losses not available yet.")
         
 
-        if global_step % SAVE_INTERVAL == 0 and global_step > 0:
-            save_checkpoint(global_step, actor, critic, actor_opt, critic_opt)
+        if global_step % algo_cfg["save_interval"] == 0 and global_step > 0:
+            save_checkpoint(global_step, actor, critic, actor_opt, critic_opt, ckpt_dir)
             pbar.write(f"Saved checkpoint at step {global_step}")
 
     writer.close()
+
 
 if __name__ == "__main__":
     train()

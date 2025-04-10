@@ -16,13 +16,7 @@ class DC_Config:
                                   (which should live in ../configs).
             datacenter_capacity_mw (float): The maximum compute power capacity of the datacenter in MW.
         """
-        # Build the path to the 'configs' folder
-        base_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), '..', 'configs')
-        )
-
-        # Now append the JSON filename
-        self.config_path = os.path.join(base_dir, dc_config_file)
+        self.config_path = os.path.abspath(dc_config_file)
 
         # Keep the capacity parameter
         self.datacenter_capacity_mw = datacenter_capacity_mw

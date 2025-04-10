@@ -42,16 +42,12 @@ class SustainDC(gym.Env):
         self.rbc_agents = env_config.get('rbc_agents', [])
         
         self.location = env_config['location']
-        
-        self.ci_file = env_config['cintensity_file']
-        self.weather_file = env_config['weather_file']
-        
+                
         self.max_bat_cap_Mw = env_config['max_bat_cap_Mw']
         
         self.datacenter_capacity_mw = env_config['datacenter_capacity_mw']
         self.dc_config_file = env_config['dc_config_file']
         self.timezone_shift = env_config['timezone_shift']
-        self.days_per_episode = env_config['days_per_episode']
         
         # Assign month according to worker index, if available
         if hasattr(env_config, 'worker_index'):
@@ -170,7 +166,8 @@ class SustainDC(gym.Env):
             task.finish_time = current_time + pd.Timedelta(minutes=task.duration)
 
             # **Compute network cost**
-            network_cost = task.bandwidth_gb * self.network_cost_per_gb
+            # TODO: Implement network cost calculation based on task properties
+            network_cost = -1
 
             # **Move task to running queue**
             self.running_tasks.append(task)
@@ -186,7 +183,7 @@ class SustainDC(gym.Env):
         else:
             # **Task couldn't be scheduled - track wait time**
             task.increment_wait_intervals()
-            if task.wait_intervals > MAX_WAIT_INTERVALS:
+            if task.wait_intervals > MAX_WAIT_TIMESTEPS:
                 log_warn(f"[{current_time}] Task {task.job_name} dropped after waiting too long. IGNORED")
                 # Simulating the drop by not re-adding the task to the pending queue
             else:
@@ -237,7 +234,7 @@ class SustainDC(gym.Env):
 
         # **Reinitialize the managers with new paths**
         self.simulation_year = init_year
-        self.t_m = Time_Manager(init_day, timezone_shift=self.timezone_shift, days_per_episode=self.days_per_episode)
+        self.t_m = Time_Manager(init_day, timezone_shift=self.timezone_shift)
         self.ci_manager = CI_Manager(location=self.location, simulation_year=self.simulation_year, timezone_shift=self.timezone_shift)
         self.weather_manager = Weather_Manager(location=self.location, simulation_year=self.simulation_year, timezone_shift=self.timezone_shift)
         self.price_manager = ElectricityPrice_Manager(location=self.location, simulation_year=self.simulation_year, timezone_shift=self.timezone_shift)
@@ -348,7 +345,7 @@ class SustainDC(gym.Env):
         self._perform_actions(action_dict)
     
         # Step the managers (time, workload, weather, CI) (t+1)
-        day, hour, t_i, terminal = self.t_m.step()
+        day, hour, t_i = self.t_m.step()
         # workload = self.workload_m.step()
         temp, norm_temp, wet_bulb, norm_wet_bulb = self.weather_manager.step()
         ci_i, ci_i_future, ci_i_denorm = self.ci_manager.step()
@@ -462,11 +459,6 @@ class SustainDC(gym.Env):
             "__sla__": sla_stats,
         })
 
-
-        # Handle termination if the episode ends
-        if terminal:
-            self._handle_terminal(terminateds, truncateds)
-
         return obs, rew, terminateds, truncateds, self.infos
 
 
@@ -508,14 +500,6 @@ class SustainDC(gym.Env):
             obs['agent_bat'] = self.bat_state
         return obs
 
-
-    def _handle_terminal(self, terminateds, truncateds):
-        """Handle the terminal state of the environment."""
-        terminateds["__all__"] = False
-        truncateds["__all__"] = True
-        for agent in self.agents:
-            truncateds[agent] = True
-    
     
     def state(self):
         """

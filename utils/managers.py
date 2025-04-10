@@ -95,24 +95,20 @@ class Time_Manager():
 
         Args:
             init_day (int, optional): Day to start from. Defaults to 0.
-            days_per_episode (int, optional): Number of days that an episode would last. Defaults to 30.
             timezone_shift (int, optional): Shift for the timezone. Defaults to 0.
     """
-    def __init__(self, init_day=0, days_per_episode=30, timezone_shift=0):
+    def __init__(self, init_day=0, timezone_shift=0):
         """Initialize the Time_Manager class.
 
         Args:
             init_day (int, optional): Day to start from. Defaults to 0.
-            days_per_episode (int, optional): Number of days that an episode would last. Defaults to 30.
             timezone_shift (int, optional): Shift for the timezone. Defaults to 0.
         """
         self.init_day = init_day
         self.timestep_per_hour = 4
-        self.days_per_episode = days_per_episode
         self.timezone_shift = timezone_shift
         
         # Calculate the total timesteps for the episode based on init_day
-        self.simulated_total_timesteps = (self.days_per_episode * 24 * self.timestep_per_hour)
         self.current_timestep = 0
 
     def reset(self, init_day=None, init_hour=None, seed=None):
@@ -123,7 +119,6 @@ class Time_Manager():
 
         # Recalculate the current timestep based on day/hour
         self.current_timestep = int(self.day * 24 * self.timestep_per_hour + self.hour * self.timestep_per_hour)
-        self.total_timesteps = self.current_timestep + self.simulated_total_timesteps
         return sc_obs(self.hour, self.day)
 
         
@@ -139,15 +134,7 @@ class Time_Manager():
         if self.hour >= 24:
             self.hour = 0
             self.day += 1
-        return self.day, self.hour, sc_obs(self.hour, self.day), self.isterminal()
-    
-    def isterminal(self):
-        """Function to identify terminal state
-
-        Returns:
-            bool: Signals if a state is terminal or not
-        """
-        return self.current_timestep >= self.total_timesteps
+        return self.day, self.hour, sc_obs(self.hour, self.day)
 
 
 # Class to manage carbon intensity data

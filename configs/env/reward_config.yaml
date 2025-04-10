@@ -1,0 +1,21 @@
+reward:
+  normalize: false
+  components:
+    energy_price:
+      weight: 0.5
+      args:
+        normalize_factor: 100000
+    carbon_emissions:
+      weight: 0.3
+      args:
+        normalize_factor: 10
+    transmission_cost:
+      weight: 0.2
+      args:
+        normalize_factor: 1
+    sla_penalty:
+      weight: 0.1
+      args:
+        penalty_per_violation: 5.0
+
+    # Add more components as needed

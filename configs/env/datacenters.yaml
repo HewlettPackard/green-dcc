@@ -1,0 +1,45 @@
+datacenters:
+  - dc_id: 1
+    location: "US-NY-NYIS"
+    timezone_shift: -5
+    population_weight: 0.25
+    total_cpus: 5000
+    total_gpus: 700
+    total_mem: 5000
+    dc_config_file: "configs/dcs/dc_config.json"
+
+  - dc_id: 2
+    location: "DE-LU"
+    timezone_shift: 1
+    population_weight: 0.22
+    total_cpus: 5000
+    total_gpus: 700
+    total_mem: 5000
+    dc_config_file: "configs/dcs/dc_config.json"
+
+  - dc_id: 3
+    location: "ZA"
+    timezone_shift: 2
+    population_weight: 0.13
+    total_cpus: 5000
+    total_gpus: 700
+    total_mem: 5000
+    dc_config_file: "configs/dcs/dc_config.json"
+
+  - dc_id: 4
+    location: "SG"
+    timezone_shift: 8
+    population_weight: 0.25
+    total_cpus: 5000
+    total_gpus: 700
+    total_mem: 5000
+    dc_config_file: "configs/dcs/dc_config.json"
+  
+  - dc_id: 5
+    location: "AU-NSW"
+    timezone_shift: 11
+    population_weight: 0.15
+    total_cpus: 5000
+    total_gpus: 700
+    total_mem: 5000
+    dc_config_file: "configs/dcs/dc_config.json"

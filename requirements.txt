@@ -7,3 +7,4 @@ torch
 gymnasium
 pytest
 tensorboard
+PyYAML
