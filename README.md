@@ -151,6 +151,24 @@ Each task:
 As can be seen, at each timestep we can have different number of tasks to be determined their destination datacenter.
 
 ---
+
+## Datacenter Modeling
+
+Each datacenter in this benchmark simulates physical infrastructure using a layered thermal and electrical model. Internally, we model:
+
+- **CPU-level power and fan dynamics** based on workload and inlet temperature
+- **Rack-level airflow and temperature response**
+- **HVAC systems** (CRAC, chiller, cooling tower, water use)
+- **Battery and thermal envelope interaction** (optional modules)
+
+These models are grounded in equations from EnergyPlus, Breen et al. (2010), and Sun et al. (2021), and simulate realistic energy use, carbon emissions, and water consumption.
+
+If you're interested in the **mathematical details and equations**, check the full modeling description in:
+
+📄 [`envs/sustaindc/README_SustainDC.md`](envs/sustaindc/README_SustainDC.md)
+
+---
+
 ## Customizing Datacenter
 Datacenters are configured in the `datacenters.yaml` file. Each entry defines a single datacenter with:
   - A unique `dc_id`
@@ -507,7 +525,7 @@ reward_fn = CompositeReward(
 
 ---
 
-## 🕒 SLA Modeling
+## SLA Modeling
 
 GreenDCC includes built-in SLA (Service-Level Agreement) constraints to evaluate how well policies meet time-sensitive requirements.
 
@@ -595,7 +613,7 @@ GreenDCC supports training Deep Reinforcement Learning agents using **Soft Actor
 
 ---
 
-## 📁 Configuration Overview
+## Configuration Overview
 
 Training is driven by four modular config files:
 
@@ -608,7 +626,7 @@ Training is driven by four modular config files:
 
 ---
 
-## 🚀 Start Training
+## Start Training
 
 Default:
 
@@ -631,7 +649,7 @@ Use `--checkpoint-path` to resume from a previous run.
 
 ---
 
-## 🧠 RL Algorithm
+## RL Algorithm
 
 The default training method is **Soft Actor-Critic (SAC)**, which features:
 
@@ -643,7 +661,7 @@ The agent learns to **defer or route tasks** for better long-term trade-offs in 
 
 ---
 
-## 📦 Checkpointing
+## Checkpointing
 
 Model checkpoints are saved in:
 
@@ -658,22 +676,7 @@ Use them to resume training or for evaluation.
 
 ---
 
-## 📈 Monitoring with TensorBoard
-
-```bash
-tensorboard --logdir runs/
-```
-
-Key logs include:
-
-- Reward trends
-- Q-loss and policy loss
-- Entropy over time
-- Reward components breakdown (carbon, price, SLA, etc.)
-
----
-
-## 🔧 Customize Everything
+## Customize Everything
 
 Want to test a new reward? Just edit `reward_config.yaml`.
 
@@ -753,7 +756,7 @@ Also you need to specify the checkpoint if using a RL agent.
 
 ---
 
-## ✅ Google Colab Evaluation
+## Google Colab Evaluation
 
 A ready-to-run Google Colab notebook is available for testing and evaluation:
 
