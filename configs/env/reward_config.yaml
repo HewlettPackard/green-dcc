@@ -17,5 +17,9 @@ reward:
       weight: 0.1
       args:
         penalty_per_violation: 5.0
+    transmission_emissions:
+      weight: 0.1
+      args:
+        normalize_factor: 1
 
     # Add more components as needed

@@ -14,5 +14,5 @@ algorithm:
   save_interval: 5000
   log_interval: 100
   hidden_dim: 64
-  max_tasks: 500
+  max_tasks: 750
   device: auto  # auto = use CUDA if available

@@ -245,8 +245,10 @@ class DatacenterClusterManager:
                 logger.info(f"[{current_time}] {dc_name} - Running Tasks: {len(dc.running_tasks)}, "
                             f"Pending Tasks: {len(dc.pending_tasks)}")
 
-        # === STEP 4: Compute total transmission cost ===
+        # === STEP 4: Compute total transmission metrics ===
         transmission_cost_total = 0.0
+        transmission_energy_total = 0.0
+        transmission_emissions_total = 0.0
 
         for dc_name, dc in self.datacenters.items():
             dc_info = results["datacenter_infos"][dc_name]
@@ -262,14 +264,55 @@ class DatacenterClusterManager:
                 if origin_region and dest_region:
                     try:
                         cost_per_gb = self.transmission_matrix.loc[origin_region, dest_region]
-                        transmission_cost_total += cost_per_gb * task.bandwidth_gb
+                        transmission_cost = cost_per_gb * task.bandwidth_gb
+                        transmission_cost_total += transmission_cost
+                        
+                        # === Compute transmission energy and emissions (Simpler model) ===
+                        kwh_per_gb = 0.06  # fixed intensity (KWh/GB) Extracted from https://onlinelibrary.wiley.com/doi/10.1111/jiec.12630
+                        energy_kwh_transmision = task.bandwidth_gb * kwh_per_gb
+                        task.origin_dc = next(dc for dc in self.datacenters.values() if dc.dc_id == task.origin_dc_id)
+                        ci_origin = task.origin_dc.ci_manager.get_current_ci(norm=False) / 1000  # in kgCO2/kWh
+
+                        # If there is no transmision (origin datacenter is the same as destination)
+                        if task.origin_dc_id == task.dest_dc_id:
+                            energy_kwh_transmision = 0.0
+                            ci_origin = 0.0
+                        
+                        transmission_emissions = energy_kwh_transmision * ci_origin
+                        transmission_energy_total += energy_kwh_transmision
+                        transmission_emissions_total += transmission_emissions
+                            
                         if logger:
-                            logger.info(f"[{current_time}] Task: {task.job_name}, Transmission cost from {origin_region} to {dest_region}: "
-                                        f"${cost_per_gb:.4f}/GB, Cost: ${cost_per_gb * task.bandwidth_gb:.4f}")
+                            origin_dc = task.origin_dc  # already assigned above
+                            logger.info(
+                                f"[{current_time}] Task '{task.job_name}' | "
+                                f"From {origin_dc.location} (ID={task.origin_dc_id}, Region={origin_region}) → "
+                                f"To {dest_loc} (ID={task.dest_dc_id}, Region={dest_region}) | "
+                                f"Bandwidth: {task.bandwidth_gb:.2f} GB | "
+                                f"Transmission Cost Rate: ${cost_per_gb:.2f}/GB | "
+                                f"Transmission Cost: ${transmission_cost:.4f} | "
+                                f"Transmission Energy Used: {energy_kwh_transmision:.4f} kWh | "
+                                f"Origin CI: {ci_origin:.4f} kgCO2/kWh | "
+                                f"Transmission CO2 Emissions: {transmission_emissions:.4f} kgCO₂"
+                            )
+
                     except KeyError:
                         print(f"[WARNING] Transmission cost not found between {origin_region} and {dest_region}")
+                
+                else:
+                    if logger:
+                        logger.warning(
+                            f"[{current_time}] Unknown region mapping for {origin_loc} (ID={task.origin_dc_id}) "
+                            f"or {dest_loc} (ID={task.dest_dc_id})"
+                        )
+                    raise ValueError(
+                        f"Unknown region mapping for {origin_loc} (ID={task.origin_dc_id}) or {dest_loc} (ID={task.dest_dc_id})"
+                    )
 
         results["transmission_cost_total_usd"] = transmission_cost_total
+        results["transmission_energy_total_kwh"] = transmission_energy_total
+        results["transmission_emissions_total_kg"] = transmission_emissions_total
+
 
         # FINAL STEP. Return aggregated results from all datacenters
         return results

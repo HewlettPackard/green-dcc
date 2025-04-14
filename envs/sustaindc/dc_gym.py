@@ -187,21 +187,22 @@ class dc_gymenv(gym.Env):
         # action = np.random.randint(self.action_space.n)
         # print(f'Warning, using random action {action} in the dc environment')
         
-        crac_setpoint_delta = self.action_mapping[action]
+        # crac_setpoint_delta = self.action_mapping[action]
         
-        # Check if the current action is in the same direction as the last one
-        if crac_setpoint_delta == self.last_action and action != 0:
-            self.consecutive_actions += 1
-        else:
-            self.consecutive_actions = 1
-            self.action_scaling_factor = 1  # Reset scaling factor if the direction changes
+        # # Check if the current action is in the same direction as the last one
+        # if crac_setpoint_delta == self.last_action and action != 0:
+        #     self.consecutive_actions += 1
+        # else:
+        #     self.consecutive_actions = 1
+        #     self.action_scaling_factor = 1  # Reset scaling factor if the direction changes
 
-        # Adjust the scaling factor based on consecutive actions
-        if self.consecutive_actions > 3:
-            self.action_scaling_factor += 1  # Increase the scale factor after every 3 consecutive actions
+        # # Adjust the scaling factor based on consecutive actions
+        # if self.consecutive_actions > 3:
+        #     self.action_scaling_factor += 1  # Increase the scale factor after every 3 consecutive actions
         
-        self.raw_curr_stpt += crac_setpoint_delta * self.action_scaling_factor
-        self.raw_curr_stpt = max(min(self.raw_curr_stpt, self.max_temp), self.min_temp)
+        # self.raw_curr_stpt += crac_setpoint_delta * self.action_scaling_factor
+        # self.raw_curr_stpt = max(min(self.raw_curr_stpt, self.max_temp), self.min_temp)
+        self.raw_curr_stpt = 18  # Set a fixed CRAC setpoint to 18 C
     
         ITE_load_pct_list = [self.cpu_load_frac*100 for i in range(self.DC_Config.NUM_RACKS)] 
 
@@ -237,7 +238,6 @@ class dc_gymenv(gym.Env):
         self.raw_next_state = self.get_obs()
         
         # Update the last action
-        self.last_action = crac_setpoint_delta
         
         # add info dictionary 
         self.info = {
@@ -246,7 +246,6 @@ class dc_gymenv(gym.Env):
             'dc_Compressor_total_power_kW': self.Compressor_load / 1e3,
             'dc_HVAC_total_power_kW': (self.CT_Cooling_load + self.Compressor_load) / 1e3,
             'dc_total_power_kW': (data_center_total_ITE_Load + self.CT_Cooling_load + self.Compressor_load) / 1e3,
-            'dc_crac_setpoint_delta': crac_setpoint_delta,
             'dc_crac_setpoint': self.raw_curr_stpt,
             'dc_cpu_workload_fraction': self.cpu_load_frac,
             'dc_int_temperature': np.mean(self.rackwise_outlet_temp),
@@ -311,9 +310,9 @@ class dc_gymenv(gym.Env):
 
         return [self.ambient_temp, zone_air_therm_cooling_stpt, zone_air_temp, hvac_power, it_power]
 
-    def set_shifted_wklds(self, cpu_load):
+    def update_workload(self, cpu_load):
         """
-        Updates the current CPU workload. fraction between 0.0 and 1.0
+        Updates the current CPU workload utilization. Fraction between 0.0 and 1.0
         """
         if 0.0 > cpu_load or cpu_load > 1.0:
             print('CPU load out of bounds')

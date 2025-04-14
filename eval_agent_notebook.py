@@ -120,7 +120,7 @@ def make_eval_env(eval_mode=True):
 
 
 # Load trained actor model
-checkpoint_path = "checkpoints/train_20250410_143236/best_checkpoint.pth"  # Adjust path
+checkpoint_path = "checkpoints/train_20250414_144025/best_checkpoint.pth"  # Adjust path
 env = make_eval_env()
 obs, _ = env.reset(seed=123)
 obs_dim = env.observation_space.shape[0]
@@ -197,6 +197,7 @@ for t, timestep_info in enumerate(infos_list):
             "tasks_assigned": dc_info["__common__"].get("tasks_assigned", 0),
             "sla_met": dc_info["__common__"]['__sla__'].get("met", 0),
             "sla_violated": dc_info["__common__"]['__sla__'].get("violated", 0),
+            "dc_cpu_workload_fraction": dc_info["agent_dc"].get("dc_cpu_workload_fraction", 0.0),
             # "transmission_cost": dc_info["__common__"].get("transmission_cost_total_usd", 0.0),
         }
         flat_records.append(record)
@@ -218,7 +219,8 @@ summary = df.groupby("datacenter").agg({
     "running_tasks": "sum",
     "pending_tasks": "mean",
     "sla_met": "sum",
-    "sla_violated": "sum"
+    "sla_violated": "sum",
+    "dc_cpu_workload_fraction": "mean",
 }).reset_index()
 
 summary["SLA Violation Rate (%)"] = (
@@ -242,7 +244,8 @@ summary.columns = [
     "Avg Pending Tasks",
     "SLA Met",
     "SLA Violated",
-    "SLA Violation Rate (%)"
+    "SLA Violation Rate (%)",
+    "Avg CPU Workload Fraction",
 ]
 
 summary
@@ -382,4 +385,12 @@ plt.tight_layout()
 plt.show()
 
 
-#%%
+#%% Now plot the metric dc_cpu_workload_fraction
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df, x="timestep", y="dc_cpu_workload_fraction", hue="datacenter")
+plt.title("CPU Workload Fraction over Time")
+plt.xlabel("Timestep")
+plt.ylabel("CPU Workload Fraction")
+plt.grid(True)
+plt.show()
+# %%

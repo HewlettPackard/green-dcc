@@ -36,11 +36,11 @@ def assign_task_origins(tasks, datacenter_configs, current_time_utc, logger=None
     probs = list(probabilities.values())
 
     for task in tasks:
-        origin_dc = int(np.random.choice(dc_ids, p=probs))
-        task.origin_dc_id = origin_dc
+        origin_dc_id = int(np.random.choice(dc_ids, p=probs))
+        task.origin_dc_id = origin_dc_id
 
         if logger:
-            logger.debug(f"Task {task.job_name} assigned origin DC{origin_dc}.")
+            logger.debug(f"Task {task.job_name} assigned origin DC{origin_dc_id}.")
 
 
 def extract_tasks_from_row(row, scale=1, datacenter_configs=None, current_time_utc=None, logger=None):

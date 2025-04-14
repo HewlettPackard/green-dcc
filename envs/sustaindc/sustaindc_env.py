@@ -65,8 +65,8 @@ class SustainDC(gym.Env):
         # **✅ Pick a random simulation year for variability**
         self.simulation_year = None 
 
-        self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, 
-                                  n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=1000)
+        # self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, 
+        #                           n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=1000)
         self.dc_env, _ = make_dc_env(month=self.month, location=self.location, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
                                              datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file, add_cpu_usage=False)
         self.bat_env = make_bat_fwd_env(month=self.month, max_bat_cap_Mwh=self.dc_env.ranges['max_battery_energy_Mwh'], 
@@ -176,7 +176,7 @@ class SustainDC(gym.Env):
                     f"(CPU: {task.cpu_req:.2f}, GPU: {task.gpu_req:.2f}, MEM: {task.mem_req:.2f}, "
                     f"Bandwidth: {task.bandwidth_gb:.4f}GB). "
                     f"Remaining: {self.available_cpus:.2f} CPUs, {self.available_gpus:.2f} GPUs, "
-                    f"{self.available_mem:.2f} MEM. Network Cost: ${network_cost:.2f}.")
+                    f"{self.available_mem:.2f} GB MEM.")
 
             log_info(f"[{current_time}] Task {task.job_name} started and will finish at {task.finish_time}.")
             return True
@@ -243,12 +243,6 @@ class SustainDC(gym.Env):
         self.ls_terminated = self.dc_terminated = self.bat_terminated = False
         self.ls_truncated = self.dc_truncated = self.bat_truncated = False
 
-        # Reset the managers
-        # if init_day is None:
-        #     init_day = random.randint(max(0, self.ranges_day[0]), min(364, self.ranges_day[1]))
-        # if init_hour is None:
-        #     init_hour = random.randint(0, 23)
-
         # Adjust based on local timezone
         local_init_day = (init_day + int((init_hour + self.timezone_shift) / 24)) % 365
         local_init_hour = (init_hour + self.timezone_shift) % 24
@@ -259,36 +253,15 @@ class SustainDC(gym.Env):
         ci_i, ci_i_future, ci_i_denorm = self.ci_manager.reset(init_day=local_init_day, init_hour=local_init_hour, seed=seed)
         price_i = self.price_manager.reset(init_day=local_init_day, init_hour=local_init_hour, seed=seed)
 
-
         # Set the external ambient temperature to data center environment
         self.dc_env.set_ambient_temp(temp, wet_bulb)
         
-        # Update the workload of the load shifting environment
-        workload = 0.5
-        self.ls_env.update_workload(workload)
-        self.ls_env.update_current_date(local_init_day, local_init_hour)
-        
         # Reset all the environments
-        ls_s, self.ls_info = self.ls_env.reset()
         self.dc_state, self.dc_info = self.dc_env.reset()
         bat_s, self.bat_info = self.bat_env.reset()
                 
-        current_workload = 0.5#self.workload_m.get_current_workload()
-        next_workload = 0.5#self.workload_m.get_next_workload()
-        
-        current_out_temperature = self.weather_manager.get_current_temperature()
-        next_out_temperature = self.weather_manager.get_next_temperature()
-        next_n_out_temperature = self.weather_manager.get_n_next_temperature(n=16)
-        
-        # ls_state -> [time (sine/cosine enconded), original ls observation, current+future normalized CI]
-        queue_status = self.ls_info['ls_norm_tasks_in_queue']
-        ci_i_past = self.ci_manager.get_n_past_ci(n=16)
-        oldest_task_age = self.ls_info['ls_oldest_task_age']
-        average_task_age = self.ls_info['ls_average_task_age']
-        ls_task_age_histogram = self.ls_info['ls_task_age_histogram']
-        
-        # bat_state -> [time (sine/cosine enconded), battery SoC, current+future normalized CI]
-        # self.bat_state = np.float32(np.hstack((t_i, bat_s, ci_i_future)))
+        current_workload = 0.0  #self.workload_m.get_current_workload()
+        self.dc_env.update_workload(current_workload)
 
         # Update ci in the battery environment
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
@@ -306,12 +279,11 @@ class SustainDC(gym.Env):
 
         # Prepare the infos dictionary with common and individual agent information
         self.infos = {
-            'agent_ls': self.ls_info,
             'agent_dc': self.dc_info,
             'agent_bat': self.bat_info,
             '__common__': {
                 'time': t_i,
-                'workload': workload,
+                'workload': current_workload,
                 'weather': temp,
                 'ci': ci_i,
                 'ci_future': ci_i_future,
@@ -387,21 +359,11 @@ class SustainDC(gym.Env):
         self._update_environments(workload, temp, wet_bulb, ci_i_denorm, ci_i_future, day, hour)
 
         # Create observations for the next step based on updated environment states
-        next_workload = 0.5 #self.workload_m.get_next_workload()
-        next_out_temperature = self.weather_manager.get_next_temperature()
-
-        queue_status = self.ls_info['ls_norm_tasks_in_queue']
-        ci_i_past = self.ci_manager.get_n_past_ci(n=16)
-        oldest_task_age = self.ls_info['ls_oldest_task_age']
-        average_task_age = self.ls_info['ls_average_task_age']
-        ls_task_age_histogram = self.ls_info['ls_task_age_histogram']
-          
         # Populate observation dictionary based on updated states
         obs = self._populate_observation_dict()
 
         # Update the self.infos dictionary, similar to how it's done in the reset method
         self.infos = {
-            'agent_ls': self.ls_info,
             'agent_dc': self.dc_info,
             'agent_bat': self.bat_info,
             '__common__': {
@@ -464,15 +426,14 @@ class SustainDC(gym.Env):
 
     def _perform_actions(self, action_dict):
         # Use fixed "do nothing" actions:
-        DO_NOTHING_LOAD_SHIFTING = 1
+        # DO_NOTHING_LOAD_SHIFTING = 1
         DO_NOTHING_HVAC = 1
         DO_NOTHING_BATTERY = 2
 
         # For load shifting environment:
-        self.ls_state, _, self.ls_terminated, self.ls_truncated, self.ls_info = self.ls_env.step(DO_NOTHING_LOAD_SHIFTING)
+        # self.ls_state, _, self.ls_terminated, self.ls_truncated, self.ls_info = self.ls_env.step(DO_NOTHING_LOAD_SHIFTING)
 
         # For HVAC / data center environment:
-        self.dc_env.set_shifted_wklds(self.ls_info['ls_shifted_workload'])
         self.dc_state, _, self.dc_terminated, self.dc_truncated, self.dc_info = self.dc_env.step(DO_NOTHING_HVAC)
 
         # For battery environment:
@@ -483,9 +444,10 @@ class SustainDC(gym.Env):
 
     def _update_environments(self, workload, temp, wet_bulb, ci_i_denorm, ci_i_future, current_day, current_hour):
         """Update the environment states based on the manager's outputs."""
-        self.ls_env.update_workload(workload)
-        self.ls_env.update_current_date(current_day, current_hour)
+        # self.ls_env.update_workload(workload)
+        # self.ls_env.update_current_date(current_day, current_hour)
         self.dc_env.set_ambient_temp(temp, wet_bulb)
+        self.dc_env.update_workload(workload)
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
 
 

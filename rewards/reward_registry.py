@@ -10,3 +10,4 @@ from rewards.predefined.composite_reward import CompositeReward
 from rewards.predefined.carbon_emissions_reward import CarbonEmissionsReward
 from rewards.predefined.energy_consumption_reward import EnergyConsumptionReward
 from rewards.predefined.transmission_cost_reward import TransmissionCostReward
+from rewards.predefined.transmission_emissions_reward import TransmissionEmissionsReward

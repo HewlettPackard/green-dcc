@@ -26,7 +26,7 @@ location_to_gcp_region = {
     "JP-TK": "asia-northeast1",
     "IN": "asia-south1",
     "AU-NSW": "australia-southeast1",
-    "BR": "southamerica-east1",
+    "BR-SP": "southamerica-east1",
     "ZA": "africa-south1",
     "PT": "europe-west1",
     "ES": "europe-west1",
@@ -50,7 +50,7 @@ location_to_aws_region = {
     "JP-TK": "ap-northeast-1",
     "IN": "ap-south-1",
     "AU-NSW": "ap-southeast-2",
-    "BR": "sa-east-1",
+    "BR-SP": "sa-east-1",
     "ZA": "af-south-1",
     "PT": "eu-south-1",
     "ES": "eu-south-1",
@@ -74,7 +74,7 @@ location_to_azure_region = {
     "JP-TK": "Japan East",
     "IN": "Central India",
     "AU-NSW": "Australia East",
-    "BR": "Brazil South",
+    "BR-SP": "Brazil South",
     "ZA": "South Africa North",
     "PT": "Portugal North",
     "ES": "Spain Central",
@@ -98,22 +98,40 @@ location_to_custom_region = {
     "JP-TK": "CustomRegion7",
     "IN": "CustomRegion8",
     "AU-NSW": "CustomRegion9",
-    "BR": "CustomRegion10",
+    "BR-SP": "CustomRegion10",
     "ZA": "CustomRegion11",
     # Add more mappings as needed
 }
 
+import warnings
+
 def map_location_to_region(location_code: str, provider: str):
     provider = provider.lower()
     if provider == "gcp":
-        return location_to_gcp_region.get(location_code)
+        region_map = location_to_gcp_region
     elif provider == "aws":
-        return location_to_aws_region.get(location_code)
+        region_map = location_to_aws_region
     elif provider == "azure":
-        return location_to_azure_region.get(location_code)
+        region_map = location_to_azure_region
     elif provider == "custom":
-        return location_to_custom_region.get(location_code)
+        region_map = location_to_custom_region
     else:
         raise ValueError(f"Unsupported provider: {provider}. Use one of: gcp, aws, azure, custom.")
 
+    # === Exact match ===
+    region = region_map.get(location_code)
+    if region:
+        return region
+
+    # === Fallback fuzzy match ===
+    for key in region_map:
+        if key in location_code or location_code in key:
+            warnings.warn(
+                f"[map_location_to_region] WARNING: No exact match for '{location_code}', "
+                f"using closest match: '{key}' -> {region_map[key]}"
+            )
+            return region_map[key]
+
+    # === Nothing found ===
+    raise ValueError(f"[map_location_to_region] ERROR: Could not map location '{location_code}' to any known region for provider '{provider}'.")
 

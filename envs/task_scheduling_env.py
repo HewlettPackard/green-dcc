@@ -90,7 +90,7 @@ class TaskSchedulingEnv(gym.Env):
                 self.deferred_tasks.append(task)
                 task.temporarily_deferred = True
                 if self.logger:
-                    self.logger.info(f"[{self.current_time}] Task {task.job_name} deferred in time (not assigned).")
+                    self.logger.info(f"[{self.current_time}] Task {task.job_name}, with origin DC{task.origin_dc_id}, has been deferred in time (not assigned destination DC).")
                 continue
             
             # === Geographical routing ===

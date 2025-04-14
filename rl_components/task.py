@@ -40,7 +40,6 @@ class Task:
         gpu_req: float,
         mem_req: float,
         bandwidth_gb: float,
-        origin_dc_id: Optional[int] = None,
         sla_multiplier: float = 1.5  # Default SLA multiplier
     ) -> None:
         # Initialize task properties
@@ -65,7 +64,8 @@ class Task:
         self.wait_intervals: int = 0
         
         # Record the origin datacenter
-        self.origin_dc_id = origin_dc_id
+        self.origin_dc_id: Optional[int] = None
+        self.origin_dc: Optional[Any] = None
         
         # Destination information will be assigned when the task is routed
         self.dest_dc_id: Optional[int] = None

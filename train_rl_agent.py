@@ -36,7 +36,16 @@ class RunningStats:
         std = max(np.sqrt(self.var / self.count), 1e-6)
         return (x - self.mean) / std
 
-
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
+    
 def parse_args():
     parser = argparse.ArgumentParser(description="GreenDCC Training")
     parser.add_argument("--sim-config", type=str, default="configs/env/sim_config.yaml")
@@ -46,7 +55,7 @@ def parse_args():
     parser.add_argument("--checkpoint-path", type=str, default=None)
     parser.add_argument("--tag", type=str, default="", help="Optional run tag")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--enable-logger", type=bool, default=True, help="Enable logger")
+    parser.add_argument("--enable-logger", type=str2bool, default=True, help="Enable logger")
     return parser.parse_args()
 
 
@@ -94,11 +103,15 @@ def train():
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_id = f"{args.tag}_{timestamp}" if args.tag else f"{timestamp}"
 
-    log_dir = f"runs/train_{run_id}"
-    ckpt_dir = f"checkpoints/train_{run_id}"
+    # Save logs separately from tensorboard
+    log_dir = f"logs/train_{run_id}"          # <--- debug logs
+    tb_dir = f"runs/train_{run_id}"           # <--- tensorboard
+    ckpt_dir = f"checkpoints/train_{run_id}"  # <--- checkpoints
+
     os.makedirs(ckpt_dir, exist_ok=True)
-    writer = SummaryWriter(log_dir=log_dir)
-    
+    writer = SummaryWriter(log_dir=tb_dir)   # <-- use only for TensorBoard
+
+    print(f"Enable logger: {args.enable_logger}")
     logger = setup_logger(log_dir, enable_logger=args.enable_logger)
 
     algo_cfg = load_yaml(args.algo_config)["algorithm"]

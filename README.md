@@ -16,7 +16,7 @@ A high-fidelity simulation benchmark for **sustainable task scheduling** across 
   - Energy use
   - Carbon emissions
   - Cooling (temperature-based proxy)
-  - Transmission overheads
+  - Transmission emissions
 - Supports:
   - Rule-based controllers
   - Deep RL agents (SAC pre-implemented)
@@ -581,7 +581,7 @@ If a task misses its SLA deadline, it will be marked as **violated**. You can pe
 ```
 This allows policies to be evaluated based on both sustainability **and** reliability metrics.
 
-## Why this matters
+### Why this matters
 
 Not all users have the same priorities:
 
@@ -591,6 +591,54 @@ Not all users have the same priorities:
 
 With our modular system, you can **define custom reward combinations** that align with your specific optimization objectives.
 This flexibility allows you to tailor the training process to your unique needs, whether you're focused on cost, carbon emissions, etc. or a combination of multiple factors.
+
+---
+
+### Carbon Emissions from Inter-Datacenter Transfers
+
+GreenDCC simulates not only compute-related emissions, but also **carbon emissions associated with data transfers** between datacenters.
+
+This matters for sustainable workload scheduling because AI workloads — especially training or fine-tuning — involve **large data transfers**, and moving that data across long distances consumes non-negligible electricity in the **network infrastructure**.
+
+#### Current Model (Simple, Efficient Approximation)
+
+At this stage, we estimate **transmission-related carbon emissions** using a linear model:
+
+```python
+emissions_kg = task.bandwidth_gb × 0.06 kWh/GB × carbon_intensity_origin
+```
+
+- `bandwidth_gb`: size of the task to be transmitted (from Alibaba 2020 dataset)
+- `0.06 kWh/GB`: average electricity required to transmit 1 GB of data (from [Aslan et al., 2017](https://doi.org/10.1111/jiec.12630))
+- `carbon_intensity_origin`: current carbon intensity (kgCO₂/kWh) at the **origin datacenter’s** location
+
+This approach assumes that most of the energy consumption for transmission happens near the **origin region**, which aligns with findings from empirical network energy studies (e.g., [Guennebaud et al., 2024](https://doi.org/10.1111/jiec.13513)).
+
+#### Example
+
+If a 50 GB task is transferred from a region with:
+- Carbon intensity = 400 gCO₂/kWh (i.e., 0.4 kgCO₂/kWh)
+
+Then:
+```python
+emissions = 50 × 0.06 × 0.4 = 1.2 kgCO₂
+```
+
+This emission is recorded and optionally **penalized via reward** in the RL training loop.
+
+#### Planned Improvements
+
+We plan to introduce a more realistic **bottom-up network model** based on:
+> *Energy consumption of data transfer: Intensity indicators versus absolute estimates*, Guennebaud et al. (2024)  
+> [https://doi.org/10.1111/jiec.13513](https://doi.org/10.1111/jiec.13513)
+
+This will account for:
+- Core vs. access network separation
+- Dynamic peak vs. idle energy allocation
+- Long-haul routing paths
+- Origin/destination asymmetry
+
+That model will enable **better estimation of network emissions under complex scenarios**, but our current approach gives fast and robust results for sustainability-aware scheduling.
 
 ---
 

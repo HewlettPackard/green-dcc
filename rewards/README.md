@@ -144,14 +144,31 @@ You can add new reward functions by:
 1. Creating a file in `rewards/predefined/`
 2. Inheriting from `BaseReward`
 3. Registering it using `@register_reward("your_name")`
+4. **IMPORTANT:** Also import your reward class in `rewards/reward_registry.py`
+   to make sure the `@register_reward(...)` decorator gets executed at runtime.
 
 Example:
 
 ```python
+# rewards/predefined/my_custom_reward.py
+
+from rewards.base_reward import BaseReward
+from rewards.registry_utils import register_reward
+
 @register_reward("my_custom")
 class MyCustomReward(BaseReward):
     def __call__(self, cluster_info, current_tasks, current_time):
-        return -some_metric
+        reward = -some_metric
+        self.last_reward = reward
+        return reward
+```
+
+Then register it in `rewards/reward_registry.py`:
+
+```python
+# rewards/reward_registry.py
+
+from rewards.predefined.my_custom_reward import MyCustomReward
 ```
 
 ---
