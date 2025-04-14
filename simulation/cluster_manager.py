@@ -14,6 +14,16 @@ from utils.transmission_region_mapper import map_location_to_region
 from utils.workload_utils import assign_task_origins, extract_tasks_from_row
 
 class DatacenterClusterManager:
+    """
+    Backend simulator that manages multiple datacenters and handles task routing.
+
+    This class can operate in either:
+      - Rule-based mode: Uses predefined heuristics for task assignment.
+      - RL mode: Waits for TaskSchedulingEnv to assign tasks via actions.
+
+    It steps the internal simulation, updates datacenter resources,
+    and computes detailed info at each timestep.
+    """
     def __init__(self, config_list, simulation_year, init_day, init_hour, strategy="priority_order", 
                  tasks_file_path=None, shuffle_datacenter_order=True, cloud_provider="gcp", logger=None):
         """
@@ -201,7 +211,7 @@ class DatacenterClusterManager:
                     results["task_distribution"][dc_name].append(task)
 
                     if logger:
-                        logger.info(f"[{current_time}] Task {task.job_name} assigned → {dc_name} (rule-based)")
+                        logger.info(f"[{current_time}] Task {task.job_name} assigned -> {dc_name} (rule-based)")
         else:
             # Manual RL mode: tasks have already been enqueued
             if logger:

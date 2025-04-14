@@ -7,6 +7,15 @@ from rewards.base_reward import BaseReward
 from torch.utils.tensorboard import SummaryWriter  # if not already imported
 
 class TaskSchedulingEnv(gym.Env):
+    """
+    RL Environment for global task scheduling across distributed datacenters.
+
+    This environment wraps around DatacenterClusterManager and exposes a
+    Gym-compatible interface. It manages task-level actions (assignment or defer),
+    computes observations, and tracks rewards via a modular reward function.
+
+    RL agents interact with this class.
+    """
     def __init__(self, cluster_manager, start_time, end_time, reward_fn: BaseReward, writer: SummaryWriter = None,):
         super().__init__()
         self.cluster_manager = cluster_manager
@@ -93,7 +102,7 @@ class TaskSchedulingEnv(gym.Env):
             
             if self.logger:
                 self.logger.info(f"[{self.current_time}] Routed task {task.job_name} "
-                            f"(origin DC{task.origin_dc_id}) → destination DC{dest_dc.dc_id}")
+                            f"(origin DC{task.origin_dc_id}) -> destination DC{dest_dc.dc_id}")
 
         # === Step all datacenters (releases, schedules, updates) ===
         results = self.cluster_manager.step(self.current_time, logger=self.logger)

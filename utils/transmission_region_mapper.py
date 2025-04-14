@@ -11,7 +11,7 @@ To define a custom cost matrix:
    - Format: rows and columns must match your custom region names
 3. Use `cloud_provider='custom'` when initializing `DatacenterClusterManager`
 
-Each row/col in the CSV must represent the cost per GB from origin → destination.
+Each row/col in the CSV must represent the cost per GB from origin -> destination.
 """
 
 

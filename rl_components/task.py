@@ -41,7 +41,7 @@ class Task:
         mem_req: float,
         bandwidth_gb: float,
         origin_dc_id: Optional[int] = None,
-        sla_multiplier: float = 1.2  # Default SLA multiplier
+        sla_multiplier: float = 1.5  # Default SLA multiplier
     ) -> None:
         # Initialize task properties
         self.job_name = job_name

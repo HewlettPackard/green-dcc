@@ -53,7 +53,7 @@ def make_eval_env(eval_mode=True):
     datacenter_configs = [
         {
             'location': 'US-NY-NYIS', 'dc_id': 1, 'agents': [], 'timezone_shift': -5,
-            'dc_config_file': 'dc_config.json',
+            'dc_config_file': 'configs/dcs/dc_config.json',
             'month': simulated_month,
             'datacenter_capacity_mw': 1.5,
             'total_cpus': 5000, 'total_gpus': 700,
@@ -61,33 +61,33 @@ def make_eval_env(eval_mode=True):
         },
         {
             'location': 'DE-LU', 'dc_id': 2, 'agents': [], 'timezone_shift': 1,
-            'dc_config_file': 'dc_config.json',
+            'dc_config_file': 'configs/dcs/dc_config.json',
             'month': simulated_month,
-            'datacenter_capacity_mw': 1.2,
+            'datacenter_capacity_mw': 1.5,
             'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.22,
         },
         {
             'location': 'ZA', 'dc_id': 3, 'agents': [], 'timezone_shift': 2,
-            'dc_config_file': 'dc_config.json',
+            'dc_config_file': 'configs/dcs/dc_config.json',
             'month': simulated_month,
-            'datacenter_capacity_mw': 1.0,
+            'datacenter_capacity_mw': 1.5,
             'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.13,
         },
         {
             'location': 'SG', 'dc_id': 4, 'agents': [], 'timezone_shift': 8,
-            'dc_config_file': 'dc_config.json',
+            'dc_config_file': 'configs/dcs/dc_config.json',
             'month': simulated_month,
-            'datacenter_capacity_mw': 1.8,
+            'datacenter_capacity_mw': 1.5,
             'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.25,
         },
         {
             'location': 'AU-NSW', 'dc_id': 5, 'agents': [], 'timezone_shift': 11,
-            'dc_config_file': 'dc_config.json',
+            'dc_config_file': 'configs/dcs/dc_config.json',
             'month': simulated_month,
-            'datacenter_capacity_mw': 1.4,
+            'datacenter_capacity_mw': 1.5,
             'total_cpus': 5000, 'total_gpus': 700,
             'total_mem': 5000, 'population_weight': 0.15,
         }
@@ -120,7 +120,7 @@ def make_eval_env(eval_mode=True):
 
 
 # Load trained actor model
-checkpoint_path = "checkpoints/train_20250409_154131/best_checkpoint.pth"  # Adjust path
+checkpoint_path = "checkpoints/train_20250410_143236/best_checkpoint.pth"  # Adjust path
 env = make_eval_env()
 obs, _ = env.reset(seed=123)
 obs_dim = env.observation_space.shape[0]
@@ -158,7 +158,7 @@ for step in tqdm(range(steps)):
         delayed_count = sum(1 for a in actions if a == 0)
         delayed_task_counts.append(delayed_count)
     else:
-        # If RBC is used, actions must be empty → internal logic assigns them
+        # If RBC is used, actions must be empty -> internal logic assigns them
         actions = []
         delayed_task_counts.append(0)  # No delayed logic in RBC
 

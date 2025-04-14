@@ -25,7 +25,7 @@ def process_excel_file(filepath):
 
             dt = datetime.strptime(date_str, "%Y%m%d") + timedelta(hours=hour - 1)
 
-            all_rows.append([dt, price * 1000])  # Convert from KRW/kWh → KRW/MWh
+            all_rows.append([dt, price * 1000])  # Convert from KRW/kWh -> KRW/MWh
 
     df_out = pd.DataFrame(all_rows, columns=["Datetime", "Price (KRW/MWh)"])
     df_out.sort_values("Datetime", inplace=True)

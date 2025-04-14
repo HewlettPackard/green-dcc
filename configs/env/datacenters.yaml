@@ -18,9 +18,9 @@ datacenters:
     dc_config_file: "configs/dcs/dc_config.json"
 
   - dc_id: 3
-    location: "ZA"
-    timezone_shift: 2
-    population_weight: 0.13
+    location: "BR-SP"
+    timezone_shift: -3
+    population_weight: 0.2
     total_cpus: 5000
     total_gpus: 700
     total_mem: 5000
