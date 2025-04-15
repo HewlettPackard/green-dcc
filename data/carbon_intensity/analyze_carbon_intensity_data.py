@@ -4,21 +4,29 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import seaborn as sns
+import matplotlib
+
+# Set global style
+sns.set_theme(style="whitegrid")
+matplotlib.rcParams.update({"font.size": 16})
+
+
 # Define the path where carbon intensity data is stored
 data_path = "."
 
 location_labels = {
-    "US-NY-NYIS": "NY/USA",
+    "US-NY-NYIS": "New York/USA",
     "US-MIDA-PJM": "Philadelphia/USA",
     "US-TEX-ERCO": "Dallas/USA",
-    "US-CAL-CISO": "San Jose/USA",
-    "DE": "Frankfurt/GE",
+    "US-CAL-CISO": "San Francisco/USA",
+    "DE-LU": "Frankfurt/GE",
     "CA-ON": "Toronto/CA",
     "SG": "Singapore/SG",
     "AU-VIC": "Melbourne/AU",
     "AU-NSW": "Sydney/AU",
     "CL-SEN": "Santiago/CL",
-    "BR-CS": "São Paulo/BR",
+    "BR-SP": "São Paulo/BR",
     "ZA": "Johannesburg/ZA",
     "KR": "Seoul/KR",
     "IN-WE": "Mumbai/IN",
@@ -73,12 +81,12 @@ for i, location in enumerate(mean_carbon_intensity["location"].unique()):
     subset = mean_carbon_intensity[mean_carbon_intensity["location"] == location]
     color = f"C{i % 10}"  # Use matplotlib's default color cycle
     linestyle = linestyles[i % len(linestyles)]  # Cycle through linestyles
-    plt.plot(subset["date"], subset["Carbon Intensity gCO₂eq/kWh (direct)"], label=location, color=color, linestyle=linestyle, alpha=0.7)
+    plt.plot(subset["date"], subset["Carbon Intensity gCO₂eq/kWh (direct)"], label=location, color=color, linestyle=linestyle, alpha=0.9)
 
 # Reduce the number of x-axis ticks
 xticks_indices = np.linspace(0, len(mean_carbon_intensity["date"].unique()) - 1, num=12, dtype=int)
 xticks_labels = mean_carbon_intensity["date"].unique()[xticks_indices]
-plt.xticks(xticks_labels, rotation=45, fontsize=8)
+plt.xticks(xticks_labels, rotation=45)
 
 # Finalize plot
 plt.xlabel("Day of Year (MM-DD)")
@@ -90,6 +98,9 @@ plt.xlim(0, len(mean_carbon_intensity["date"].unique()))
 # Place the legend outside the plot
 plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left', borderaxespad=0.)
 plt.tight_layout()
+
+# Save the plot as SVG
+# plt.savefig("../../assets/figures/carbon_intensity_trends.svg", format="svg", bbox_inches="tight")
 plt.show()
 #%%
 all_data = []
@@ -130,12 +141,12 @@ for i, location in enumerate(mean_carbon_intensity["location"].unique()):
     subset = mean_carbon_intensity[mean_carbon_intensity["location"] == location]
     color = f"C{i % 10}"  # Use matplotlib's default color cycle
     linestyle = linestyles[i % len(linestyles)]  # Cycle through linestyles
-    plt.plot(subset["time_of_day"], subset["Carbon Intensity gCO₂eq/kWh (direct)"], label=location, color=color, linestyle=linestyle, alpha=0.7)
+    plt.plot(subset["time_of_day"], subset["Carbon Intensity gCO₂eq/kWh (direct)"], label=location, color=color, linestyle=linestyle, alpha=0.9)
 
 # Reduce the number of x-axis ticks
 xticks_indices = np.linspace(0, len(mean_carbon_intensity["time_of_day"].unique()) - 1, num=24, dtype=int)
 xticks_labels = mean_carbon_intensity["time_of_day"].unique()[xticks_indices]
-plt.xticks(xticks_labels, rotation=45, fontsize=8)
+plt.xticks(xticks_labels, rotation=45)
 plt.xlim(0, len(mean_carbon_intensity["time_of_day"].unique())-1)
 
 # Finalize plot
@@ -147,5 +158,8 @@ plt.grid(linestyle="--", alpha=0.7)
 # Place the legend outside the plot
 plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left', borderaxespad=0.)
 plt.tight_layout()
+
+# Save the plot as SVG
+# plt.savefig("../../assets/figures/carbon_intensity_variation.svg", format="svg", bbox_inches="tight")
 plt.show()
 #%%

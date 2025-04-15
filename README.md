@@ -1,10 +1,12 @@
-
 # Multi-Data Center Geographical Scheduling Benchmark
 
 A high-fidelity simulation benchmark for **sustainable task scheduling** across globally distributed data centers. Optimize AI workloads based on **carbon emissions**, **energy cost**, **resource efficiency**, **transmission costs**, and **SLA guarantees**.
 
 > **Goal**: Assign each incoming task to the best datacenter considering real-world sustainability and operational trade-offs.
 
+<p align="center">
+  <img src="assets/figures/global_map.svg" alt="Geo-Distributed Data Centers" width="1000"/>
+</p>
 ---
 
 ## Features
@@ -98,57 +100,302 @@ In short, a 15-minute timestep is not only realistic—it’s also **recommended
 
 | Type               | Source                                                                 |
 |--------------------|------------------------------------------------------------------------|
-| AI Workloads       | Alibaba Cluster Trace 2020                                             |
-| Weather Data       | Open-Meteo                                                             |
-| Carbon Intensity   | Electricity Maps                                                       |
-| Energy Prices      | Mixed sources: Electricity Maps, GridStatus, Open APIs (per country)   |
-| Transmission Costs | AWS, GCP, Azure (per region)                                           |
+| AI Workloads       | [Alibaba Cluster Trace 2020](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020)  |
+| Weather Data       | [Open-Meteo](https://open-meteo.com/)                                  |
+| Carbon Intensity   | [Electricity Maps](https://www.electricitymaps.com/)                   |
+| Energy Prices      | [Electricity Maps](https://www.electricitymaps.com/), [GridStatus](https://gridstatus.io/) |
+| Transmission Costs | [AWS](https://aws.amazon.com/ec2/pricing/on-demand/), [GCP](https://cloud.google.com/vpc/pricing), [Azure](https://azure.microsoft.com/en-us/pricing/details/bandwidth/) |
+
+GreenDCC includes full-year datasets for:
+- **Weather**, **carbon intensity**, and **electricity prices** from **2021 to 2024**
+- Pricing normalized to $/kWh across supported regions
+- Transmission costs based on **cloud-specific regional bandwidth pricing**
+
+For more details on how electricity prices are collected, normalized, and aligned with simulation timezones, refer to:
+📄 [`data/electricity_prices/README.md`](data/electricity_prices/README.md)
 
 ---
 
-## AI Workloads Dataset Format
+### 🌐 Supported Datacenter Locations
 
-The workload traces used in the paper come from the Alibaba GPU Cluster Trace (2020)​ [MLaaS in the Wild: Workload Analysis and Scheduling in Large-Scale Heterogeneous {GPU} Clusters](https://www.usenix.org/system/files/nsdi22-paper-weng.pdf). [Repository](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020).
-These traces contain a hybrid of training and inference jobs running state-of-the-art ML algorithms. It is collected from a large production cluster with over 6,500 GPUs (on ~1800 machines) in Alibaba PAI (Platform for Artificial Intelligence), spanning the July and August of 2020.
+Use the following `location` codes in `datacenters.yaml` to enable real data integration:
 
-From the Alibaba Cluster Trace 2020 dataset, we are interesed in the tasks that requires a big ammount of resources, requiring at least 15 minutes to be completed (AI model training like for Chatbots Fine Tuning, Stable Diffusion, etc.).
+| Code         | Region / Market                          |
+|--------------|------------------------------------------|
+| US-NY-NYIS   | New York (NYISO)                         |
+| US-CAL-CISO  | California (CAISO)                       |
+| US-TEX-ERCO  | Texas (ERCOT)                            |
+| DE-LU        | Germany + Luxembourg (ENTSO-E)           |
+| FR           | France (ENTSO-E)                         |
+| SG           | Singapore (USEP)                         |
+| JP-TK        | Japan - Tokyo Area (JEPX)                |
+| IN           | India - Mumbai (POSOCO)                  |
+| AU-NSW       | Australia - New South Wales (AEMO)       |
+| BR-SP        | Brazil - São Paulo (ONS)                 |
+| ZA           | South Africa (Eskom)                     |
+| PT           | Portugal (OMIE)                          |
+| ES           | Spain (OMIE)                             |
+| BE           | Belgium (ENTSO-E)                        |
+| CH           | Switzerland (ENTSO-E)                    |
+| KR           | South Korea (KPX)                        |
+| CA-ON        | Ontario (IESO)                           |
+| CL-SIC       | Chile (CDEC-SIC)                         |
+| AT           | Austria (ENTSO-E)                        |
+| NL           | Netherlands (ENTSO-E)                    |
 
-The 2 months of data were expanded to 1 year of data to match the duration of the dataset with the weather data, the carbon intensity and the energy prices. The tasks are then grouped into 15-minute intervals, and the tasks are then assigned to the datacenters using a population-based logic.
+We plan to continuously expand this list in future releases.
+➡️ Have a region you'd like to see supported? Open an issue or submit a PR!
 
-Even the task is assigned to a datacenter, the task is not executed in that datacenter. The datacenter that will compute the task is selected by the global scheduler, that will select the datacenter most suitable based on the current state of the datacenter (energy price, carbon intensity, SLA, etc.), and based on the objectives that the user wants to optimize.
-Based on the selected datacenter, the task will have a cost associated to the transmission of the task to the datacenter, and a delay associated to the transmission of the task to the datacenter. Because the tasks duration are very long, the delay is not important, but the cost is important. The cost per GB is based on public datasets from AWS, GCP and Azure, considering the origin region and the destination region. The total cost is then calculated considering the size of the task (the bandwidth) (considering the data required for that training/infering, extracted from the original Alibaba dataset), and the cost per GB.
+### Climate Variability Across Regions
 
+We analyze **historical temperature trends** in datacenter regions using weather data from [Open-Meteo](https://open-meteo.com/), covering years **2021 to 2024**. Temperature impacts both **cooling needs** and **energy efficiency**, making it an important factor in sustainable infrastructure planning.
+
+<p align="center">
+  <img src="assets/figures/temperature_trends.svg" alt="Temperature Trends" width="800"/>
+</p>
+
+<p align="center">
+  <em>Average daily temperature across selected datacenter regions (°C)</em>
+</p>
+
+This figure reveals the **seasonal variations** across locations:
+
+- Northern hemisphere locations show strong temperature swings between summer and winter.
+- Regions like Singapore or Mumbai maintain **stable warm climates** year-round.
+- This information helps **model cooling-related energy demands** in simulations and energy estimation.
+
+
+### Carbon Intensity Trends and Variability
+
+To highlight how **carbon intensity varies across locations and times**, we also analyze the carbon intensity real-world data collected between **2021 and 2024** from [Electricity Maps](https://www.electricitymaps.com/). These insights guide **GreenDCC**’s energy-aware task scheduling policies.
+
+<p align="center">
+  <img src="assets/figures/carbon_intensity_trends.svg" alt="Carbon Intensity Trends" width="800"/>
+</p>
+
+<p align="center">
+  <em>Average daily carbon intensity across selected datacenter regions (gCO₂eq/kWh)</em>
+</p>
+
+<p align="center">
+  <img src="assets/figures/carbon_intensity_variation.svg" alt="Carbon Intensity Daily Variation" width="800"/>
+</p>
+
+<p align="center">
+  <em>Average hourly carbon intensity profile over a typical day (UTC time)</em>
+</p>
+
+These figures show that:
+
+- **Carbon intensity is highly region-dependent** (e.g., countries with renewable-heavy grids have lower values like Toronto/CA, or Sao Paulo/BR).
+- **Time-of-day plays a big role**: some regions show large carbon intensity variations throughout the day (e.g., Sydney/AU, California/USA).
+- This variability can be used by **GreenDCC’s scheduling engine** to route tasks at the most sustainable moments.
+
+### Electricity Prices Dataset
+
+We include real hourly electricity price data across 20+ global regions, covering the years 2020–2024.  
+Prices are stored in standardized format: **UTC timestamps** and **USD/MWh** units, extracted from sources like ElectricityMaps, GridStatus, CAISO, OMIE, and regional APIs.
+
+Each region has a yearly CSV file under:  
+`data/electricity_prices/standardized/<REGION>/<YEAR>/<REGION>_electricity_prices_<YEAR>.csv`
+
+The dataset enables dynamic, cost-aware scheduling across regions.
+
+#### Learn More
+For full region list, folder structure, sources, and extraction scripts:  
+📄 [`data/electricity_prices/README.md`](data/electricity_prices/README.md)
+
+####  Visualization
+We also include this figure showing the **typical daily electricity price patterns** (averaged by hour-of-day) for some regions:
+
+<p align="center">
+  <img src="assets/figures/electricity_price_patterns.svg" alt="Electricity Price Trends" width="800"/>
+</p>
+
+<p align="center">
+  <em>Average hourly electricity price profile over a typical day (UTC time)</em>
+</p>
+
+
+
+---
+
+## AI Workloads Dataset (Alibaba GPU Cluster Trace)
+
+We use the [Alibaba Cluster Trace 2020](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020), a real-world dataset of GPU jobs from a large production cluster operated by Alibaba PAI (Platform for AI). It covers two months (July–August 2020), including over **6,500 GPUs** across **~1800 machines**.
+
+This trace contains **training and inference jobs** using frameworks like TensorFlow, PyTorch, and Graph-Learn. These jobs span a wide range of machine learning workloads, and each job may consist of multiple tasks with multiple instances.
+
+📄 *Original dataset paper*:  
+**"MLaaS in the Wild: Workload Analysis and Scheduling in Large-Scale Heterogeneous GPU Clusters"**  
+NSDI ’22  
+[Link to paper](https://www.usenix.org/system/files/nsdi22-paper-weng.pdf)
+
+---
+
+### Preprocessing & Simulation Format
+
+To use this data in long-term sustainable scheduling, we:
+
+- **Filtered** short or trivial tasks. Only jobs ≥15 minutes are kept (typical of model fine-tuning, etc.)
+- **Extended** the 2-month trace to a **full year** by replicating temporal patterns
+- **Assigned origin datacenters** using a probabilistic model based on **population** and **local activity time**
+- **Grouped** tasks into 15-minute intervals to match sustainability data (e.g., weather, energy, emissions)
+
+Each task is **not guaranteed to be executed at its origin DC**. The global scheduler decides execution based on sustainability goals (carbon, cost, SLA, etc.), and tasks may be routed between datacenters.
+
+For each transfer, we compute:
 ```python
-total_cost = bw * cost_per_GB(origin, destination)
+transmission_cost = task_bandwidth_GB * cost_per_GB(origin_region, destination_region)
 ```
 
-The cleaned dataset is saved as a Pandas .pkl file with the following structure:
+---
 
-interval_15m | tasks_matrix  
--------------|----------------------------------------  
-2020-03-01 08:00   | [[job1, tstart, tend, cpu, gpu, mem, bw, dc_origin, SLA], [job2, tstart, tend, cpu, gpu, mem, bw, dc_origin, SLA]...]
-2020-03-01 08:15   | [[jobN, tstart, tend, cpu, gpu, mem, bw, dc_origin, SLA], [jobM, tstart, tend, cpu, gpu, mem, bw, dc_origin, SLA]...]
-...
+### Dataset Format (After Cleaning)
+The cleaned dataset is saved as a Pandas `.pkl` DataFrame file with the following structure:
+
+| interval_15m       | tasks_matrix                                            |
+|--------------------|--------------------------------------------------------|
+| 2020-03-01 08:00   | [[job1, tstart, tend, start_dt, duration, cpu, gpu, mem, gpu_mem, bw, day_name, day_num], ...] |
+| 2020-03-01 08:15   | [[jobN, tstart, tend, start_dt, duration, cpu, gpu, mem, gpu_mem, bw, day_name, day_num], ...] |
+| ...                | ...                                                    |
+
 
 Where:
-- `interval_15m`: The time interval of 15 minutes.
-- `tasks_matrix`: A list of tasks with the following fields:
-  - `job_id`: Unique identifier for the task.
-  - `tstart`: Start time of the task.
-  - `tend`: End time of the task.
-  - `cpu`: CPU usage (normalized).
-  - `gpu`: GPU usage (normalized).
-  - `mem`: Memory usage (normalized).
-  - `bw`: Bandwidth (GB).
-  - `dc_origin`: Datacenter origin (based on population and time-zone logic).
-   - `SLA`: Service Level Agreement (SLA) factor (1.5 by default).
+- `interval_15m`: The 15-minute time window (UTC) when the task starts.
+- `tasks_matrix`: A NumPy array representing all tasks in that interval. Each task row includes:
+  1. **job_id**: Unique task identifier.
+  2. **start_time**: Start timestamp (Unix).
+  3. **end_time**: End timestamp (Unix).
+  4. **start_dt**: UTC datetime of start.
+  5. **duration_min**: Task duration in minutes.
+  6. **cpu_usage**: Number of CPU cores requested (e.g., `600.0` -> 6 cores).
+  7. **gpu_wrk_util**: Number of GPUs requested (e.g., `50.0` -> 0.5 GPUs).
+  8. **avg_mem**: Memory used (GB).
+  9. **avg_gpu_wrk_mem**: GPU memory used (GB).
+  10. **bandwidth_gb**: Estimated input data size (GB).
+  11. **weekday_name**: Day name (e.g., Monday).
+  12. **weekday_num**: Integer from 0 (Monday) to 6 (Sunday).
 
-Each task:
-- Normalized CPU, GPU, MEM usage
-- Bandwidth (GB)
-- Dynamically assigned origin DC using local time + population logic
+> ⚠️ **Note:**  
+> In the original Alibaba dataset, both CPU and GPU requirements are stored as percentages:
+> - `600.0` = 6 vCPU cores  
+> - `50.0` = 0.5 GPUs  
+>  
+> We keep this representation in the `.pkl` file. However, during task extraction and simulation, we normalize these values into actual hardware units using the logic in `extract_tasks_from_row()` (located in `workload_utils.py`):
 
+```python
+job_name = task_data[0]
+duration = float(task_data[4])
+cpu_req = float(task_data[5]) / 100.0    # Convert percentage to core count
+gpu_req = float(task_data[6]) / 100.0    # Convert percentage to GPU count
+mem_req = float(task_data[7])            # Memory in GB
+bandwidth_gb = float(task_data[8])       # Data transfer size in GB
+
+task = Task(job_name, arrival_time, duration, cpu_req, gpu_req, mem_req, bandwidth_gb)
+tasks.append(task)
+```
+
+This transformation allows for more intuitive interpretation and visualization.
+
+### 📊 Dataset Visualizations
+
+To better understand the characteristics of the **Alibaba GPU Cluster Trace**, we include a set of figures showing task distributions, resource demands, and scheduling patterns across time.
+
+---
+
+#### 1. **Task Duration Distribution**
+
+Shows the histogram of task durations (in minutes) for all jobs ≥15 minutes. Most tasks range between 15–120 minutes, with a long tail of heavier training workloads.
+
+<div align="center">
+  <img src="assets/figures/alibaba_task_durations.svg" width="600">
+</div>
+
+---
+
+#### 2. **Resource Usage Distributions**
+
+We plot histograms for the resource requests:
+
+- **CPU cores** (converted from 100-based scale)
+- **GPU units** (e.g., 0.5 = half GPU)
+- **Memory (GB)**
+- **Bandwidth (GB)** – used to estimate transmission cost
+
+<div align="center">
+  <img src="assets/figures/alibaba_resource_usage.svg" width="50%">
+</div>
+
+---
+
+#### 3. **Task Load Heatmap (Hourly x Weekday)**
+
+Shows the **average number of tasks submitted** per hour, across all weekdays. Highlights peak hours of activity (e.g., business hours, time zone effects).
+
+<div align="center">
+  <img src="assets/figures/alibaba_task_count_heatmap.svg" width="25%">
+</div>
+
+---
+
+#### 4. **Hourly Distribution of Resource Requests**
+
+Boxplots of CPU, GPU, and memory usage across **hours of the day**, aggregated over July–August. Useful for modeling time-of-day-aware scheduling or load shaping.
+
+<div align="center">
+  <img src="assets/figures/alibaba_hourly_cpu_requests.svg" width="50%">
+  <br><br>
+  <img src="assets/figures/alibaba_hourly_gpu_requests.svg" width="50%">
+  <br><br>
+  <img src="assets/figures/alibaba_hourly_memory_requests.svg" width="50%">
+</div>
+
+---
+
+#### 5. **Gantt Chart of Tasks with Resource Colors**
+
+Visualizes a 10-hour simulation window, showing task durations on the timeline. Each panel maps the same tasks, colored by:
+
+- CPU cores requested  
+- GPU units requested  
+- Memory requested
+
+This gives a compact view of temporal and resource variation across jobs.
+
+<div align="center">
+  <img src="assets/figures/alibaba_task_gantt_resources.svg" width="50%">
+</div>
+
+---
+
+These plots offer a comprehensive summary of the workload behavior, temporal distribution, and compute intensity of the original trace, helping validate its realism for sustainable AI scheduling.
+
+📂 Code to generate these figures can be found in: `data/workload/alibaba_2020_dataset/plot_alibaba_workload_stats.py`
+
+---
+
+### Additional Logic Injected at Runtime
+
+During training or simulation, **two more fields are computed dynamically** for each task:
+
+- `dc_origin`:  
+  The **origin datacenter** is assigned using a **probabilistic population-based + local time** logic.  
+  - Higher population DCs have more weight.
+  - During their local business hours (08:00–20:00), they are more likely to generate tasks.
+  - Implemented in: `assign_task_origins()`
+
+- `SLA`:  
+  Each task is given a **service deadline** via a **linear SLA multiplier**:
+  ```python
+  sla_deadline = arrival_time + sla_multiplier * duration
+  ```
+  - `sla_multiplier`: A configurable value (default: `1.5`) that defines the allowable slack.
+  - Configurable per task, allowing for different urgency levels (e.g., urgent, normal, flexible).
+  - Logic inspired by [*Sustainable AIGC Scheduling (2023)*](https://ieeexplore.ieee.org/document/10437617) for sustainable AIGC workloads.
 As can be seen, at each timestep we can have different number of tasks to be determined their destination datacenter.
+
+📄 For detailed scripts used to clean and expand the dataset, refer to `data/workload/README.md`.
 
 ---
 
@@ -342,35 +589,8 @@ This approach ensures:
 
 This logic is implemented in the utility function `assign_task_origins()` used during task extraction in the pipeline.
 
-
----
-
-## Supported Locations
-
-These are valid `location` codes to use when defining datacenters in your simulation:
-
-| Code         | Region / Market                          |
-|--------------|------------------------------------------|
-| US-NY-NYIS   | New York (NYISO)                         |
-| US-CAL-CISO  | California (CAISO)                       |
-| US-TEX-ERCO  | Texas (ERCOT)                            |
-| DE-LU        | Germany + Luxembourg (ENTSO-E)           |
-| FR           | France (ENTSO-E)                         |
-| SG           | Singapore (USEP)                         |
-| JP-TK        | Japan - Tokyo Area (JEPX)                |
-| IN           | India (POSOCO)                           |
-| AU-NSW       | Australia - New South Wales (AEMO)       |
-| BR           | Brazil (ONS)                             |
-| ZA           | South Africa (Eskom)                     |
-| PT           | Portugal (OMIE)                          |
-| ES           | Spain (OMIE)                             |
-| BE           | Belgium (ENTSO-E)                        |
-| CH           | Switzerland (ENTSO-E)                    |
-| KR           | South Korea (KPX)                        |
-| CA-ON        | Ontario (IESO)                           |
-| CL-SIC       | Chile (CDEC-SIC)                         |
-| AT           | Austria (ENTSO-E)                        |
-| NL           | Netherlands (ENTSO-E)                    |
+- **Geographic and Policy-based Transfer Constraints**  
+  We plan to introduce restrictions on task transmission between datacenters based on geographic or regulatory constraints (e.g., GDPR compliance, national data residency laws, inter-region data sovereignty). This will allow more realistic simulations of compliance-aware task placement.
 
 ---
 
@@ -817,13 +1037,37 @@ The notebook supports:
 - Visualizing energy, carbon, and resource usage
 
 ---
-## TODO / Roadmap
 
-- Add transmission cost and delay matrices
-- GPU + Memory energy modeling
+## 🛣️ Planned Features and Enhancements
+
+GreenDCC is actively evolving. Upcoming features include:
+
+- **Geographic and Policy-based Transfer Constraints**  
+  Enforce restrictions on inter-datacenter transfers based on legal or geopolitical constraints, such as GDPR or cross-border data regulations.
+
+- **Expanded Regional Coverage**  
+  Support for more datacenter locations and energy markets in Africa, South America, and Southeast Asia.
+
+- **Transmission Emissions Refinement**  
+  Upgrade from fixed energy intensities to path-based dynamic models for data transmission.
+
+- **GPU + Memory Energy Modeling**  
+  Extend energy consumption models to include GPU and memory usage, enabling more accurate sustainability tracking of training and inference tasks.
+
+- **Workload Prioritization and Tiers**  
+  Integrate flexible vs. non-flexible job types, with varying SLA strictness and resource guarantees.
+
+- **Colocation-aware Modeling**  
+  Add support for shared infrastructure scenarios with multiple tenants or service-level priorities.
+
+- **Visualization Dashboard**  
+  Real-time dashboards to visualize energy, carbon, and cost metrics during training or evaluation.
+
+Want to contribute or suggest features? Open an issue or reach out!
+
+## TODO
+
 - More rule-based controllers for baseline comparison
-- Modular reward builder
-- Task delay & deferral logic
 - Improve the Google colab notebook
 
 ---

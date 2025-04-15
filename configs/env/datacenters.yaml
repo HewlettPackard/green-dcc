@@ -1,8 +1,8 @@
 datacenters:
   - dc_id: 1
-    location: "US-NY-NYIS"
-    timezone_shift: -5
-    population_weight: 0.25
+    location: "US-CAL-CISO"
+    timezone_shift: -7
+    population_weight: 0.18
     total_cpus: 5000
     total_gpus: 700
     total_mem: 5000
