@@ -5,9 +5,6 @@ def get_default_config():
 
         # Datafiles
         'location': 'ny',
-        
-        # Capacity (MW) of the datacenter
-        'datacenter_capacity_mw': 1,
 
         # Timezone shift
         'timezone_shift': 0,

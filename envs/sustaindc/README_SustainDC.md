@@ -184,7 +184,6 @@ W_{usage} = 0.044 \cdot T_{wetbulb} + (0.3528 \cdot \Delta T + 0.101)
 
 Each DC is defined in `datacenters.yaml` with:
 - Compute resource spec: `total_cpus`, `total_gpus`, `total_mem`
-- Power envelope via `datacenter_capacity_mw`
 - Thermal config via `dc_config_file`
 
 ---

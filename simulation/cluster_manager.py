@@ -42,7 +42,21 @@ class DatacenterClusterManager:
             config['simulation_year'] = simulation_year
             config['init_day'] = init_day
             config['init_hour'] = init_hour
+            
+            # Convert CPU/GPU/MEM to estimated MW
+            total_cpus = config["total_cpus"]
+            total_gpus = config["total_gpus"]
+            total_mem = config["total_mem"]
 
+            cpu_power = 20 * total_cpus      # watts per core
+            gpu_power = 300 * total_gpus     # watts per GPU
+            mem_power = 2.5 * total_mem      # watts per GB
+
+            total_power_watt = cpu_power + gpu_power + mem_power
+            capacity_mw = total_power_watt / 1e6
+
+            config["datacenter_capacity_mw"] = capacity_mw  # Inject into env_config
+    
         self.datacenters = {f"DC{i+1}": SustainDC(config) for i, config in enumerate(config_list)}
         self.simulation_year = simulation_year
         self.init_day = init_day

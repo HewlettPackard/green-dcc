@@ -136,6 +136,8 @@ def make_dc_env(month : int = 1,
     ################################################################################
     
     # from DC_Config, scale the variable number of CPUs to have a similar value to "datacenter_capacity_mw"
+    print(f"[INFO] Datacenter at {location} scaled to capacity: {datacenter_capacity_mw:.2f} MW")
+
     dc_config = DC_Config(dc_config_file=dc_config_file, datacenter_capacity_mw=datacenter_capacity_mw)  # Specify the relative or absolute path
 
     # Perform Cooling Tower Sizing
@@ -145,15 +147,15 @@ def make_dc_env(month : int = 1,
     
     # dictionary with locations and min_CRAC_setpoint/max_amb_temp
 
-    if 'NY'.lower() in location.lower():
-        max_amb_temperature = 30.0
-    elif 'AZ'.lower() in location.lower():
-        max_amb_temperature = 50.0
-    elif 'WA'.lower() in location.lower():
-        max_amb_temperature = 20.0
-    else:
-        print('WARNING, using default values for chiller sizing...')
-        max_amb_temperature = 50.0
+    # if 'NY'.lower() in location.lower():
+    max_amb_temperature = 30.0
+    # elif 'AZ'.lower() in location.lower():
+    #     max_amb_temperature = 50.0
+    # elif 'WA'.lower() in location.lower():
+    #     max_amb_temperature = 20.0
+    # else:
+    #     print('WARNING, using default values for chiller sizing...')
+    #     max_amb_temperature = 50.0
         
     ctafr, ct_rated_load = DataCenter.chiller_sizing(dc_config, min_CRAC_setpoint=min_temp, max_CRAC_setpoint=max_temp, max_ambient_temp=max_amb_temperature)
     dc_config.CT_REFRENCE_AIR_FLOW_RATE = ctafr

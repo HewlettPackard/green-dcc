@@ -7,6 +7,7 @@ A high-fidelity simulation benchmark for **sustainable task scheduling** across 
 <p align="center">
   <img src="assets/figures/global_map.svg" alt="Geo-Distributed Data Centers" width="1000"/>
 </p>
+
 ---
 
 ## Features
