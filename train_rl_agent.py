@@ -115,7 +115,10 @@ def train():
     logger = setup_logger(log_dir, enable_logger=args.enable_logger)
 
     algo_cfg = load_yaml(args.algo_config)["algorithm"]
-    DEVICE = torch.device("cuda" if algo_cfg["device"] == "auto" and torch.cuda.is_available() else algo_cfg["device"])
+    if algo_cfg["device"] == "auto":
+        DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        DEVICE = torch.device(algo_cfg["device"])
 
     env = make_env(args.sim_config, args.dc_config, args.reward_config, writer, logger)
 

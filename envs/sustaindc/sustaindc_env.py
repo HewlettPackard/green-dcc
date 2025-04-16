@@ -260,8 +260,10 @@ class SustainDC(gym.Env):
         self.dc_state, self.dc_info = self.dc_env.reset()
         bat_s, self.bat_info = self.bat_env.reset()
                 
-        current_workload = 0.0  #self.workload_m.get_current_workload()
-        self.dc_env.update_workload(current_workload)
+        current_cpu_workload = 0.0  #self.workload_m.get_current_workload()
+        current_gpu_workload = 0.0 
+        self.dc_env.update_workload(current_cpu_workload)
+        self.dc_env.update_gpu_workload(current_gpu_workload)
 
         # Update ci in the battery environment
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
@@ -283,7 +285,8 @@ class SustainDC(gym.Env):
             'agent_bat': self.bat_info,
             '__common__': {
                 'time': t_i,
-                'workload': current_workload,
+                'cpu_workload': current_cpu_workload,
+                'gpu_workload': current_gpu_workload,
                 'weather': temp,
                 'ci': ci_i,
                 'ci_future': ci_i_future,
@@ -350,13 +353,14 @@ class SustainDC(gym.Env):
         # HPC environment can produce the final usage metrics
         # I need a value between 0 and 1 for the workload.
         # At this time, we are only focused on the cpu usage.
-        workload = used_cpu / self.total_cpus
+        cpu_workload = used_cpu / self.total_cpus
+        gpu_workload = used_gpu / self.total_gpus
         # print(f"[{self.current_time_task}] DC:{self.dc_id} Running: {len(self.running_tasks)}, Pending: {len(self.pending_tasks)}")
         if logger:
             logger.info(f"[{self.current_time_task}] DC:{self.dc_id} Running: {len(self.running_tasks)}, Pending: {len(self.pending_tasks)}")
 
         # Update environment states with new values from managers
-        self._update_environments(workload, temp, wet_bulb, ci_i_denorm, ci_i_future, day, hour)
+        self._update_environments(cpu_workload, gpu_workload, temp, wet_bulb, ci_i_denorm, ci_i_future, day, hour)
 
         # Create observations for the next step based on updated environment states
         # Populate observation dictionary based on updated states
@@ -442,12 +446,13 @@ class SustainDC(gym.Env):
 
 
 
-    def _update_environments(self, workload, temp, wet_bulb, ci_i_denorm, ci_i_future, current_day, current_hour):
+    def _update_environments(self, workload, gpu_workload, temp, wet_bulb, ci_i_denorm, ci_i_future, current_day, current_hour):
         """Update the environment states based on the manager's outputs."""
         # self.ls_env.update_workload(workload)
         # self.ls_env.update_current_date(current_day, current_hour)
         self.dc_env.set_ambient_temp(temp, wet_bulb)
         self.dc_env.update_workload(workload)
+        self.dc_env.update_gpu_workload(gpu_workload)
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
 
 
