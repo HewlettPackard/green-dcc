@@ -221,7 +221,8 @@ def make_dc_env(month : int = 1,
     chiller_max_load = DataCenter.calculate_chiller_power(max_cooling_cap, max_load, highest_ambient_temp)
 
     # Battery sizing - now includes GPU power
-    max_dc_power_w = 1.1*max(total_ite_pwr) + 1.1*max(total_gpu_pwr) + 1.1*ct_rated_load + 1.1*chiller_max_load  # Watts
+    # Simulate battery installed in datacenter, we need to scale the battery that can provide the maximum power
+    max_dc_power_w = 1.1*max(total_power_list) + 1.1*ct_rated_load + 1.1*chiller_max_load  # Watts
     
     # By carbon explorer paper, we need a battery to feed the DC by at least 1 hours, so we need the energy metric
     num_hours_battery = 1

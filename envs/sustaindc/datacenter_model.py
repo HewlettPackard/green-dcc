@@ -269,6 +269,8 @@ class Rack():
                                (self.full_load_pwr*cpu_power_ratio_at_inlet_temp).reshape(1,-1)),
                               axis=0)
         cpu_power = np.max(temp_arr, axis=0)
+
+        # Memory power calculation and add to CPU power
         
         # GPU power calculation
         gpu_power = np.zeros_like(cpu_power) if self.has_gpus else np.zeros(1)
@@ -281,7 +283,8 @@ class Rack():
             gpu_power = alpha + beta * np.log2(1 + x)
         
         # IT fan power calculation - respond to the highest heat load
-        effective_load = max(ITE_load_pct, GPU_load_pct) if self.has_gpus else ITE_load_pct
+        # Add heats generated
+        effective_load = sum(ITE_load_pct, GPU_load_pct) if self.has_gpus else ITE_load_pct
         base_itfan_v_ratio = self.m_itfan*self.m_coefficient*inlet_temp + self.c_itfan*self.c_coefficient
         itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio + self.ratio_shift_max_itfan*(effective_load/self.it_slope)
         itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.ITFAN_REF_V_RATIO)
@@ -409,6 +412,8 @@ class DataCenter_ITModel():
             gpu_load = GPU_load_pct_list[i] if GPU_load_pct_list is not None else 0
             
             # Calculate power with GPU if applicable
+            # Add cpu power and memory power
+            # Memory energy consumption with respect to memory usage
             rack_cpu_power, rack_itfan_power, rack_gpu_power = rack.compute_instantaneous_pwr_vecd(
                 rack_inlet_temp, ITE_load_pct, gpu_load)
             
