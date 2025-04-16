@@ -1,22 +1,29 @@
 import os
 import numpy as np
+import math
 
-class CPU():
-
-    def __init__(self, full_load_pwr = None, idle_pwr = None, cpu_config = None): 
-        """CPU class in charge of the energy consumption and termal calculations of the individuals CPUs
+class Server():
+    def __init__(self, full_load_pwr=None, idle_pwr=None, gpu_full_load_pwr=None, gpu_idle_pwr=None, server_config=None): 
+        """Server class in charge of the energy consumption and thermal calculations of the individual servers
             in a Rack.
 
         Args:
-            full_load_pwr (float, optional): Power at full capacity.
-            idle_pwr (float, optional): Power while idle.
-            cpu_config (config): Configuration for the DC.
+            full_load_pwr (float, optional): Power at full capacity for CPU.
+            idle_pwr (float, optional): Power while idle for CPU.
+            gpu_full_load_pwr (float, optional): Power at full capacity for GPU.
+            gpu_idle_pwr (float, optional): Power while idle for GPU.
+            server_config (config): Configuration for the DC.
         """
-        self.cpu_config = cpu_config
+        self.server_config = server_config
         
-        self.full_load_pwr = full_load_pwr  if not None else self.cpu_config.HP_PROLIANT[0]
-        self.idle_pwr = idle_pwr if not None else self.cpu_config.HP_PROLIANT[1]
-
+        # CPU power parameters
+        self.full_load_pwr = full_load_pwr if full_load_pwr is not None else self.server_config.HP_PROLIANT[0]
+        self.idle_pwr = idle_pwr if idle_pwr is not None else self.server_config.HP_PROLIANT[1]
+        
+        # GPU power parameters
+        self.gpu_full_load_pwr = gpu_full_load_pwr if gpu_full_load_pwr is not None else self.server_config.NVIDIA_V100[1]
+        self.gpu_idle_pwr = gpu_idle_pwr if gpu_idle_pwr is not None else self.server_config.NVIDIA_V100[0]
+        
         self.m_cpu = None
         self.c_cpu = None
         self.m_itfan = None
@@ -30,155 +37,257 @@ class CPU():
 
     def cpu_curve1(self,):
         """
-        initialize the  cpu power ratio curve at different IT workload ratios as a function of inlet temperatures [3]
+        initialize the cpu power ratio curve at different IT workload ratios as a function of inlet temperatures [3]
         """
         # curve parameters at lowest ITE utilization 0%
-        self.m_cpu  = (self.cpu_config.CPU_POWER_RATIO_UB[0]-self.cpu_config.CPU_POWER_RATIO_LB[0])/(self.cpu_config.INLET_TEMP_RANGE[1]-self.cpu_config.INLET_TEMP_RANGE[0])
-        self.c_cpu  = self.cpu_config.CPU_POWER_RATIO_UB[0] - self.m_cpu*self.cpu_config.INLET_TEMP_RANGE[1]
+        self.m_cpu = (self.server_config.CPU_POWER_RATIO_UB[0]-self.server_config.CPU_POWER_RATIO_LB[0])/(self.server_config.INLET_TEMP_RANGE[1]-self.server_config.INLET_TEMP_RANGE[0])
+        self.c_cpu = self.server_config.CPU_POWER_RATIO_UB[0] - self.m_cpu*self.server_config.INLET_TEMP_RANGE[1]
         # max vertical shift in power ratio curve at a given point in inlet temperature for 100% change in ITE input load pct
-        self.ratio_shift_max_cpu = self.cpu_config.CPU_POWER_RATIO_LB[1] - self.cpu_config.CPU_POWER_RATIO_LB[0]
+        self.ratio_shift_max_cpu = self.server_config.CPU_POWER_RATIO_LB[1] - self.server_config.CPU_POWER_RATIO_LB[0]
 
     def itfan_curve2(self,):
         """
         initialize the itfan velocity ratio curve at different IT workload ratios as a function of inlet temperatures [3]
         """
         # curve parameters at ITE utilization 25%
-        self.m_itfan = (self.cpu_config.IT_FAN_AIRFLOW_RATIO_UB[0]-self.cpu_config.IT_FAN_AIRFLOW_RATIO_LB[0])/(self.cpu_config.INLET_TEMP_RANGE[1]-self.cpu_config.INLET_TEMP_RANGE[0])
-        self.c_itfan =  self.cpu_config.IT_FAN_AIRFLOW_RATIO_UB[0] - self.m_itfan*self.cpu_config.INLET_TEMP_RANGE[1]
+        self.m_itfan = (self.server_config.IT_FAN_AIRFLOW_RATIO_UB[0]-self.server_config.IT_FAN_AIRFLOW_RATIO_LB[0])/(self.server_config.INLET_TEMP_RANGE[1]-self.server_config.INLET_TEMP_RANGE[0])
+        self.c_itfan = self.server_config.IT_FAN_AIRFLOW_RATIO_UB[0] - self.m_itfan*self.server_config.INLET_TEMP_RANGE[1]
         # max vertical shift in fan flow ratio curve at a given point for 75% change in ITE input load pct
-        self.ratio_shift_max_itfan = self.cpu_config.IT_FAN_AIRFLOW_RATIO_LB[1] - self.cpu_config.IT_FAN_AIRFLOW_RATIO_LB[0]
+        self.ratio_shift_max_itfan = self.server_config.IT_FAN_AIRFLOW_RATIO_LB[1] - self.server_config.IT_FAN_AIRFLOW_RATIO_LB[0]
+    
+    def compute_instantaneous_cpu_pwr(self, inlet_temp, ITE_load_pct):
+        """Calculate the CPU power consumption
+        
+        Args:
+            inlet_temp (float): Inlet temperature
+            ITE_load_pct (float): CPU utilization
+            
+        Returns:
+            float: CPU power consumption in Watts
+        """
+        # Existing CPU power calculation method (assuming this was in the original code)
+        base_cpu_power_ratio = self.m_cpu * inlet_temp + self.c_cpu
+        cpu_power_ratio_at_inlet_temp = base_cpu_power_ratio + self.ratio_shift_max_cpu * (ITE_load_pct/100)
+        cpu_power = max(self.idle_pwr, self.full_load_pwr * cpu_power_ratio_at_inlet_temp)
+        return cpu_power
+
+    def compute_instantaneous_fan_pwr(self, inlet_temp, ITE_load_pct):
+        """Calculate the IT fan power consumption
+        
+        Args:
+            inlet_temp (float): Inlet temperature
+            ITE_load_pct (float): IT workload percentage
+            
+        Returns:
+            float: Fan power consumption in Watts
+        """
+        # Existing fan power calculation method (assuming this was in the original code)
+        base_itfan_v_ratio = self.m_itfan * inlet_temp + self.c_itfan
+        itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio + self.ratio_shift_max_itfan * (ITE_load_pct/100)
+        self.itfan_v_ratio_at_inlet_temp = itfan_v_ratio_at_inlet_temp
+        self.v_fan = self.server_config.IT_FAN_FULL_LOAD_V * itfan_v_ratio_at_inlet_temp
+        itfan_pwr = self.server_config.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.server_config.ITFAN_REF_V_RATIO)
+        return itfan_pwr
+
+    def compute_instantaneous_gpu_pwr(self, gpu_utilization):
+        """Calculate GPU power based on utilization using the logarithmic model
+        
+        Args:
+            gpu_utilization (float): GPU utilization percentage (0-100)
+            
+        Returns:
+            float: GPU power consumption in Watts
+        """
+
+        # Apply the formula: y = α + β × log₂(1 + x)
+        # where α is idle_power and β is (max_power - idle_power)
+        # as referenced from from [6]
+        alpha = self.gpu_idle_pwr
+        beta = self.gpu_full_load_pwr - self.gpu_idle_pwr
+        
+        gpu_power = alpha + beta * math.log2(1 + gpu_utilization)
+        return gpu_power
 
 
 class Rack():
-
-    def __init__(self, CPU_config_list, max_W_per_rack = 10000, rack_config = None):  # [3] Table 2 Mid-tier data center
-        """Defines the rack as a collection of CPUs
+    def __init__(self, server_config_list, gpu_config_list=None, max_W_per_rack=10000, rack_config=None):
+        """Defines the rack as a collection of servers
 
         Args:
-            CPU_config_list (config): CPU configuration
-            max_W_per_rack (int): Maximun power allowed for a whole rack. Defaults to 10000.
+            server_config_list (list): Server configuration
+            gpu_config_list (list, optional): GPU configuration 
+            max_W_per_rack (int): Maximum power allowed for a whole rack. Defaults to 10000.
             rack_config (config): Rack configuration. Defaults to None.
         """
         
         self.rack_config = rack_config
         
-        self.CPU_list = []
+        self.server_list = []
+        self.has_gpus = gpu_config_list is not None
         self.current_rack_load = 0
-        for CPU_config in CPU_config_list:
-            self.CPU_list.append(CPU(full_load_pwr = CPU_config['full_load_pwr'], idle_pwr = CPU_config['idle_pwr'], cpu_config = self.rack_config))
-            self.current_rack_load += self.CPU_list[-1].full_load_pwr
-            if self.current_rack_load>= max_W_per_rack:
-                self.CPU_list.pop()
+        
+        for i, server_config in enumerate(server_config_list):
+            # Get GPU info if available
+            gpu_full_load_pwr = None
+            gpu_idle_pwr = None
+            
+            if self.has_gpus and i < len(gpu_config_list):
+                gpu_full_load_pwr = gpu_config_list[i]['full_load_pwr']
+                gpu_idle_pwr = gpu_config_list[i]['idle_pwr']
+            
+            # Create server object with GPU info
+            self.server_list.append(Server(
+                full_load_pwr=server_config['full_load_pwr'], 
+                idle_pwr=server_config['idle_pwr'],
+                gpu_full_load_pwr=gpu_full_load_pwr,
+                gpu_idle_pwr=gpu_idle_pwr,
+                server_config=self.rack_config
+            ))
+            
+            # Track power for capacity planning
+            self.current_rack_load += self.server_list[-1].full_load_pwr
+            if self.has_gpus and i < len(gpu_config_list):
+                self.current_rack_load += self.server_list[-1].gpu_full_load_pwr
+            
+            if self.current_rack_load >= max_W_per_rack:
+                self.server_list.pop()
                 break
             
-        self.num_CPUs = len(self.CPU_list)
-        self.cpu_and_fan_init()
-        self.v_fan_rack = None  # will be later pointing to a 1d np array whose shape is the number of cpus in the rack class
+        self.num_servers = len(self.server_list)
+        self.num_gpus = self.num_servers if self.has_gpus else 0
+        self.server_and_fan_init()
+        self.v_fan_rack = None
   
-    def cpu_and_fan_init(self,):
+    def server_and_fan_init(self,):
         """
-        Initialize the CPU and Fan parameters for the servers in each rack with the specified data center configurations
+        Initialize the Server and Fan parameters for the servers in each rack with the specified data center configurations
         """
         
         #common to both cpu and fan 
-        inlet_temp_lb,inlet_temp_ub =[],[]
+        inlet_temp_lb, inlet_temp_ub = [], []
         
         # only for cpu
-        m_cpu,c_cpu,ratio_shift_max_cpu,\
-            idle_pwr, full_load_pwr = [],[],[],[],[]
+        m_cpu, c_cpu, ratio_shift_max_cpu, idle_pwr, full_load_pwr = [], [], [], [], []
             
         # only for it fan
-        m_itfan,c_itfan,ratio_shift_max_itfan,\
-        ITFAN_REF_P,ITFAN_REF_V_RATIO,IT_FAN_FULL_LOAD_V = \
-            [],[],[],[],[],[]
+        m_itfan, c_itfan, ratio_shift_max_itfan, ITFAN_REF_P, ITFAN_REF_V_RATIO, IT_FAN_FULL_LOAD_V = [], [], [], [], [], []
+        
+        # GPU parameters
+        gpu_idle_pwr, gpu_full_load_pwr = [], []
+        
         self.m_coefficient = 10 #1 -> 10 
         self.c_coefficient = 5 #1 -> 5
         self.it_slope = 20 #100 -> 20
             
-        for CPU_item in self.CPU_list:
+        for server_item in self.server_list:
             
             #common to both cpu and fan
-            inlet_temp_lb.append(CPU_item.cpu_config.INLET_TEMP_RANGE[0])
-            inlet_temp_ub.append(CPU_item.cpu_config.INLET_TEMP_RANGE[1])
+            inlet_temp_lb.append(server_item.server_config.INLET_TEMP_RANGE[0])
+            inlet_temp_ub.append(server_item.server_config.INLET_TEMP_RANGE[1])
             
             # only for cpu
-            m_cpu.append(CPU_item.m_cpu)
-            c_cpu.append(CPU_item.c_cpu)
-            ratio_shift_max_cpu.append(CPU_item.ratio_shift_max_cpu)
-            idle_pwr.append(CPU_item.idle_pwr)
-            full_load_pwr.append(CPU_item.full_load_pwr)
+            m_cpu.append(server_item.m_cpu)
+            c_cpu.append(server_item.c_cpu)
+            ratio_shift_max_cpu.append(server_item.ratio_shift_max_cpu)
+            idle_pwr.append(server_item.idle_pwr)
+            full_load_pwr.append(server_item.full_load_pwr)
+            
+            # for GPU
+            if self.has_gpus:
+                gpu_idle_pwr.append(server_item.gpu_idle_pwr)
+                gpu_full_load_pwr.append(server_item.gpu_full_load_pwr)
             
             # only for itfan
-            m_itfan.append(CPU_item.m_itfan)
-            c_itfan.append(CPU_item.c_itfan)
-            ratio_shift_max_itfan.append(CPU_item.ratio_shift_max_itfan)
-            ITFAN_REF_P.append(CPU_item.cpu_config.ITFAN_REF_P)
-            ITFAN_REF_V_RATIO.append(CPU_item.cpu_config.ITFAN_REF_V_RATIO)
-            IT_FAN_FULL_LOAD_V.append(CPU_item.cpu_config.IT_FAN_FULL_LOAD_V)
+            m_itfan.append(server_item.m_itfan)
+            c_itfan.append(server_item.c_itfan)
+            ratio_shift_max_itfan.append(server_item.ratio_shift_max_itfan)
+            ITFAN_REF_P.append(server_item.server_config.ITFAN_REF_P)
+            ITFAN_REF_V_RATIO.append(server_item.server_config.ITFAN_REF_V_RATIO)
+            IT_FAN_FULL_LOAD_V.append(server_item.server_config.IT_FAN_FULL_LOAD_V)
             
-            
-        # commont to both cpu and itfan
-        self.inlet_temp_lb,self.inlet_temp_ub =np.array(inlet_temp_lb),\
-                                    np.array(inlet_temp_ub)
+        # common to both cpu and itfan
+        self.inlet_temp_lb, self.inlet_temp_ub = np.array(inlet_temp_lb), np.array(inlet_temp_ub)
         
         # only for cpu
-        self.m_cpu,self.c_cpu,self.ratio_shift_max_cpu,\
-            self.idle_pwr, self.full_load_pwr = \
-                                    np.array(m_cpu),np.array(c_cpu),\
-                                    np.array(ratio_shift_max_cpu),\
-                                    np.array(idle_pwr), np.array(full_load_pwr)
+        self.m_cpu, self.c_cpu, self.ratio_shift_max_cpu, self.idle_pwr, self.full_load_pwr = \
+            np.array(m_cpu), np.array(c_cpu), np.array(ratio_shift_max_cpu), np.array(idle_pwr), np.array(full_load_pwr)
+        
+        # for GPU
+        if self.has_gpus:
+            self.gpu_idle_pwr, self.gpu_full_load_pwr = np.array(gpu_idle_pwr), np.array(gpu_full_load_pwr)
         
         # only for itfan
-        self.m_itfan,self.c_itfan,self.ratio_shift_max_itfan,\
-        self.ITFAN_REF_P,self.ITFAN_REF_V_RATIO,self.IT_FAN_FULL_LOAD_V = \
-            np.array(m_itfan),np.array(c_itfan),np.array(ratio_shift_max_itfan),\
-            np.array(ITFAN_REF_P),np.array(ITFAN_REF_V_RATIO),np.array(IT_FAN_FULL_LOAD_V) 
+        self.m_itfan, self.c_itfan, self.ratio_shift_max_itfan, self.ITFAN_REF_P, self.ITFAN_REF_V_RATIO, self.IT_FAN_FULL_LOAD_V = \
+            np.array(m_itfan), np.array(c_itfan), np.array(ratio_shift_max_itfan), \
+            np.array(ITFAN_REF_P), np.array(ITFAN_REF_V_RATIO), np.array(IT_FAN_FULL_LOAD_V) 
             
-    def compute_instantaneous_pwr(self,inlet_temp, ITE_load_pct):
+    def compute_instantaneous_pwr(self, inlet_temp, ITE_load_pct, GPU_load_pct=0):
         """Calculate the power consumption of the whole rack at the current step
 
         Args:
             inlet_temp (float): Room temperature
             ITE_load_pct (float): Current CPU usage
+            GPU_load_pct (float): Current GPU usage (optional, defaults to 0)
 
         Returns:
-            cpu_power (float): Current CPU power usage
+            tuple: (cpu_power, itfan_power, gpu_power)
         """
-        # Assuming that all CPUs have the same parameters
-        cpu = self.CPU_list[0]
-        tot_cpu_pwr = cpu.compute_instantaneous_cpu_pwr(inlet_temp, ITE_load_pct)*self.num_CPUs
+        # Server CPU power
+        server = self.server_list[0]
+        tot_cpu_pwr = server.compute_instantaneous_cpu_pwr(inlet_temp, ITE_load_pct) * self.num_servers
 
+        # GPU power calculation
+        tot_gpu_pwr = 0
+        if self.has_gpus and GPU_load_pct > 0:
+            for server_item in self.server_list:
+                tot_gpu_pwr += server_item.compute_instantaneous_gpu_pwr(GPU_load_pct)
+
+        # IT fan power calculation (consider both CPU and GPU heat)
         tot_itfan_pwr = []
-        for CPU_item in self.CPU_list:
-            tot_itfan_pwr.append(CPU_item.compute_instantaneous_fan_pwr(inlet_temp, ITE_load_pct))
+        for server_item in self.server_list:
+            # Fan responds to highest thermal load between CPU and GPU
+            effective_load = max(ITE_load_pct, GPU_load_pct) if self.has_gpus else ITE_load_pct
+            tot_itfan_pwr.append(server_item.compute_instantaneous_fan_pwr(inlet_temp, effective_load))
 
-        return tot_cpu_pwr, np.array(tot_itfan_pwr).sum()
+        return tot_cpu_pwr, np.array(tot_itfan_pwr).sum(), tot_gpu_pwr
 
-    def compute_instantaneous_pwr_vecd(self, inlet_temp, ITE_load_pct):
+    def compute_instantaneous_pwr_vecd(self, inlet_temp, ITE_load_pct, GPU_load_pct=0):
         """Calculate the power consumption of the whole rack at the current step in a vectorized manner
 
         Args:
             inlet_temp (float): Room temperature
             ITE_load_pct (float): Current CPU usage
+            GPU_load_pct (float): Current GPU usage (optional, defaults to 0)
+
         Returns:
-            cpu_power (float): Current CPU power usage
+            tuple: (cpu_power, itfan_power, gpu_power)
         """
-        
-        # CPU
+        # CPU power calculation
         base_cpu_power_ratio = (self.m_cpu+0.05)*inlet_temp + self.c_cpu
         cpu_power_ratio_at_inlet_temp = base_cpu_power_ratio + self.ratio_shift_max_cpu*(ITE_load_pct/100)
         temp_arr = np.concatenate((self.idle_pwr.reshape(1,-1),
-                                   (self.full_load_pwr*cpu_power_ratio_at_inlet_temp).reshape(1,-1)),
-                                  axis=0)
-        cpu_power = np.max(temp_arr,axis=0)
+                               (self.full_load_pwr*cpu_power_ratio_at_inlet_temp).reshape(1,-1)),
+                              axis=0)
+        cpu_power = np.max(temp_arr, axis=0)
         
-        # itfan
+        # GPU power calculation
+        gpu_power = np.zeros_like(cpu_power) if self.has_gpus else np.zeros(1)
+        if self.has_gpus and GPU_load_pct > 0:
+            # Normalize utilization for log formula
+            x = GPU_load_pct / 100.0
+            # Vectorized calculation of the logarithmic formula
+            alpha = self.gpu_idle_pwr
+            beta = self.gpu_full_load_pwr - self.gpu_idle_pwr
+            gpu_power = alpha + beta * np.log2(1 + x)
+        
+        # IT fan power calculation - respond to the highest heat load
+        effective_load = max(ITE_load_pct, GPU_load_pct) if self.has_gpus else ITE_load_pct
         base_itfan_v_ratio = self.m_itfan*self.m_coefficient*inlet_temp + self.c_itfan*self.c_coefficient
-        itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio + self.ratio_shift_max_itfan*(ITE_load_pct/self.it_slope)
-        itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.ITFAN_REF_V_RATIO)  # [4] Eqn (3)
+        itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio + self.ratio_shift_max_itfan*(effective_load/self.it_slope)
+        itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.ITFAN_REF_V_RATIO)
         self.v_fan_rack = self.IT_FAN_FULL_LOAD_V*itfan_v_ratio_at_inlet_temp
         
-        return np.sum(cpu_power), np.sum(itfan_pwr)
+        return np.sum(cpu_power), np.sum(itfan_pwr), np.sum(gpu_power)
 
     def get_average_rack_fan_v(self,):
         """Calculate the average fan velocity for each rack
@@ -197,7 +306,6 @@ class Rack():
         """
         return np.sum(self.v_fan_rack)
     
-    
     def get_current_rack_load(self,):
         """Returns the total power consumption of the rack
 
@@ -213,28 +321,45 @@ class Rack():
             float: Supply approach temperature
         """
         return max(3.8, min(supply_approach_temperature, 5.3))
-    
-class DataCenter_ITModel():
 
-    def __init__(self, num_racks, rack_supply_approach_temp_list, rack_CPU_config, max_W_per_rack = 10000, DC_ITModel_config = None, chiller_sizing = False) -> None:
+
+class DataCenter_ITModel():
+    def __init__(self, num_racks, rack_supply_approach_temp_list, rack_CPU_config, rack_GPU_config=None, max_W_per_rack=10000, DC_ITModel_config=None, chiller_sizing=False):
         """Creates the DC from a giving DC configuration
 
         Args:
             num_racks (int): Number of racks in the DC
             rack_supply_approach_temp_list (list[float]): models the supply approach temperature for each rack based on geometry and estimated from CFD
             rack_CPU_config (list[list[dict]]): A list of lists where each list is associated with a rack. 
-            It is a list of dictionaries with their full load and idle load values in W
-            chiller_sizing (bool): Whether to perform Chiller Power Sizing
+                It is a list of dictionaries with their full load and idle load values in W
+            rack_GPU_config (list[list[dict]], optional): Similar structure as rack_CPU_config but for GPUs
+            max_W_per_rack (int): Maximum power allowed for a whole rack. Defaults to 10000.
+            DC_ITModel_config (config): Data center configuration. Defaults to None.
+            chiller_sizing (bool): Whether to perform Chiller Power Sizing. Defaults to False.
         """
         self.DC_ITModel_config = DC_ITModel_config
         self.racks_list = []
         self.rack_supply_approach_temp_list = rack_supply_approach_temp_list
         self.rack_CPU_config = rack_CPU_config
+        self.rack_GPU_config = rack_GPU_config
+        self.has_gpus = rack_GPU_config is not None
         
         self.rackwise_inlet_temp = []
         
-        for _, CPU_config_list in zip(range(num_racks),self.rack_CPU_config):
-            self.racks_list.append(Rack(CPU_config_list, max_W_per_rack = max_W_per_rack, rack_config=self.DC_ITModel_config))
+        for i in range(num_racks):
+            if self.has_gpus and i < len(self.rack_GPU_config):
+                self.racks_list.append(Rack(
+                    self.rack_CPU_config[i], 
+                    self.rack_GPU_config[i], 
+                    max_W_per_rack=max_W_per_rack, 
+                    rack_config=self.DC_ITModel_config
+                ))
+            else:
+                self.racks_list.append(Rack(
+                    self.rack_CPU_config[i], 
+                    max_W_per_rack=max_W_per_rack, 
+                    rack_config=self.DC_ITModel_config
+                ))
         
         self.total_datacenter_full_load()
         
@@ -245,24 +370,24 @@ class DataCenter_ITModel():
         self.cycles_of_concentration = 5
         self.drift_rate = 0.01
         
-        
-        
-    def compute_datacenter_IT_load_outlet_temp(self,ITE_load_pct_list, CRAC_setpoint):
-        
+    def compute_datacenter_IT_load_outlet_temp(self, ITE_load_pct_list, CRAC_setpoint, GPU_load_pct_list=None):
         """Calculate the average outlet temperature of all the racks
 
         Args:
             ITE_load_pct_list (List[float]): CPU load for each rack
             CRAC_setpoint (float): CRAC setpoint
+            GPU_load_pct_list (List[float], optional): GPU load for each rack. Defaults to None.
 
         Returns:
-            rackwise_cpu_pwr (List[float]): Rackwise CPU power usage
-            rackwise_itfan_pwr (List[float]):  Rackwise IT fan power usage
-            rackwise_outlet_temp (List[float]): Rackwise outlet temperature
+            tuple: (rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_gpu_pwr, rackwise_outlet_temp)
         """
+        # Default GPU load to 0 if not provided and GPUs exist
+        if GPU_load_pct_list is None:
+            GPU_load_pct_list = [0] * len(ITE_load_pct_list) if self.has_gpus else None
 
         rackwise_cpu_pwr = [] 
         rackwise_itfan_pwr = []
+        rackwise_gpu_pwr = []
         rackwise_outlet_temp = []
         rackwise_inlet_temp = []
                 
@@ -272,55 +397,61 @@ class DataCenter_ITModel():
         f = 0.526
         g = -14.01
         
-        for rack, rack_supply_approach_temp, ITE_load_pct \
-                                in zip(self.racks_list, self.rack_supply_approach_temp_list, ITE_load_pct_list):
+        for i, (rack, rack_supply_approach_temp, ITE_load_pct) in enumerate(
+                zip(self.racks_list, self.rack_supply_approach_temp_list, ITE_load_pct_list)):
+            
             #clamp supply approach temperatures
             rack_supply_approach_temp = rack.clamp_supply_approach_temp(rack_supply_approach_temp)
             rack_inlet_temp = rack_supply_approach_temp + CRAC_setpoint 
             rackwise_inlet_temp.append(rack_inlet_temp)
-            rack_cpu_power, rack_itfan_power = rack.compute_instantaneous_pwr_vecd(rack_inlet_temp, ITE_load_pct)
-            # Max IT Power : 83000
-            # Min IT Power : 28000
+            
+            # Get GPU load if applicable
+            gpu_load = GPU_load_pct_list[i] if GPU_load_pct_list is not None else 0
+            
+            # Calculate power with GPU if applicable
+            rack_cpu_power, rack_itfan_power, rack_gpu_power = rack.compute_instantaneous_pwr_vecd(
+                rack_inlet_temp, ITE_load_pct, gpu_load)
+            
             rackwise_cpu_pwr.append(rack_cpu_power)
             rackwise_itfan_pwr.append(rack_itfan_power)
+            rackwise_gpu_pwr.append(rack_gpu_power)
             
-            power_term = (rack_cpu_power + rack_itfan_power)**d
+            # Use total power (CPU + GPU + fan) for thermal calculations
+            total_power = rack_cpu_power + rack_itfan_power + rack_gpu_power
+            
+            power_term = total_power**d
             airflow_term = self.DC_ITModel_config.C_AIR*self.DC_ITModel_config.RHO_AIR*rack.get_total_rack_fan_v()**e * f
-            log_term = 0# h * np.log(max(power_term / airflow_term, 1))  # Log term, avoid log(0)
-            # rackwise_outlet_temp.append((rack_inlet_temp + (rack_cpu_power+rack_itfan_power)/(self.DC_ITModel_config.C_AIR*self.DC_ITModel_config.RHO_AIR*rack.get_total_rack_fan_v()*a) + b * (rack_cpu_power+rack_itfan_power) - c))
+            
             outlet_temp = rack_inlet_temp + c * power_term / airflow_term + g 
             if outlet_temp > 60:
                 print(f'WARNING, the outlet temperature is higher than 60C: {outlet_temp:.3f}')
             
             if outlet_temp - rack_inlet_temp < 2:
                 print(f'There is something wrong with the delta calculation because is too small: {outlet_temp - rack_inlet_temp:.3f}')
-                print(f'Inlet Temp: {rack_inlet_temp:.3f}, Util: {ITE_load_pct}, ITE Power: {rack_cpu_power+rack_itfan_power:.3f}')
-                print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}, Log term: {log_term:.3f}')
-                print(f'Delta: {c * power_term / airflow_term + g + log_term:.3f}')
+                print(f'Inlet Temp: {rack_inlet_temp:.3f}, Util: {ITE_load_pct}, GPU Util: {gpu_load}, Total Power: {total_power:.3f}')
+                print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}')
+                print(f'Delta: {c * power_term / airflow_term + g:.3f}')
                 raise Exception("Sorry, no numbers below 2")
 
-            if ITE_load_pct > 95 and CRAC_setpoint < 16.5:
+            if (ITE_load_pct > 95 or (gpu_load > 95 and self.has_gpus)) and CRAC_setpoint < 16.5:
                 if outlet_temp - rack_inlet_temp < 2:
                     print(f'There is something wrong with the delta calculation for MAX is too small: {outlet_temp - rack_inlet_temp:.3f}')
-                    print(f'Inlet Temp: {rack_inlet_temp:.3f}, ITE Power: {rack_cpu_power+rack_itfan_power:.3f}')
-                    print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}, Log term: {log_term:.3f}')
-                    print(f'Delta: {c * power_term / airflow_term + g + log_term:.3f}')
+                    print(f'Inlet Temp: {rack_inlet_temp:.3f}, Total Power: {total_power:.3f}')
+                    print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}')
+                    print(f'Delta: {c * power_term / airflow_term + g:.3f}')
                     raise Exception("Sorry, no numbers below 2")
+                    
             rackwise_outlet_temp.append(outlet_temp)
 
-            # rackwise_outlet_temp.append(
-            #                     rack_inlet_temp + \
-            #                     (rack_cpu_power+rack_itfan_power)/(self.DC_ITModel_config.C_AIR*self.DC_ITModel_config.RHO_AIR*rack.get_total_rack_fan_v())
-            #                     )
         self.rackwise_inlet_temp = rackwise_inlet_temp
             
-        return rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_outlet_temp
+        return rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_gpu_pwr, rackwise_outlet_temp
     
     def total_datacenter_full_load(self,):
-        """Calculate the total DC IT(IT CPU POWER + IT FAN POWER) power consumption
+        """Calculate the total DC IT power consumption (CPU, GPU, and fan)
         """
-        x = [rack_item.get_current_rack_load() for rack_item in self.racks_list]
-        self.total_DC_full_load = sum(x)
+        total_power = sum(rack.get_current_rack_load() for rack in self.racks_list)
+        self.total_DC_full_load = total_power
 
     def calculate_cooling_tower_water_usage(self):
         """
@@ -351,7 +482,6 @@ class DataCenter_ITModel():
         water_usage_liters_per_15min = np.round((water_usage * 1000) / 4, 4)
 
         return water_usage_liters_per_15min
-
 
 def calculate_chiller_power(max_cooling_cap, load, ambient_temp):
     """
@@ -430,7 +560,7 @@ def calculate_chiller_power(max_cooling_cap, load, ambient_temp):
 
 
 def calculate_HVAC_power(CRAC_setpoint, avg_CRAC_return_temp, ambient_temp, data_center_full_load, DC_Config, ctafr=None):
-    """Calculate the HVAV power attributes
+    """Calculate the HVAC power attributes
 
         Args:
             CRAC_Setpoint (float): The control action
@@ -486,22 +616,49 @@ def chiller_sizing(DC_Config, min_CRAC_setpoint=16, max_CRAC_setpoint=22, max_am
     Returns:
         tuple: A tuple containing the cooling tower reference air flow rate (ctafr) and the rated load of the cooling tower (CT_rated_load).
     '''
+    # Create GPU configs if available in the DC_Config
+    gpu_config = None
+    if hasattr(DC_Config, 'RACK_GPU_CONFIG'):
+        gpu_config = DC_Config.RACK_GPU_CONFIG
+    
     dc = DataCenter_ITModel(num_racks=DC_Config.NUM_RACKS,
                             rack_supply_approach_temp_list=DC_Config.RACK_SUPPLY_APPROACH_TEMP_LIST,
                             rack_CPU_config=DC_Config.RACK_CPU_CONFIG,
+                            rack_GPU_config=gpu_config,
                             max_W_per_rack=DC_Config.MAX_W_PER_RACK,
                             DC_ITModel_config=DC_Config)
     
+    # Set maximum load for both CPU and GPU if present
     cpu_load = 100.0
     ITE_load_pct_list = [cpu_load for i in range(DC_Config.NUM_RACKS)]
-        
-    rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_outlet_temp = \
-                        dc.compute_datacenter_IT_load_outlet_temp(ITE_load_pct_list=ITE_load_pct_list, CRAC_setpoint=max_CRAC_setpoint)
-                        
-    avg_CRAC_return_temp = calculate_avg_CRAC_return_temp(rack_return_approach_temp_list=DC_Config.RACK_RETURN_APPROACH_TEMP_LIST,
-                                                                         rackwise_outlet_temp=rackwise_outlet_temp)
     
-    data_center_total_ITE_Load = sum(rackwise_cpu_pwr) + sum(rackwise_itfan_pwr)
+    # Set GPU load if GPU config is available
+    GPU_load_pct_list = None
+    if gpu_config:
+        gpu_load = 100.0
+        GPU_load_pct_list = [gpu_load for i in range(DC_Config.NUM_RACKS)]
+    
+    # Calculate with both CPU and GPU loads if GPU is present
+    result = dc.compute_datacenter_IT_load_outlet_temp(
+        ITE_load_pct_list=ITE_load_pct_list, 
+        CRAC_setpoint=max_CRAC_setpoint,
+        GPU_load_pct_list=GPU_load_pct_list
+    )
+    
+    # Unpack result
+    if len(result) == 4:  # Includes GPU power
+        rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_gpu_pwr, rackwise_outlet_temp = result
+    else:  # No GPU
+        rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_outlet_temp = result
+        rackwise_gpu_pwr = [0] * len(rackwise_cpu_pwr)
+    
+    avg_CRAC_return_temp = calculate_avg_CRAC_return_temp(
+        rack_return_approach_temp_list=DC_Config.RACK_RETURN_APPROACH_TEMP_LIST,
+        rackwise_outlet_temp=rackwise_outlet_temp
+    )
+    
+    # Calculate total power including GPU if present
+    data_center_total_ITE_Load = sum(rackwise_cpu_pwr) + sum(rackwise_itfan_pwr) + sum(rackwise_gpu_pwr)
     
     m_sys = DC_Config.RHO_AIR * DC_Config.CRAC_SUPPLY_AIR_FLOW_RATE_pu * data_center_total_ITE_Load
     
@@ -513,22 +670,11 @@ def chiller_sizing(DC_Config, min_CRAC_setpoint=16, max_CRAC_setpoint=22, max_am
     # Cooling Tower Reference Air FlowRate
     ctafr = m_air/DC_Config.RHO_AIR
     
-    '''
-    # Assuming that the HVAC consumes 43% of energy on a datacenter, and the rest is IT
-    # We assume that on months where temperature is lower than 15C, the HVAC energy consumption is almost 0. (> 60% of time)
-    # Also, the HVAC energy consumption follow the external temperature trend (almost a sin signal).
-    # The average area for a sin period of a sin is 2*pi
-    # The average power consumption of a day where the maximum temperature is raised and the lowest setpoint is used (MaxPower) is 2*pi*MaxPower [W]
-    # The average energy for that day is (2*pi*MaxPower)[W]/24[hours] -> 0.26 * MAxPower [W/h]
-    # So, to obtain an average HVAC energy consumption of 43%, we need to scale the total maximum energy consumption with a factor of 10
-    # This value is obtained after a methodic literature search.
-    '''
-    
-    CT_rated_load = CRAC_cooling_load #2 * data_center_total_ITE_Load * (43/(100-43))
+    CT_rated_load = CRAC_cooling_load
     
     return ctafr, CT_rated_load
     
-def calculate_avg_CRAC_return_temp(rack_return_approach_temp_list,rackwise_outlet_temp):   
+def calculate_avg_CRAC_return_temp(rack_return_approach_temp_list, rackwise_outlet_temp):   
     """Calculate the CRAC return air temperature
 
         Args:
@@ -538,8 +684,7 @@ def calculate_avg_CRAC_return_temp(rack_return_approach_temp_list,rackwise_outle
             (float): CRAC return air temperature
         """
     n = len(rack_return_approach_temp_list)
-    return sum([i + j for i,j in zip(rack_return_approach_temp_list,rackwise_outlet_temp)])/n  # CRAC return is averaged across racks
-
+    return sum([i + j for i,j in zip(rack_return_approach_temp_list, rackwise_outlet_temp)])/n  # CRAC return is averaged across racks
 
 """
 References:
@@ -550,4 +695,8 @@ References:
 [4]: Breen, Thomas J., et al. "From chip to cooling tower data center modeling: Part I influence of server inlet temperature and temperature 
      rise across cabinet." 2010 12th IEEE Intersociety Conference on Thermal and Thermomechanical Phenomena in Electronic Systems. IEEE, 2010.
 [5]: https://h2ocooling.com/blog/look-cooling-tower-fan-efficiences/#:~:text=The%20tower%20has%20been%20designed,of%200.42%20inches%20of%20water.
+[6]: X. Tang and Z. Fu, "CPU–GPU Utilization Aware Energy-Efficient Scheduling Algorithm on Heterogeneous Computing Systems," in IEEE Access, vol. 8, pp. 58948-58958, 2020, doi: 10.1109/ACCESS.2020.2982956. 
 """
+
+
+

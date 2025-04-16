@@ -72,16 +72,18 @@ def make_bat_fwd_env(month,
     return bat_env
 
 def make_dc_env(month : int = 1,
-                        location : str = 'NYIS',
-                        dc_config_file: str = 'dc_config_file.json',
-                        datacenter_capacity_mw: int = 1,
-                        max_bat_cap_Mw : float = 2.0,
-                        add_cpu_usage : bool = True,
-                        add_CI : bool = True,
-                        episode_length_in_time : pd.Timedelta = None,
-                        use_ls_cpu_load : bool = False,
-                        num_sin_cos_vars : int = 4,
-                        ):
+                location : str = 'NYIS',
+                dc_config_file: str = 'dc_config_file.json',
+                datacenter_capacity_mw: int = 1,
+                max_bat_cap_Mw : float = 2.0,
+                add_cpu_usage : bool = True,
+                add_gpu_usage : bool = True,  # Added GPU usage flag
+                add_CI : bool = True,
+                episode_length_in_time : pd.Timedelta = None,
+                use_ls_cpu_load : bool = False,
+                use_ls_gpu_load : bool = False,  # Added GPU load flag
+                num_sin_cos_vars : int = 4,
+                ):
     """Method that creates the data center environment with the timeline, location, proper data files, gym specifications and auxiliary methods
 
     Args:
@@ -91,9 +93,11 @@ def make_dc_env(month : int = 1,
         datacenter_capacity_mw (int, optional): Maximum capacity (MW) of the data center. This value will scale the number of servers installed in the data center.
         max_bat_cap_Mw (float, optional): The battery capacity in Megawatts for the installed battery. Defaults to 2.0.
         add_cpu_usage (bool, optional): Boolean Flag to indicate whether cpu usage is part of the environment statespace. Defaults to True.
+        add_gpu_usage (bool, optional): Boolean Flag to indicate whether gpu usage is part of the environment statespace. Defaults to True.
         add_CI (bool, optional): Boolean Flag to indicate whether Carbon Intensity is part of the environment statespace. Defaults to True.
         episode_length_in_time (pd.Timedelta, optional): Length of an episode in terms of pandas time-delta object. Defaults to None.
         use_ls_cpu_load (bool, optional): Use the cpu workload value from a separate Load Shifting agent. This turns of reading default cpu data. Defaults to False.
+        use_ls_gpu_load (bool, optional): Use the gpu workload value from a separate Load Shifting agent. This turns of reading default gpu data. Defaults to False.
         num_sin_cos_vars (int, optional): Number of sin and cosine variable that will be added externally from the centralized data source
     Returns:
         envs.dc_gym.dc_gymenv: The environment instantiated with the particular month.
@@ -108,11 +112,14 @@ def make_dc_env(month : int = 1,
         'Zone Air Temperature(West Zone)',
         'Facility Total HVAC Electricity Demand Rate(Whole Building)',  # 'HVAC POWER'
         # TODO: Will add sum of IT POWER  and HVAC Power Here if AGP wants it
-        'Facility Total Building Electricity Demand Rate(Whole Building)'  #  'IT POWER'
+        'Facility Total Building Electricity Demand Rate(Whole Building)',  #  'IT POWER'
+        'Facility Total GPU Electricity Demand Rate(Whole Building)'  # Added GPU POWER
     ]
-    observation_space = spaces.Box(low=np.float32(-1.0*np.ones(14)),
-                                    high=np.float32(1.0*np.ones(14)),
-                                    )
+    
+    # Update observation space dimensions to include GPU
+    observation_space = spaces.Box(low=np.float32(-1.0*np.ones(15)),  # Increased dimension for GPU
+                                   high=np.float32(1.0*np.ones(15)),
+                                   )
 
     
     ################################################################################
@@ -162,38 +169,66 @@ def make_dc_env(month : int = 1,
     
     # Perform sizing of ITE power and ambient temperature
     # Find highest and lowest values of ITE power, rackwise outlet temperature
-    dc = DataCenter.DataCenter_ITModel(num_racks=dc_config.NUM_RACKS, rack_supply_approach_temp_list=dc_config.RACK_SUPPLY_APPROACH_TEMP_LIST,
-                                    rack_CPU_config=dc_config.RACK_CPU_CONFIG, max_W_per_rack=dc_config.MAX_W_PER_RACK, DC_ITModel_config=dc_config)
+    dc = DataCenter.DataCenter_ITModel(num_racks=dc_config.NUM_RACKS, 
+                                      rack_supply_approach_temp_list=dc_config.RACK_SUPPLY_APPROACH_TEMP_LIST,
+                                      rack_CPU_config=dc_config.RACK_CPU_CONFIG, 
+                                      rack_GPU_config=dc_config.RACK_GPU_CONFIG,  # Added GPU config
+                                      max_W_per_rack=dc_config.MAX_W_PER_RACK, 
+                                      DC_ITModel_config=dc_config)
+    
     raw_curr_stpt_list = range(15,23)
-    cpu_load_list = range(0,110,10) # We assume same data center load for all servers; Here it will be max
-    p = itertools.product(raw_curr_stpt_list,cpu_load_list)
+    cpu_load_list = range(0,110,10)  # We assume same data center load for all servers
+    gpu_load_list = range(0,110,10)  # Added GPU load list
+    
+    # Create combinations of setpoint, CPU load, and GPU load
+    p = itertools.product(raw_curr_stpt_list, cpu_load_list, gpu_load_list)
     dc_ambient_temp_list = []
     total_ite_pwr = []
-    for raw_curr_stpt, cpu_load in p:
-        ITE_load_pct_list = [cpu_load for i in range(dc_config.NUM_RACKS)] 
-        rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_outlet_temp = \
-            dc.compute_datacenter_IT_load_outlet_temp(ITE_load_pct_list=ITE_load_pct_list, CRAC_setpoint=raw_curr_stpt)
+    total_gpu_pwr = []  # New list to track GPU power
+    
+    for raw_curr_stpt, cpu_load, gpu_load in p:
+        ITE_load_pct_list = [cpu_load for i in range(dc_config.NUM_RACKS)]
+        GPU_load_pct_list = [gpu_load for i in range(dc_config.NUM_RACKS)]
+        
+        # Update to handle the new return structure including GPU
+        result = dc.compute_datacenter_IT_load_outlet_temp(
+            ITE_load_pct_list=ITE_load_pct_list, 
+            CRAC_setpoint=raw_curr_stpt,
+            GPU_load_pct_list=GPU_load_pct_list
+        )
+        
+        # Unpack results based on whether GPU is included
+        if len(result) == 4:  # GPU included
+            rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_gpu_pwr, rackwise_outlet_temp = result
+            total_gpu_pwr.append(sum(rackwise_gpu_pwr))
+        else:
+            rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_outlet_temp = result
+            total_gpu_pwr.append(0)
+            
         total_ite_pwr.append(sum(rackwise_cpu_pwr) + sum(rackwise_itfan_pwr))
-        dc_ambient_temp_list.append(sum(rackwise_outlet_temp)/len(rackwise_outlet_temp))   
+        dc_ambient_temp_list.append(sum(rackwise_outlet_temp)/len(rackwise_outlet_temp))
     
     
     # Calculate the maximum power consumption of the chiller
     # Assuming the worst-case scenario with the highest load and ambient temperature
     max_cooling_cap = ct_rated_load  # Maximum cooling capacity of the chiller
     highest_ambient_temp = max_amb_temperature  # Highest ambient temperature
-    max_load = max(total_ite_pwr)  # Maximum load from your previous calculations
+    
+    # Consider total power including GPU for maximum load
+    total_power_list = [ite + gpu for ite, gpu in zip(total_ite_pwr, total_gpu_pwr)]
+    max_load = max(total_power_list)
 
     chiller_max_load = DataCenter.calculate_chiller_power(max_cooling_cap, max_load, highest_ambient_temp)
 
-    # This will be battery sizing
-    max_dc_power_w =  1.1*max(total_ite_pwr) + 1.1*ct_rated_load + 1.1*chiller_max_load # Watts
+    # Battery sizing - now includes GPU power
+    max_dc_power_w = 1.1*max(total_ite_pwr) + 1.1*max(total_gpu_pwr) + 1.1*ct_rated_load + 1.1*chiller_max_load  # Watts
     
     # By carbon explorer paper, we need a battery to feed the DC by at least 1 hours, so we need the energy metric
     num_hours_battery = 1
     num_timestep_hour = 4
     
-    max_dc_energy = (max_dc_power_w / num_timestep_hour) * (num_timestep_hour * num_hours_battery) # (energy_per_timestep) * (timestep * num_hours) Wh
-    max_dc_energy = max_dc_energy / 1e6 # Mhw
+    max_dc_energy = (max_dc_power_w / num_timestep_hour) * (num_timestep_hour * num_hours_battery)  # (energy_per_timestep) * (timestep * num_hours) Wh
+    max_dc_energy = max_dc_energy / 1e6  # Mwh
     
     ranges = {
         'sinhour': [-1.0, 1.0], #0
@@ -206,11 +241,13 @@ def make_dc_env(month : int = 1,
         'Site Outdoor Air Drybulb Temperature(Environment)': [-10.0, 40.0], #6
         'Zone Thermostat Cooling Setpoint Temperature(West Zone)': [15.0, 30.0],  # reasonable range for setpoint; can be updated based on need #7
         'Zone Air Temperature(West Zone)':[0.9*min(dc_ambient_temp_list), 1.1*max(dc_ambient_temp_list)],
-        'Facility Total HVAC Electricity Demand Rate(Whole Building)':  [0.0, 1.1*ct_rated_load + 1.1*chiller_max_load],  # this is cooling tower power and chiller power
-        'Facility Total Electricity Demand Rate(Whole Building)': [0.9*min(total_ite_pwr), 1.1*max(total_ite_pwr) +  1.1*ct_rated_load + 1.1*chiller_max_load],  # TODO: This is not a part of the observation variables right now
-        'Facility Total Building Electricity Demand Rate(Whole Building)':[0.9*min(total_ite_pwr), 1.1*max(total_ite_pwr)],  # this is it power
+        'Facility Total HVAC Electricity Demand Rate(Whole Building)':  [0.0, 1.1*ct_rated_load + 1.1*chiller_max_load],  # cooling tower power and chiller power
+        'Facility Total Electricity Demand Rate(Whole Building)': [0.9*min(total_power_list), 1.1*max_dc_power_w],  # Total power including CPU, GPU, and cooling
+        'Facility Total Building Electricity Demand Rate(Whole Building)':[0.9*min(total_ite_pwr), 1.1*max(total_ite_pwr)],  # CPU and IT fan power
+        'Facility Total GPU Electricity Demand Rate(Whole Building)':[0.0, 1.1*max(total_gpu_pwr)],  # Added GPU power range
         
         'cpuUsage':[0.0, 1.0],
+        'gpuUsage':[0.0, 1.0],  # Added GPU usage range
         'carbonIntensity':[0.0, 1000.0],
         'batterySoC': [0.0, max_bat_cap_Mw*1e6],
         'max_battery_energy_Mwh' : max_dc_energy
@@ -227,6 +264,7 @@ def make_dc_env(month : int = 1,
                     action_mapping=action_mapping,
                     ranges=ranges,
                     add_cpu_usage=add_cpu_usage,
+                    add_gpu_usage=add_gpu_usage,  # Added GPU usage flag
                     min_temp=min_temp,
                     max_temp=max_temp,
                     action_definition=action_definition,
@@ -235,10 +273,11 @@ def make_dc_env(month : int = 1,
                     )
     
     dc_env.NormalizeObservation()
-    max_dc_pw = ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1]+\
-        ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1]
+    # Update max DC power to include all components (CPU, GPU, cooling)
+    max_dc_pw = ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1] + \
+               ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1] + \
+               ranges['Facility Total GPU Electricity Demand Rate(Whole Building)'][1]
     
     return dc_env, max_dc_pw
-    
     
     

@@ -73,7 +73,8 @@ class DC_Config:
         self.RACK_RETURN_APPROACH_TEMP_LIST = json_obj['data_center_configuration']['RACK_RETURN_APPROACH_TEMP_LIST']
 
         # how many servers are assigned in each rack. The actual number of servers per rack may be limited while
-        self.CPUS_PER_RACK = json_obj['data_center_configuration']['CPUS_PER_RACK']  
+        self.CPUS_PER_RACK = json_obj['data_center_configuration']['CPUS_PER_RACK']
+        self.GPUS_PER_RACK = json_obj['data_center_configuration']['GPUS_PER_RACK']    
 
         ##################################################################
         #################### SERVER CONFIGURATION ########################
@@ -87,8 +88,13 @@ class DC_Config:
         # CPU Power Parameters
         self.DEFAULT_SERVER_POWER_CHARACTERISTICS = json_obj['server_characteristics']['DEFAULT_SERVER_POWER_CHARACTERISTICS']
 
-        # This list should be of length NUM_RACKS; Here DEFAULT_SERVER_POWER_CHARACTERISTICS is of same length as NUM_RACKS
+        # GPU Power Parameters
+        # The idlepower of GPUs depends on the frequency
+        self.DEFAULT_GPU_POWER_CHARACTERISTICS = json_obj['server_characteristics']['DEFAULT_GPU_POWER_CHARACTERISTICS']
+
+        # These lists should be of length NUM_RACKS; Here DEFAULT_SERVER_POWER_CHARACTERISTICS and DEFAULT_GPU_POWER_CHARACTERISTICS are of same length as NUM_RACKS
         assert len(self.DEFAULT_SERVER_POWER_CHARACTERISTICS) == self.NUM_RACKS, "DEFAULT_SERVER_POWER_CHARACTERISTICS should be of length as NUM_RACKS"
+        assert len(self.DEFAULT_GPU_POWER_CHARACTERISTICS) == self.NUM_RACKS, "DEFAULT_GPU_POWER_CHARACTERISTICS should be of length as NUM_RACKS"
         # self.RACK_CPU_CONFIG = [[{'full_load_pwr' : j[0],
                             # 'idle_pwr': j[-1]} for _ in range(int(self.CPUS_PER_RACK))] for j in self.DEFAULT_SERVER_POWER_CHARACTERISTICS]
 
@@ -97,16 +103,26 @@ class DC_Config:
             """Function to construct CPU configuration for a single server."""
             return [{'full_load_pwr': j[0], 'idle_pwr': j[-1]} for _ in range(int(self.CPUS_PER_RACK)) for j in server_power_characteristics]
         
+        # Parallelize the construction of RACK_GPU_CONFIG
+        def construct_gpu_config(server_gpu_power_characteristics):
+            """Function to construct CPU configuration for a single server."""
+            return [{'full_load_pwr': j[0], 'idle_pwr': j[-1]} for _ in range(int(self.GPUS_PER_RACK)) for j in server_gpu_power_characteristics]
+        
         # Use ThreadPoolExecutor to parallelize the operation
         with ThreadPoolExecutor() as executor:
             # Submit tasks to the executor
             futures = [executor.submit(construct_cpu_config, [j]) for j in self.DEFAULT_SERVER_POWER_CHARACTERISTICS]
+            futures_gpu = [executor.submit(construct_gpu_config, [j]) for j in self.DEFAULT_GPU_POWER_CHARACTERISTICS]
             
-            # Wait for the futures to complete and collect the results
+            # Wait for the futures and futures_gpu to complete and collect the results
             self.RACK_CPU_CONFIG = [future.result() for future in as_completed(futures)]
+            self.RACK_GPU_CONFIG = [future.result() for future in as_completed(futures_gpu)]
 
         # A default value of HP_PROLIANT server for standalone testing
         self.HP_PROLIANT = json_obj["server_characteristics"]['HP_PROLIANT']
+
+        # A default value of HP_PROLIANT server for standalone testing
+        self.NVIDIA_V100 = json_obj["server_characteristics"]['NVIDIA_V100']
 
         # Serve/cpu parameters; Obtained from [3]
         self.CPU_POWER_RATIO_LB = json_obj['server_characteristics']['CPU_POWER_RATIO_LB']
