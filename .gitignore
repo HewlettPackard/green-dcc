@@ -44,4 +44,5 @@ data/workload/alibaba_2020_dataset/*.csv
 
 # Auto added
 filtered_file_list.txt
-.pytest_cache
+.pytest_cacheenv/
+env/
