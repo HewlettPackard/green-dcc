@@ -284,7 +284,7 @@ class Rack():
         
         # IT fan power calculation - respond to the highest heat load
         # Add heats generated
-        effective_load = sum(ITE_load_pct, GPU_load_pct) if self.has_gpus else ITE_load_pct
+        effective_load = ITE_load_pct + GPU_load_pct if self.has_gpus else ITE_load_pct
         base_itfan_v_ratio = self.m_itfan*self.m_coefficient*inlet_temp + self.c_itfan*self.c_coefficient
         itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio + self.ratio_shift_max_itfan*(effective_load/self.it_slope)
         itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.ITFAN_REF_V_RATIO)
