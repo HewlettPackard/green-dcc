@@ -95,14 +95,11 @@ class dc_gymenv(gym.Env):
         self.last_action = None
         self.action_scaling_factor = 1  # Starts with a scale factor of 1
         
-        # IT + HVAC + GPU
-        gpu_power_range = self.ranges['Facility Total GPU Electricity Demand Rate(Whole Building)'] if 'Facility Total GPU Electricity Demand Rate(Whole Building)' in self.ranges else [0, 0]
+        # IT + HVAC
         self.power_lb_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][0] + 
-                           self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0] + 
-                           gpu_power_range[0]) / 1e3
+                           self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0] ) / 1e3
         self.power_ub_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1] + 
-                           self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1] + 
-                           gpu_power_range[1]) / 1e3
+                           self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1]) / 1e3
     
     def reset(self, *, seed=None, options=None):
         """
@@ -130,16 +127,8 @@ class dc_gymenv(gym.Env):
         self.last_action = None
         self.action_scaling_factor = 1  # Starts with a scale factor of 1
         
-        # Create info dictionary with GPU support
-        gpu_power = 0
-        if self.has_gpus:
-            # If we have GPUs but no power values yet, use minimum from ranges
-            gpu_power_range = self.ranges.get('Facility Total GPU Electricity Demand Rate(Whole Building)', [0, 0])
-            gpu_power = gpu_power_range[0]
-        
         self.info = {
             'dc_ITE_total_power_kW': 0,
-            'dc_GPU_total_power_kW': gpu_power / 1e3,  # Added GPU power
             'dc_CT_total_power_kW': 0,
             'dc_Compressor_total_power_kW': 0,
             'dc_HVAC_total_power_kW': 0,
@@ -233,8 +222,7 @@ class dc_gymenv(gym.Env):
         
         # Update info dictionary with GPU information
         self.info = {
-            'dc_ITE_total_power_kW': data_center_total_ITE_Load / 1e3,
-            'dc_GPU_total_power_kW': data_center_total_GPU_Load / 1e3,  # Added GPU power
+            'dc_ITE_total_power_kW': total_load / 1e3,
             'dc_CT_total_power_kW': self.CT_Cooling_load / 1e3,
             'dc_Compressor_total_power_kW': self.Compressor_load / 1e3,
             'dc_HVAC_total_power_kW': (self.CT_Cooling_load + self.Compressor_load) / 1e3,
@@ -298,25 +286,14 @@ class dc_gymenv(gym.Env):
         hvac_power = self.HVAC_load
 
         # 'Facility Total Building Electricity Demand Rate(Whole Building)' ie 'IT POWER'
-        if self.rackwise_cpu_pwr:
-            it_power = sum(self.rackwise_cpu_pwr) + sum(self.rackwise_itfan_pwr)
+        if self.rackwise_cpu_pwr and self.rackwise_gpu_pwr:
+            it_power = sum(self.rackwise_cpu_pwr) + sum(self.rackwise_itfan_pwr) + sum(self.rackwise_gpu_pwr)
         else:
             it_power = self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][0]
-            
-        # 'Facility Total GPU Electricity Demand Rate(Whole Building)' ie 'GPU POWER'
-        gpu_power = 0
-        if self.has_gpus and self.rackwise_gpu_pwr:
-            gpu_power = sum(self.rackwise_gpu_pwr)
-        elif 'Facility Total GPU Electricity Demand Rate(Whole Building)' in self.ranges:
-            gpu_power = self.ranges['Facility Total GPU Electricity Demand Rate(Whole Building)'][0]
 
         # Basic observation list
         obs = [self.ambient_temp, zone_air_therm_cooling_stpt, zone_air_temp, hvac_power, it_power]
-        
-        # Add GPU power if needed
-        if self.has_gpus or 'Facility Total GPU Electricity Demand Rate(Whole Building)' in self.observation_variables:
-            obs.append(gpu_power)
-            
+                    
         return obs
 
     def update_workload(self, cpu_load):
