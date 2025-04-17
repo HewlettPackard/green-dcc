@@ -113,7 +113,6 @@ def make_dc_env(month : int = 1,
         'Facility Total HVAC Electricity Demand Rate(Whole Building)',  # 'HVAC POWER'
         # TODO: Will add sum of IT POWER  and HVAC Power Here if AGP wants it
         'Facility Total Building Electricity Demand Rate(Whole Building)',  #  'IT POWER'
-        'Facility Total GPU Electricity Demand Rate(Whole Building)'  # Added GPU POWER
     ]
     
     # Update observation space dimensions to include GPU
@@ -244,8 +243,7 @@ def make_dc_env(month : int = 1,
         'Zone Air Temperature(West Zone)':[0.9*min(dc_ambient_temp_list), 1.1*max(dc_ambient_temp_list)],
         'Facility Total HVAC Electricity Demand Rate(Whole Building)':  [0.0, 1.1*ct_rated_load + 1.1*chiller_max_load],  # cooling tower power and chiller power
         'Facility Total Electricity Demand Rate(Whole Building)': [0.9*min(total_power_list), 1.1*max_dc_power_w],  # Total power including CPU, GPU, and cooling
-        'Facility Total Building Electricity Demand Rate(Whole Building)':[0.9*min(total_ite_pwr), 1.1*max(total_ite_pwr)],  # CPU and IT fan power
-        'Facility Total GPU Electricity Demand Rate(Whole Building)':[0.0, 1.1*max(total_gpu_pwr)],  # Added GPU power range
+        'Facility Total Building Electricity Demand Rate(Whole Building)':[0.9*min(total_power_list), 1.1*max(total_power_list)],  # CPU and IT fan power
         
         'cpuUsage':[0.0, 1.0],
         'gpuUsage':[0.0, 1.0],  # Added GPU usage range
@@ -276,8 +274,7 @@ def make_dc_env(month : int = 1,
     dc_env.NormalizeObservation()
     # Update max DC power to include all components (CPU, GPU, cooling)
     max_dc_pw = ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1] + \
-               ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1] + \
-               ranges['Facility Total GPU Electricity Demand Rate(Whole Building)'][1]
+               ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1] 
     
     return dc_env, max_dc_pw
     
