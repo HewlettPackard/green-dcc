@@ -7,7 +7,7 @@ simulation:
   timestep_minutes: 15
 
   workload_path: "data/workload/alibaba_2020_dataset/result_df_full_year_2020.pkl"
-  cloud_provider: "gcp"
+  cloud_provider: "aws"
   shuffle_datacenters: true
   strategy: "manual_rl"
   use_tensorboard: true

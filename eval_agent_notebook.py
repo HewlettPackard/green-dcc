@@ -79,7 +79,7 @@ def make_eval_env(eval_mode=True):
 
 
 # Load trained actor model
-checkpoint_path = "checkpoints/train_20250421_091110/best_checkpoint.pth"  # Adjust path
+checkpoint_path = "checkpoints/train_20250421_160702/best_checkpoint.pth"  # Adjust path
 env = make_eval_env()
 obs, _ = env.reset(seed=123)
 obs_dim = env.observation_space.shape[0]

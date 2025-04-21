@@ -5,6 +5,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from rewards.base_reward import BaseReward
 from torch.utils.tensorboard import SummaryWriter  # if not already imported
+from data.network_cost.network_delay import get_transmission_delay
 
 class TaskSchedulingEnv(gym.Env):
     """
@@ -29,6 +30,8 @@ class TaskSchedulingEnv(gym.Env):
 
         self.pending_tasks = []
         self.deferred_tasks = []
+        # queue of (arrival_time: Timestamp, task: Task, dest_dc_name: str)
+        self.in_transit_tasks = []
 
         self.current_task = None
         self.global_step = 0  # Used to track time for TensorBoard logs
@@ -64,6 +67,19 @@ class TaskSchedulingEnv(gym.Env):
         actions: list[int] of length == len(self.current_tasks)
         Each element is the index of the destination datacenter (0-based)
         """
+        
+        # === Deliver any in‑flight (transmitting) tasks whose arrival time has come ===
+        remaining = []
+        for arrival_time, task, dc_name in self.in_transit_tasks:
+            if arrival_time <= self.current_time:
+                # now it appears in the destination DC’s pending queue
+                self.cluster_manager.datacenters[dc_name].pending_tasks.append(task)
+                if self.logger:
+                    self.logger.info(f"[{self.current_time}] Task {task.job_name} arrived at {dc_name}")
+            else:
+                remaining.append((arrival_time, task, dc_name))
+        self.in_transit_tasks = remaining
+        
         if self.cluster_manager.strategy == "manual_rl":
             assert len(actions) == len(self.current_tasks), \
                 f"Expected {len(self.current_tasks)} actions, got {len(actions)}"
@@ -77,12 +93,16 @@ class TaskSchedulingEnv(gym.Env):
             # Check if the task has exceeded its SLA deadline
             if self.current_time > task.sla_deadline:
                 # Enforce computation at origin datacenter
-                origin_dc = next(dc for dc in self.cluster_manager.datacenters.values() if dc.dc_id == task.origin_dc_id)
+                origin_dc = next(dc for dc in self.cluster_manager.datacenters.values()
+                                 if dc.dc_id == task.origin_dc_id)
                 origin_dc.pending_tasks.append(task)
                 task.dest_dc_id = origin_dc.dc_id
                 task.dest_dc = origin_dc
                 if self.logger:
-                    self.logger.info(f"[{self.current_time}] Task {task.job_name} exceeded SLA deadline. Forced to origin DC{origin_dc.dc_id}.")
+                    self.logger.info(
+                        f"[{self.current_time}] Task {task.job_name} exceeded SLA deadline. "
+                        f"Forced to origin DC{origin_dc.dc_id}."
+                    )
                 continue
             
             # === Temporal deferral ===
@@ -90,19 +110,38 @@ class TaskSchedulingEnv(gym.Env):
                 self.deferred_tasks.append(task)
                 task.temporarily_deferred = True
                 if self.logger:
-                    self.logger.info(f"[{self.current_time}] Task {task.job_name}, with origin DC{task.origin_dc_id}, has been deferred in time (not assigned destination DC).")
+                    self.logger.info(
+                        f"[{self.current_time}] Task {task.job_name}, with origin DC{task.origin_dc_id}, "
+                        "has been deferred in time (not assigned destination DC)."
+                    )
                 continue
             
             # === Geographical routing ===
             dest_dc = dc_list[action - 1]  # Now action ∈ [1..num_dcs]
-            dest_dc.pending_tasks.append(task)
+            # dest_dc.pending_tasks.append(task)
             # Assign the destination to the task info
             task.dest_dc_id = dest_dc.dc_id
             task.dest_dc = dest_dc
             
+            # compute network delay
+            origin_loc = self.cluster_manager.get_dc_location(task.origin_dc_id)
+            dest_loc   = dest_dc.location
+            provider   = self.cluster_manager.cloud_provider  # 'aws' or 'azure'
+            size_gb    = task.bandwidth_gb
+
+            delay_s = get_transmission_delay(origin_loc, dest_loc, provider, size_gb)
+            arrival_ts = self.current_time + pd.to_timedelta(delay_s, unit='s')
+
+            # enqueue for later delivery
+            dc_name = next(name for name, dc in self.cluster_manager.datacenters.items()
+                           if dc.dc_id == task.dest_dc_id)
+            self.in_transit_tasks.append((arrival_ts, task, dc_name))
+
             if self.logger:
-                self.logger.info(f"[{self.current_time}] Routed task {task.job_name} "
-                            f"(origin DC{task.origin_dc_id}) -> destination DC{dest_dc.dc_id}")
+                self.logger.info(
+                    f"[{self.current_time}] Routed task {task.job_name} from DC{task.origin_dc_id} to DC{task.dest_dc_id}, requiring a bandwidth of {task.bandwidth_gb:.2f} GB. "
+                    f"(delay={delay_s:.1f}s, will arrive at {arrival_ts})"
+                )
 
         # === Step all datacenters (releases, schedules, updates) ===
         results = self.cluster_manager.step(self.current_time, logger=self.logger)
@@ -165,18 +204,18 @@ class TaskSchedulingEnv(gym.Env):
             # RBC loads and handles tasks internally
             self.current_tasks = []
 
-    def _next_task(self):
-        if self.pending_tasks:
-            self.current_task = self.pending_tasks.pop(0)
-        else:
-            self.current_task = None
+    # def _next_task(self):
+    #     if self.pending_tasks:
+    #         self.current_task = self.pending_tasks.pop(0)
+    #     else:
+    #         self.current_task = None
 
-    def _advance_time_if_needed(self):
-        if not self.pending_tasks:
-            self.current_time += self.time_step
+    # def _advance_time_if_needed(self):
+    #     if not self.pending_tasks:
+    #         self.current_time += self.time_step
 
-    def _check_done(self):
-        return self.current_time >= self.end_time
+    # def _check_done(self):
+    #     return self.current_time >= self.end_time
 
     def _get_obs(self):
         obs = []

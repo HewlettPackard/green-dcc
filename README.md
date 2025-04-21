@@ -1,8 +1,11 @@
-# Multi-Data Center Geographical Scheduling Benchmark
+# GreenDCC: Geo‑Distributed Sustainable Scheduling Benchmark
 
-A high-fidelity simulation benchmark for **sustainable task scheduling** across globally distributed data centers. Optimize AI workloads based on **carbon emissions**, **energy cost**, **resource efficiency**, **transmission costs**, and **SLA guarantees**.
+We propose **GreenDCC**, a open benchmark for **sustainable, geo‑temporal task scheduling** across globally distributed data centers.
+Optimize AI workloads based on **carbon emissions**, **energy cost**, **resource efficiency**, **transmission costs**, and **SLA guarantees**.
 
-> **Goal**: Assign each incoming task to the best datacenter considering real-world sustainability and operational trade-offs.
+> **Goal**: 
+> Given a continuous stream of AI tasks (training or inference) with resource demands and deadlines, a centralized scheduler must decide, at each 15‑minute interval, whether to defer or to dispatch each task to one of `N` data centers to optimize sustainability and operational metrics under capacity and timing constraints.
+
 
 <p align="center">
   <img src="assets/figures/global_map.svg" alt="Geo-Distributed Data Centers" width="1000"/>
@@ -15,6 +18,7 @@ A high-fidelity simulation benchmark for **sustainable task scheduling** across 
 - **Centralized global scheduler** with decentralized task generation
 - Real-world data from Alibaba, Electricity Maps, Open-Meteo, AWS/GCP/Azure
 - Transfer-aware routing (latency, bandwidth, transmission cost)
+- Transmission delay modeling based on real inter‑datacenter throughput & RTT (Persico et al., IEEE GLOBECOM 2016)
 - Detailed simulation of:
   - Energy use
   - Carbon emissions
@@ -38,7 +42,7 @@ At every 15-minute timestep:
 2. Global Scheduling:
    - A centralized agent observes system-wide state and decides a destination DC for each task.
 3. Routing Penalty:
-   - Tasks sent to remote DCs incur transfer costs and delays.
+   - Tasks sent to remote DCs incur transfer cost, *and are delayed* by the measured serialization‑time + propagation‑time before they arrive (per `get_transmission_delay`).
 4. Execution:
    - Each DC executes tasks when resources are available.
    - Energy, cost, and carbon metrics are recorded.
@@ -49,14 +53,14 @@ We use a 15-minute timestep for our simulation to reflect how real data center o
 
 - **Real-world data sources** like Electricity Maps and grid APIs commonly provide energy prices, carbon intensity, and weather data at 15-minute or hourly intervals.
 - **Cloud billing models** from AWS, GCP, and Azure often round usage in 5–15-minute blocks, making 15-minute scheduling windows practical and cost-relevant.
-- **Batch scheduling and resource planning** in large clusters is typically done in intervals—not every minute—to smooth loads and reduce overhead.
+- **Batch scheduling and resource planning** in large clusters is typically done in intervals, not every minute, to smooth loads and reduce overhead.
 
 More importantly, our simulator models the **thermal and electrical dynamics of data centers**, including:
 - CPU-level energy and fan modeling (based on inlet temperature and utilization)
 - Rack-level airflow, temperature, and power draw
 - HVAC systems: CRAC setpoints, chiller loads, cooling tower behavior, and water usage
 
-Thermal systems respond **relatively slowly**—changes in temperature, airflow, and cooling power have delayed effects. So simulating every minute adds unnecessary noise, while 15-minute steps allow:
+Thermal systems respond **relatively slowly** to changes in temperature, airflow, and cooling power have delayed effects. So simulating every minute adds unnecessary noise, while 15-minute steps allow:
 - Stable tracking of thermal responses
 - Meaningful HVAC control decisions
 - Realistic latency and SLA trade-offs
@@ -82,7 +86,7 @@ This timestep design is **backed by multiple studies** in the field:
   https://doi.org/10.1109/TCC.2018.2834376  
   → Models energy transitions and sleep states using coarse time intervals to minimize server wake/sleep cycles.
 
-In short, a 15-minute timestep is not only realistic—it’s also **recommended** when simulating complex physical systems like cooling and power in large-scale data centers like the ones we model here.
+In short, a 15-minute timestep is not only realistic but it’s also **recommended** when simulating complex physical systems like cooling and power in large-scale data centers like the ones we model here.
 
 ---
 
@@ -106,6 +110,8 @@ In short, a 15-minute timestep is not only realistic—it’s also **recommended
 | Carbon Intensity   | [Electricity Maps](https://www.electricitymaps.com/)                   |
 | Energy Prices      | [Electricity Maps](https://www.electricitymaps.com/), [GridStatus](https://gridstatus.io/) |
 | Transmission Costs | [AWS](https://aws.amazon.com/ec2/pricing/on-demand/), [GCP](https://cloud.google.com/vpc/pricing), [Azure](https://azure.microsoft.com/en-us/pricing/details/bandwidth/) |
+| Transmission Latency | [AWS](https://www.cloudping.co/)|
+
 
 GreenDCC includes full-year datasets for:
 - **Weather**, **carbon intensity**, and **electricity prices** from **2021 to 2024**
@@ -217,8 +223,48 @@ We also include this figure showing the **typical daily electricity price patter
   <em>Average hourly electricity price profile over a typical day (UTC time)</em>
 </p>
 
+---
 
+### Transmission Delay
 
+To accurately account for the time required to transfer task data between geographically distributed datacenters, we model a **transmission delay** composed of:
+
+- **Serialization time**, determined by the data volume and the available TCP throughput;  
+- **Propagation delay**, represented by the round‑trip time (RTT) of the path.
+
+These parameters are obtained from Persico et al. [1], who measured the mean inter‑datacenter TCP throughput and RTT across four macro‑clusters: **EU** (Europe), **US** (North America), **SA** (South America), and **AP** (Asia–Pacific).
+
+#### 1. Regional Clustering  
+Map each cloud‑provider region identifier (e.g. `us‑east‑1`, `East US`) into one of the four clusters: **EU**, **US**, **SA**, or **AP**.
+
+#### 2. Empirical Metrics  
+Use the published mean TCP throughput (Mbps) and RTT (ms) between clusters (Figures 3 and 6 in [1]).
+
+#### 3. Data Size Conversion  
+Convert the task’s data volume from gigabytes to megabits:
+```python
+size_Mb = size_GB * 8 * 1000
+```
+
+#### 4. Transmission Delay Calculation
+Compute the total transmission delay (in seconds) as:
+```math
+   delay\,(s) = \frac{\text{size\_Mb}}{\text{throughput\_Mbps}} \;+\; \frac{\text{RTT\_ms}}{1000}\,.
+```
+
+#### 5. Deferred Enqueue
+Once a destination is selected, the scheduler holds the task in transit for the calculated delay before enqueuing it at the target datacenter.
+
+All of this logic is implemented in the `data/network_cost/network_delay.py` file.
+```python
+def get_transmission_delay(src_region, dst_region, provider, size_GB):
+    # … cluster lookup …
+    # … throughput & latency (rtt_ms) lookup from Persico et al. …
+    return size_Mb/throughput_mbps + rtt_ms/1000
+```
+
+> Reference:
+> [1] V. Persico, A. Botta, A. Montieri, A. Pescape, “A First Look at Public‑Cloud Inter‑datacenter Network Performance,” IEEE GLOBECOM, 2016. doi:10.1109/GLOCOM.2016.7841498
 ---
 
 ## AI Workloads Dataset (Alibaba GPU Cluster Trace)
@@ -770,7 +816,7 @@ This mechanism introduces flexibility in scheduling, allowing the agent to **tem
 > *Sustainable AIGC Workload Scheduling of Geo-Distributed Data Centers: A Multi-Agent Reinforcement Learning Approach*  
 > [https://arxiv.org/abs/2304.07948](https://arxiv.org/abs/2304.07948)
 
-In that paper, the authors simulate fixed job slack times proportional to job duration — a structure also mirrored here.
+In that paper, the authors simulate fixed job slack times proportional to job duration, a structure also mirrored here.
 
 ### Per-Task SLA Tiers
 GreenDCC also supports assigning custom `sla_factor` values per task to reflect different urgency levels:
@@ -819,7 +865,7 @@ This flexibility allows you to tailor the training process to your unique needs,
 
 GreenDCC simulates not only compute-related emissions, but also **carbon emissions associated with data transfers** between datacenters.
 
-This matters for sustainable workload scheduling because AI workloads — especially training or fine-tuning — involve **large data transfers**, and moving that data across long distances consumes non-negligible electricity in the **network infrastructure**.
+This matters for sustainable workload scheduling because AI workloads (especially training or fine-tuning) involve **large data transfers**, and moving that data across long distances consumes non-negligible electricity in the **network infrastructure**.
 
 #### Current Model (Simple, Efficient Approximation)
 
