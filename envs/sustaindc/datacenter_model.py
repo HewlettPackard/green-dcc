@@ -327,7 +327,7 @@ class Rack():
 
 
 class DataCenter_ITModel():
-    def __init__(self, num_racks, rack_supply_approach_temp_list, rack_CPU_config, rack_GPU_config=None, max_W_per_rack=10000, DC_ITModel_config=None, chiller_sizing=False):
+    def __init__(self, num_racks, dc_memory, rack_supply_approach_temp_list, rack_CPU_config, rack_GPU_config=None, max_W_per_rack=10000, DC_ITModel_config=None, chiller_sizing=False):
         """Creates the DC from a giving DC configuration
 
         Args:
@@ -345,6 +345,7 @@ class DataCenter_ITModel():
         self.rack_supply_approach_temp_list = rack_supply_approach_temp_list
         self.rack_CPU_config = rack_CPU_config
         self.rack_GPU_config = rack_GPU_config
+        self.dc_memory = dc_memory
         self.has_gpus = rack_GPU_config is not None
         
         self.rackwise_inlet_temp = []
@@ -399,24 +400,59 @@ class DataCenter_ITModel():
         f = 0.526
         g = -14.01
         
-        power_term = total_power ** d
-        airflow_term = self.DC_ITModel_config.C_AIR * self.DC_ITModel_config.RHO_AIR * rack.get_total_rack_fan_v() ** e * f
-        outlet_temp = rack_inlet_temp + c * power_term / airflow_term + g
+        for i, (rack, rack_supply_approach_temp, ITE_load_pct) in enumerate(
+                zip(self.racks_list, self.rack_supply_approach_temp_list, ITE_load_pct_list)):
+            
+            #clamp supply approach temperatures
+            rack_supply_approach_temp = rack.clamp_supply_approach_temp(rack_supply_approach_temp)
+            rack_inlet_temp = rack_supply_approach_temp + CRAC_setpoint 
+            rackwise_inlet_temp.append(rack_inlet_temp)
+            
+            # Get GPU load if applicable
+            gpu_load = GPU_load_pct_list[i] if GPU_load_pct_list is not None else 0
+            
+            # Calculate power with GPU if applicable
+            # Add cpu power and memory power
+            # Memory energy consumption with respect to memory usage
+            rack_cpu_power, rack_itfan_power, rack_gpu_power = rack.compute_instantaneous_pwr_vecd(
+                rack_inlet_temp, ITE_load_pct, gpu_load)
+            
+            rackwise_cpu_pwr.append(rack_cpu_power)
+            rackwise_itfan_pwr.append(rack_itfan_power)
+            rackwise_gpu_pwr.append(rack_gpu_power)
+            
+            # Use total power (CPU + GPU + fan) for thermal calculations
+            # The coefficient for scaling background power consumption of DRAM memory is referenced by approximation from from Figure 2 in [7]
+            memory_power = 0.07*self.dc_memory
+            total_power = rack_cpu_power + rack_itfan_power + rack_gpu_power
+            
+            power_term = total_power**d
+            airflow_term = self.DC_ITModel_config.C_AIR*self.DC_ITModel_config.RHO_AIR*rack.get_total_rack_fan_v()**e * f
+            
+            outlet_temp = rack_inlet_temp + c * power_term / airflow_term + g 
+            if outlet_temp > 60:
+                print(f'WARNING, the outlet temperature is higher than 60C: {outlet_temp:.3f}')
+            
+            if outlet_temp - rack_inlet_temp < 2:
+                print(f'There is something wrong with the delta calculation because is too small: {outlet_temp - rack_inlet_temp:.3f}')
+                print(f'Inlet Temp: {rack_inlet_temp:.3f}, Util: {ITE_load_pct}, GPU Util: {gpu_load}, Total Power: {total_power:.3f}')
+                print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}')
+                print(f'Delta: {c * power_term / airflow_term + g:.3f}')
+                raise Exception("Sorry, no numbers below 2")
 
-        if outlet_temp > 60:
-            print(f"[WARNING] Outlet temp high: {outlet_temp:.3f}")
-        if outlet_temp - rack_inlet_temp < 2:
-            raise Exception("Outlet temp delta too small")
+            if (ITE_load_pct > 95 or (gpu_load > 95 and self.has_gpus)) and CRAC_setpoint < 16.5:
+                if outlet_temp - rack_inlet_temp < 2:
+                    print(f'There is something wrong with the delta calculation for MAX is too small: {outlet_temp - rack_inlet_temp:.3f}')
+                    print(f'Inlet Temp: {rack_inlet_temp:.3f}, Total Power: {total_power:.3f}')
+                    print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}')
+                    print(f'Delta: {c * power_term / airflow_term + g:.3f}')
+                    raise Exception("Sorry, no numbers below 2")
+                    
+            rackwise_outlet_temp.append(outlet_temp)
 
-        # Repeat result for all racks
-        rackwise_cpu_pwr = [rack_cpu_power] * num_racks
-        rackwise_itfan_pwr = [rack_itfan_power] * num_racks
-        rackwise_gpu_pwr = [rack_gpu_power] * num_racks
-        rackwise_outlet_temp = [outlet_temp] * num_racks
-        self.rackwise_inlet_temp = [rack_inlet_temp] * num_racks
-
-        return rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_gpu_pwr, rackwise_outlet_temp
-
+        self.rackwise_inlet_temp = rackwise_inlet_temp
+            
+        return rackwise_cpu_pwr, rackwise_itfan_pwr, memory_power, rackwise_gpu_pwr, rackwise_outlet_temp
     
     def total_datacenter_full_load(self,):
         """Calculate the total DC IT power consumption (CPU, GPU, and fan)
@@ -574,12 +610,13 @@ def calculate_HVAC_power(CRAC_setpoint, avg_CRAC_return_temp, ambient_temp, data
     # ToDo: exploring the new chiller_power method
     return CRAC_Fan_load, CT_Fan_pwr, CRAC_cooling_load, chiller_power, power_consumed_CW, power_consumed_CT
 
-def chiller_sizing(DC_Config, min_CRAC_setpoint=16, max_CRAC_setpoint=22, max_ambient_temp=40.0):
+def chiller_sizing(DC_Config, dc_memory, min_CRAC_setpoint=16, max_CRAC_setpoint=22, max_ambient_temp=40.0):
     '''
     Calculates the chiller sizing for a data center based on the given configuration and parameters.
     
     Parameters:
         DC_Config (object): The data center configuration object.
+        dc_memory (float): the total available memory in the datacenter.
         min_CRAC_setpoint (float): The minimum CRAC setpoint temperature in degrees Celsius. Default is 16.
         max_CRAC_setpoint (float): The maximum CRAC setpoint temperature in degrees Celsius. Default is 22.
         max_ambient_temp (float): The maximum ambient temperature in degrees Celsius. Default is 40.0.
@@ -593,6 +630,7 @@ def chiller_sizing(DC_Config, min_CRAC_setpoint=16, max_CRAC_setpoint=22, max_am
         gpu_config = DC_Config.RACK_GPU_CONFIG
     
     dc = DataCenter_ITModel(num_racks=DC_Config.NUM_RACKS,
+                            dc_memory=dc_memory,
                             rack_supply_approach_temp_list=DC_Config.RACK_SUPPLY_APPROACH_TEMP_LIST,
                             rack_CPU_config=DC_Config.RACK_CPU_CONFIG,
                             rack_GPU_config=gpu_config,
@@ -617,10 +655,10 @@ def chiller_sizing(DC_Config, min_CRAC_setpoint=16, max_CRAC_setpoint=22, max_am
     )
     
     # Unpack result
-    if len(result) == 4:  # Includes GPU power
-        rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_gpu_pwr, rackwise_outlet_temp = result
+    if len(result) == 5:  # Includes GPU power
+        rackwise_cpu_pwr, rackwise_itfan_pwr, memory_power, rackwise_gpu_pwr, rackwise_outlet_temp = result
     else:  # No GPU
-        rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_outlet_temp = result
+        rackwise_cpu_pwr, rackwise_itfan_pwr, memory_power, rackwise_outlet_temp = result
         rackwise_gpu_pwr = [0] * len(rackwise_cpu_pwr)
     
     avg_CRAC_return_temp = calculate_avg_CRAC_return_temp(
@@ -629,7 +667,8 @@ def chiller_sizing(DC_Config, min_CRAC_setpoint=16, max_CRAC_setpoint=22, max_am
     )
     
     # Calculate total power including GPU if present
-    data_center_total_ITE_Load = sum(rackwise_cpu_pwr) + sum(rackwise_itfan_pwr) + sum(rackwise_gpu_pwr)
+    # 0.07 is the scaling factor for background power consumption in DRAM memory as discussed in [7]
+    data_center_total_ITE_Load = sum(rackwise_cpu_pwr) + sum(rackwise_itfan_pwr) + sum(rackwise_gpu_pwr) + memory_power
     
     m_sys = DC_Config.RHO_AIR * DC_Config.CRAC_SUPPLY_AIR_FLOW_RATE_pu * data_center_total_ITE_Load
     
@@ -667,6 +706,7 @@ References:
      rise across cabinet." 2010 12th IEEE Intersociety Conference on Thermal and Thermomechanical Phenomena in Electronic Systems. IEEE, 2010.
 [5]: https://h2ocooling.com/blog/look-cooling-tower-fan-efficiences/#:~:text=The%20tower%20has%20been%20designed,of%200.42%20inches%20of%20water.
 [6]: X. Tang and Z. Fu, "CPU–GPU Utilization Aware Energy-Efficient Scheduling Algorithm on Heterogeneous Computing Systems," in IEEE Access, vol. 8, pp. 58948-58958, 2020, doi: 10.1109/ACCESS.2020.2982956. 
+[7]: Seunghak Lee, Ki-Dong Kang, Hwanjun Lee, Hyungwon Park, Younghoon Son, Nam Sung Kim, and Daehoon Kim. 2021. GreenDIMM: OS-assisted DRAM Power Management for DRAM with a Sub-array Granularity Power-Down State. In MICRO-54: 54th Annual IEEE/ACM International Symposium on Microarchitecture (MICRO '21). Association for Computing Machinery, New York, NY, USA, 131–142. https://doi.org/10.1145/3466752.3480089.
 """
 
 

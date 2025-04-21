@@ -11,6 +11,7 @@ import envs.sustaindc.datacenter_model as DataCenter
 class dc_gymenv(gym.Env):
     
     def __init__(self, observation_variables : list,
+                       dc_memory : float,
                        observation_space : spaces.Box,
                        action_variables: list,
                        action_space : spaces.Discrete,
@@ -31,6 +32,7 @@ class dc_gymenv(gym.Env):
             observation_variables (list[str]): The partial list of variables that will be evaluated inside this evironment.The actual
                                                 gym space may include other variables like sine cosine of hours, day of year, cpu usage,
                                                 carbon intensity and battery state of charge.
+            dc_memory (float): The DRAM memory in a datacenter
             observation_space (spaces.Box): The gym observations space following gymnasium standard
             action_variables (list[str]): The list of action variables for the environment. It is used to create the info dict returned by
                                         the environment
@@ -53,6 +55,7 @@ class dc_gymenv(gym.Env):
         self.action_variables = action_variables
         self.action_space = action_space
         self.action_mapping = action_mapping
+        self.dc_memory = dc_memory
         self.ranges = ranges
         self.seed = seed
         self.add_cpu_usage = add_cpu_usage
@@ -69,6 +72,7 @@ class dc_gymenv(gym.Env):
             gpu_config = self.DC_Config.RACK_GPU_CONFIG
             
         self.dc = DataCenter.DataCenter_ITModel(num_racks=self.DC_Config.NUM_RACKS,
+                                                dc_memory = self.dc_memory,
                                                 rack_supply_approach_temp_list=self.DC_Config.RACK_SUPPLY_APPROACH_TEMP_LIST,
                                                 rack_CPU_config=self.DC_Config.RACK_CPU_CONFIG,
                                                 rack_GPU_config=gpu_config,  # Add GPU config
@@ -95,8 +99,12 @@ class dc_gymenv(gym.Env):
         self.last_action = None
         self.action_scaling_factor = 1  # Starts with a scale factor of 1
         
-        # IT + HVAC + GPU
-        gpu_power_range = self.ranges['Facility Total GPU Electricity Demand Rate(Whole Building)'] if 'Facility Total GPU Electricity Demand Rate(Whole Building)' in self.ranges else [0, 0]
+        # IT + HVAC
+        self.power_lb_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][0] + 
+                           self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]) / 1e3
+        self.power_ub_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1] + 
+                           self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1] ) / 1e3
+
 
     
     def reset(self, *, seed=None, options=None):
@@ -125,16 +133,8 @@ class dc_gymenv(gym.Env):
         self.last_action = None
         self.action_scaling_factor = 1  # Starts with a scale factor of 1
         
-        # Create info dictionary with GPU support
-        gpu_power = 0
-        if self.has_gpus:
-            # If we have GPUs but no power values yet, use minimum from ranges
-            gpu_power_range = self.ranges.get('Facility Total GPU Electricity Demand Rate(Whole Building)', [0, 0])
-            gpu_power = gpu_power_range[0]
-        
         self.info = {
             'dc_ITE_total_power_kW': 0,
-            'dc_GPU_total_power_kW': gpu_power / 1e3,  # Added GPU power
             'dc_CT_total_power_kW': 0,
             'dc_Compressor_total_power_kW': 0,
             'dc_HVAC_total_power_kW': 0,
@@ -185,10 +185,10 @@ class dc_gymenv(gym.Env):
         )
         
         # Unpack result based on whether it includes GPU power
-        if len(result) == 4:  # Includes GPU power
-            self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_gpu_pwr, self.rackwise_outlet_temp = result
+        if len(result) == 5:  # Includes GPU power
+            self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, memory_power, self.rackwise_gpu_pwr, self.rackwise_outlet_temp = result
         else:  # Original version without GPU
-            self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_outlet_temp = result
+            self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, memory_power, self.rackwise_outlet_temp = result
             self.rackwise_gpu_pwr = [0] * len(self.rackwise_cpu_pwr)
             
         avg_CRAC_return_temp = DataCenter.calculate_avg_CRAC_return_temp(
@@ -199,7 +199,7 @@ class dc_gymenv(gym.Env):
         # Calculate total power including GPU if present
         data_center_total_ITE_Load = sum(self.rackwise_cpu_pwr) + sum(self.rackwise_itfan_pwr)
         data_center_total_GPU_Load = sum(self.rackwise_gpu_pwr)
-        total_load = data_center_total_ITE_Load + data_center_total_GPU_Load
+        total_load = data_center_total_ITE_Load + data_center_total_GPU_Load + memory_power
         
         self.CRAC_Fan_load, self.CT_Cooling_load, self.CRAC_Cooling_load, self.Compressor_load, self.CW_pump_load, self.CT_pump_load = DataCenter.calculate_HVAC_power(
             CRAC_setpoint=self.raw_curr_stpt,
@@ -226,8 +226,7 @@ class dc_gymenv(gym.Env):
         
         # Update info dictionary with GPU information
         self.info = {
-            'dc_ITE_total_power_kW': data_center_total_ITE_Load / 1e3,
-            'dc_GPU_total_power_kW': data_center_total_GPU_Load / 1e3,  # Added GPU power
+            'dc_ITE_total_power_kW': total_load / 1e3,
             'dc_CT_total_power_kW': self.CT_Cooling_load / 1e3,
             'dc_Compressor_total_power_kW': self.Compressor_load / 1e3,
             'dc_HVAC_total_power_kW': (self.CT_Cooling_load + self.Compressor_load) / 1e3,
@@ -256,6 +255,49 @@ class dc_gymenv(gym.Env):
         Normalizes the observation.
         """
         return np.float32((obs-self.obs_min)/self.obs_delta)
+
+    def get_obs(self):
+        """
+        Returns the observation at the current time step.
+
+        Returns:
+            observation (List[float]): Current state of the environmment.
+        """
+        zone_air_therm_cooling_stpt = self.min_temp  # in C, default for reset state
+        if self.raw_curr_stpt is not None:
+            zone_air_therm_cooling_stpt = self.raw_curr_stpt
+        
+        zone_air_temp = self.obs_min[2]  # in C, default for reset state
+        if self.rackwise_outlet_temp:
+            zone_air_temp = sum(self.rackwise_outlet_temp)/len(self.rackwise_outlet_temp)
+
+        # 'Facility Total HVAC Electricity Demand Rate(Whole Building)'  ie 'HVAC POWER'
+        hvac_power = self.HVAC_load
+
+        # Calculate 'Facility Total Building Electricity Demand Rate(Whole Building)' i.e. 'IT POWER'
+        it_power = 0
+
+        # Add CPU power if available
+        if self.rackwise_cpu_pwr:
+            it_power += sum(self.rackwise_cpu_pwr)
+
+        # Add IT fan power if available
+        if hasattr(self, 'rackwise_itfan_pwr') and self.rackwise_itfan_pwr:
+            it_power += sum(self.rackwise_itfan_pwr)
+
+        # Add GPU power if available
+        if self.rackwise_gpu_pwr:
+            it_power += sum(self.rackwise_gpu_pwr)
+
+        # If no power components were available, use the fallback value
+        if it_power == 0:
+
+            it_power = self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][0]
+
+        # Basic observation list
+        obs = [self.ambient_temp, zone_air_therm_cooling_stpt, zone_air_temp, hvac_power, it_power]            
+
+        return obs
 
     def update_workload(self, cpu_load):
         """

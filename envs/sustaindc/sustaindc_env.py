@@ -69,11 +69,20 @@ class SustainDC(gym.Env):
         # **✅ Pick a random simulation year for variability**
         self.simulation_year = None 
 
+        # Get resource capacities from config, provide default values if not specified
+        self.total_cpus = env_config.get('total_cpus', 2000)
+        self.total_gpus = env_config.get('total_gpus', 220)
+        self.total_mem = env_config.get('total_mem', 2000)
+
+        # Set available resources equal to total at initialization
+        self.available_cpus = self.total_cpus
+        self.available_gpus = self.total_gpus
+        self.available_mem = self.total_mem
+
         # self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, 
         #                           n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=1000)
-        self.dc_env, _ = make_dc_env(month=self.month, location=self.location, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
-                                             datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file, add_cpu_usage=False,
-                                             total_cores=self.total_cores, total_gpus=self.total_gpus, total_mem=self.total_mem)
+        self.dc_env, _ = make_dc_env(month=self.month, location=self.location, dc_memory=self.available_mem, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
+                                             datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file, add_cpu_usage=False)
         self.bat_env = make_bat_fwd_env(month=self.month, max_bat_cap_Mwh=self.dc_env.ranges['max_battery_energy_Mwh'], 
                                         max_dc_pw_MW=10, 
                                         dcload_max=10,
