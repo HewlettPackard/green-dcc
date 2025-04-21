@@ -279,6 +279,7 @@ def make_dc_env(month : int = 1,
     # Update max DC power to include all components (CPU, GPU, cooling)
     max_dc_pw = ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1] + \
                ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1]
+
     
     return dc_env, max_dc_pw
     

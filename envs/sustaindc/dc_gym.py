@@ -104,6 +104,8 @@ class dc_gymenv(gym.Env):
                            self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]) / 1e3
         self.power_ub_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1] + 
                            self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1] ) / 1e3
+
+
     
     def reset(self, *, seed=None, options=None):
         """
@@ -306,11 +308,12 @@ class dc_gymenv(gym.Env):
 
         # If no power components were available, use the fallback value
         if it_power == 0:
+
             it_power = self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][0]
 
         # Basic observation list
-        obs = [self.ambient_temp, zone_air_therm_cooling_stpt, zone_air_temp, hvac_power, it_power]
-            
+        obs = [self.ambient_temp, zone_air_therm_cooling_stpt, zone_air_temp, hvac_power, it_power]            
+
         return obs
 
     def update_workload(self, cpu_load):
