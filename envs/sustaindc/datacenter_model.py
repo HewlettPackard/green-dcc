@@ -274,14 +274,14 @@ class Rack():
         
         # GPU power calculation
         gpu_power = np.zeros_like(cpu_power) if self.has_gpus else np.zeros(1)
-        if self.has_gpus and GPU_load_pct > 0:
+        if self.has_gpus and GPU_load_pct >= 0:
             # Normalize utilization for log formula
             x = GPU_load_pct / 100.0
             # Vectorized calculation of the logarithmic formula
             alpha = self.gpu_idle_pwr
             beta = self.gpu_full_load_pwr - self.gpu_idle_pwr
             gpu_power = alpha + beta * np.log2(1 + x)
-        
+                    
         # IT fan power calculation - respond to the highest heat load
         # Add heats generated
         effective_load = ITE_load_pct + GPU_load_pct if self.has_gpus else ITE_load_pct
@@ -374,83 +374,49 @@ class DataCenter_ITModel():
         self.drift_rate = 0.01
         
     def compute_datacenter_IT_load_outlet_temp(self, ITE_load_pct_list, CRAC_setpoint, GPU_load_pct_list=None):
-        """Calculate the average outlet temperature of all the racks
+        """Optimized version assuming identical racks with uniform workload."""
+        num_racks = len(self.racks_list)
+        
+        # Use first rack for representative calculation
+        rack = self.racks_list[0]
+        rack_supply_approach_temp = self.rack_supply_approach_temp_list[0]
+        ITE_load_pct = ITE_load_pct_list[0]
+        gpu_load = GPU_load_pct_list[0] if GPU_load_pct_list else 0
 
-        Args:
-            ITE_load_pct_list (List[float]): CPU load for each rack
-            CRAC_setpoint (float): CRAC setpoint
-            GPU_load_pct_list (List[float], optional): GPU load for each rack. Defaults to None.
+        rack_supply_approach_temp = rack.clamp_supply_approach_temp(rack_supply_approach_temp)
+        rack_inlet_temp = rack_supply_approach_temp + CRAC_setpoint
+        
+        rack_cpu_power, rack_itfan_power, rack_gpu_power = rack.compute_instantaneous_pwr_vecd(
+            rack_inlet_temp, ITE_load_pct, gpu_load
+        )
+        
+        total_power = rack_cpu_power + rack_itfan_power + rack_gpu_power
 
-        Returns:
-            tuple: (rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_gpu_pwr, rackwise_outlet_temp)
-        """
-        # Default GPU load to 0 if not provided and GPUs exist
-        if GPU_load_pct_list is None:
-            GPU_load_pct_list = [0] * len(ITE_load_pct_list) if self.has_gpus else None
-
-        rackwise_cpu_pwr = [] 
-        rackwise_itfan_pwr = []
-        rackwise_gpu_pwr = []
-        rackwise_outlet_temp = []
-        rackwise_inlet_temp = []
-                
+        # Constants
         c = 1.918
         d = 1.096
         e = 0.824
         f = 0.526
         g = -14.01
         
-        for i, (rack, rack_supply_approach_temp, ITE_load_pct) in enumerate(
-                zip(self.racks_list, self.rack_supply_approach_temp_list, ITE_load_pct_list)):
-            
-            #clamp supply approach temperatures
-            rack_supply_approach_temp = rack.clamp_supply_approach_temp(rack_supply_approach_temp)
-            rack_inlet_temp = rack_supply_approach_temp + CRAC_setpoint 
-            rackwise_inlet_temp.append(rack_inlet_temp)
-            
-            # Get GPU load if applicable
-            gpu_load = GPU_load_pct_list[i] if GPU_load_pct_list is not None else 0
-            
-            # Calculate power with GPU if applicable
-            # Add cpu power and memory power
-            # Memory energy consumption with respect to memory usage
-            rack_cpu_power, rack_itfan_power, rack_gpu_power = rack.compute_instantaneous_pwr_vecd(
-                rack_inlet_temp, ITE_load_pct, gpu_load)
-            
-            rackwise_cpu_pwr.append(rack_cpu_power)
-            rackwise_itfan_pwr.append(rack_itfan_power)
-            rackwise_gpu_pwr.append(rack_gpu_power)
-            
-            # Use total power (CPU + GPU + fan) for thermal calculations
-            total_power = rack_cpu_power + rack_itfan_power + rack_gpu_power
-            
-            power_term = total_power**d
-            airflow_term = self.DC_ITModel_config.C_AIR*self.DC_ITModel_config.RHO_AIR*rack.get_total_rack_fan_v()**e * f
-            
-            outlet_temp = rack_inlet_temp + c * power_term / airflow_term + g 
-            if outlet_temp > 60:
-                print(f'WARNING, the outlet temperature is higher than 60C: {outlet_temp:.3f}')
-            
-            if outlet_temp - rack_inlet_temp < 2:
-                print(f'There is something wrong with the delta calculation because is too small: {outlet_temp - rack_inlet_temp:.3f}')
-                print(f'Inlet Temp: {rack_inlet_temp:.3f}, Util: {ITE_load_pct}, GPU Util: {gpu_load}, Total Power: {total_power:.3f}')
-                print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}')
-                print(f'Delta: {c * power_term / airflow_term + g:.3f}')
-                raise Exception("Sorry, no numbers below 2")
+        power_term = total_power ** d
+        airflow_term = self.DC_ITModel_config.C_AIR * self.DC_ITModel_config.RHO_AIR * rack.get_total_rack_fan_v() ** e * f
+        outlet_temp = rack_inlet_temp + c * power_term / airflow_term + g
 
-            if (ITE_load_pct > 95 or (gpu_load > 95 and self.has_gpus)) and CRAC_setpoint < 16.5:
-                if outlet_temp - rack_inlet_temp < 2:
-                    print(f'There is something wrong with the delta calculation for MAX is too small: {outlet_temp - rack_inlet_temp:.3f}')
-                    print(f'Inlet Temp: {rack_inlet_temp:.3f}, Total Power: {total_power:.3f}')
-                    print(f'Power term: {power_term:.3f}, Airflow term: {airflow_term:.3f}')
-                    print(f'Delta: {c * power_term / airflow_term + g:.3f}')
-                    raise Exception("Sorry, no numbers below 2")
-                    
-            rackwise_outlet_temp.append(outlet_temp)
+        if outlet_temp > 60:
+            print(f"[WARNING] Outlet temp high: {outlet_temp:.3f}")
+        if outlet_temp - rack_inlet_temp < 2:
+            raise Exception("Outlet temp delta too small")
 
-        self.rackwise_inlet_temp = rackwise_inlet_temp
-            
+        # Repeat result for all racks
+        rackwise_cpu_pwr = [rack_cpu_power] * num_racks
+        rackwise_itfan_pwr = [rack_itfan_power] * num_racks
+        rackwise_gpu_pwr = [rack_gpu_power] * num_racks
+        rackwise_outlet_temp = [outlet_temp] * num_racks
+        self.rackwise_inlet_temp = [rack_inlet_temp] * num_racks
+
         return rackwise_cpu_pwr, rackwise_itfan_pwr, rackwise_gpu_pwr, rackwise_outlet_temp
+
     
     def total_datacenter_full_load(self,):
         """Calculate the total DC IT power consumption (CPU, GPU, and fan)

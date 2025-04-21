@@ -288,12 +288,12 @@ Where:
 ```python
 job_name = task_data[0]
 duration = float(task_data[4])
-cpu_req = float(task_data[5]) / 100.0    # Convert percentage to core count
+cores_req = float(task_data[5]) / 100.0    # Convert percentage to core count
 gpu_req = float(task_data[6]) / 100.0    # Convert percentage to GPU count
 mem_req = float(task_data[7])            # Memory in GB
 bandwidth_gb = float(task_data[8])       # Data transfer size in GB
 
-task = Task(job_name, arrival_time, duration, cpu_req, gpu_req, mem_req, bandwidth_gb)
+task = Task(job_name, arrival_time, duration, cores_req, gpu_req, mem_req, bandwidth_gb)
 tasks.append(task)
 ```
 
@@ -427,7 +427,7 @@ Datacenters are configured in the `datacenters.yaml` file. Each entry defines a 
   - A `dc_config_file` for layout configuration and low-level energy and cooling models
 
 ### Resource Parameters
-  - `total_cpus`: Simulated number of CPU cores
+  - `total_cores`: Simulated number of CPU cores
   - `total_gpus`: Simulated number of discrete GPUs
   - `total_mem`: Total memory capacity in GB
 
@@ -450,7 +450,7 @@ datacenters:
     location: "US-NY-NYIS"
     timezone_shift: -5
     population_weight: 0.25
-    total_cpus: 25000         # Total virtual CPUs
+    total_cores: 25000         # Total virtual CPUs
     total_gpus: 700           # Total GPUs
     total_mem: 80000          # Total memory in GB
     dc_config_file: "configs/dcs/dc_config.json"
@@ -459,7 +459,7 @@ datacenters:
     location: "DE-LU"
     timezone_shift: 1
     population_weight: 0.22
-    total_cpus: 15000
+    total_cores: 15000
     total_gpus: 1000
     total_mem: 80000
     dc_config_file: "configs/dcs/dc_config.json"
@@ -468,7 +468,7 @@ datacenters:
       location: "US-CAL-CISO"
       timezone_shift: -8
       population_weight: 0.20
-      total_cpus: 20000
+      total_cores: 20000
       total_gpus: 600
       total_mem: 80000
       dc_config_file: "configs/dcs/dc_config.json"
@@ -479,11 +479,11 @@ datacenters:
 
 If you want to simulate realistic datacenter configurations, you can use the following reference values based on typical power distribution across components:
 
-| Datacenter Type      | total_cpus | total_gpus | total_mem (GB) |
-|----------------------|------------|------------|----------------|
-| GPU-heavy (training) | 15,000     | 1000       | 80,000         |
-| Balanced (general)   | 25,000     | 600        | 80,000         |
-| CPU-heavy (inference)| 30,000     | 300        | 60,000         |
+| Datacenter Type      | total_cores | total_gpus | total_mem (GB) |
+|----------------------|-------------|------------|----------------|
+| GPU-heavy (training) | 50,000      | 1000       | 80,000         |
+| Balanced (general)   | 85,000      | 600        | 80,000         |
+| CPU-heavy (inference)| 110,000     | 300        | 60,000         |
 
 These values assume approximately 1 MW of compute power, split into:
 - ~20 W per CPU core

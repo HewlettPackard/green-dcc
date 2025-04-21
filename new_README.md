@@ -480,7 +480,7 @@ Each entry describes one datacenter:
 - `location`: Region code (e.g., `"DE-LU"`)
 - `timezone_shift`: Hours offset from UTC
 - `population_weight`: Used in origin generation
-- `total_cpus`, `total_gpus`, `total_mem`: Available compute resources
+- `total_cores`, `total_gpus`, `total_mem`: Available compute resources
 - `dc_config_file`: JSON with HVAC and layout modeling info
 
 #### 🧩 `reward_config.yaml`
@@ -722,7 +722,7 @@ To simulate a new region accurately, you need to provide aligned data for:
        location: "FI"  # Finland
        timezone_shift: 2
        population_weight: 0.12
-       total_cpus: 4000
+       total_cores: 4000
        total_gpus: 500
        total_mem: 4000
        dc_config_file: "configs/dcs/dc_config.json"

@@ -97,12 +97,7 @@ class dc_gymenv(gym.Env):
         
         # IT + HVAC + GPU
         gpu_power_range = self.ranges['Facility Total GPU Electricity Demand Rate(Whole Building)'] if 'Facility Total GPU Electricity Demand Rate(Whole Building)' in self.ranges else [0, 0]
-        self.power_lb_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][0] + 
-                           self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0] + 
-                           gpu_power_range[0]) / 1e3
-        self.power_ub_kW = (self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][1] + 
-                           self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][1] + 
-                           gpu_power_range[1]) / 1e3
+
     
     def reset(self, *, seed=None, options=None):
         """
@@ -124,7 +119,7 @@ class dc_gymenv(gym.Env):
         self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_gpu_pwr, self.rackwise_outlet_temp = [], [], [], []
         self.water_usage = None
         
-        self.raw_curr_state = self.get_obs()
+        # self.raw_curr_state = self.get_obs()
         
         self.consecutive_actions = 0
         self.last_action = None
@@ -150,8 +145,6 @@ class dc_gymenv(gym.Env):
             'dc_gpu_workload_fraction': 1 if self.has_gpus else 0,  # Added GPU workload
             'dc_int_temperature': 16,
             'dc_exterior_ambient_temp': 16,
-            'dc_power_lb_kW': self.power_lb_kW,
-            'dc_power_ub_kW': self.power_ub_kW,
             'dc_CW_pump_power_kW': 0,
             'dc_CT_pump_power_kW': 0,
             'dc_water_usage': 0,
@@ -159,7 +152,7 @@ class dc_gymenv(gym.Env):
         
         if self.scale_obs:
             return self.normalize(self.raw_curr_state), self.info
-        return self.raw_curr_state, self.info
+        return None, self.info
     
     def step(self, action):
         """
@@ -229,7 +222,7 @@ class dc_gymenv(gym.Env):
         self.reward = 0
                 
         # calculate self.raw_next_state
-        self.raw_next_state = self.get_obs()
+        # self.raw_next_state = self.get_obs()
         
         # Update info dictionary with GPU information
         self.info = {
@@ -244,8 +237,6 @@ class dc_gymenv(gym.Env):
             'dc_gpu_workload_fraction': self.gpu_load_frac if self.has_gpus else 0,  # Added GPU workload
             'dc_int_temperature': np.mean(self.rackwise_outlet_temp),
             'dc_exterior_ambient_temp': self.ambient_temp,
-            'dc_power_lb_kW': self.power_lb_kW,
-            'dc_power_ub_kW': self.power_ub_kW,
             'dc_CW_pump_power_kW': self.CW_pump_load,
             'dc_CT_pump_power_kW': self.CT_pump_load,
             'dc_water_usage': self.water_usage,
@@ -258,66 +249,13 @@ class dc_gymenv(gym.Env):
         # Return processed/unprocessed state to agent
         if self.scale_obs:
             return self.normalize(self.raw_next_state), self.reward, done, truncated, self.info
-        return self.raw_next_state, self.reward, done, truncated, self.info
-
-    def NormalizeObservation(self):
-        """
-        Obtains the value for normalizing the observation.
-        """
-        self.scale_obs = True
-        for obs_var in self.observation_variables:
-            self.obs_min.append(self.ranges[obs_var][0])
-            self.obs_max.append(self.ranges[obs_var][1])
-        
-        self.obs_min = np.array(self.obs_min)
-        self.obs_max = np.array(self.obs_max)
-        self.obs_delta = self.obs_max - self.obs_min
+        return None, self.reward, done, truncated, self.info
 
     def normalize(self, obs):
         """
         Normalizes the observation.
         """
         return np.float32((obs-self.obs_min)/self.obs_delta)
-
-    def get_obs(self):
-        """
-        Returns the observation at the current time step.
-
-        Returns:
-            observation (List[float]): Current state of the environmment.
-        """
-        zone_air_therm_cooling_stpt = self.min_temp  # in C, default for reset state
-        if self.raw_curr_stpt is not None:
-            zone_air_therm_cooling_stpt = self.raw_curr_stpt
-        
-        zone_air_temp = self.obs_min[2]  # in C, default for reset state
-        if self.rackwise_outlet_temp:
-            zone_air_temp = sum(self.rackwise_outlet_temp)/len(self.rackwise_outlet_temp)
-
-        # 'Facility Total HVAC Electricity Demand Rate(Whole Building)'  ie 'HVAC POWER'
-        hvac_power = self.HVAC_load
-
-        # 'Facility Total Building Electricity Demand Rate(Whole Building)' ie 'IT POWER'
-        if self.rackwise_cpu_pwr:
-            it_power = sum(self.rackwise_cpu_pwr) + sum(self.rackwise_itfan_pwr)
-        else:
-            it_power = self.ranges['Facility Total Building Electricity Demand Rate(Whole Building)'][0]
-            
-        # 'Facility Total GPU Electricity Demand Rate(Whole Building)' ie 'GPU POWER'
-        gpu_power = 0
-        if self.has_gpus and self.rackwise_gpu_pwr:
-            gpu_power = sum(self.rackwise_gpu_pwr)
-        elif 'Facility Total GPU Electricity Demand Rate(Whole Building)' in self.ranges:
-            gpu_power = self.ranges['Facility Total GPU Electricity Demand Rate(Whole Building)'][0]
-
-        # Basic observation list
-        obs = [self.ambient_temp, zone_air_therm_cooling_stpt, zone_air_temp, hvac_power, it_power]
-        
-        # Add GPU power if needed
-        if self.has_gpus or 'Facility Total GPU Electricity Demand Rate(Whole Building)' in self.observation_variables:
-            obs.append(gpu_power)
-            
-        return obs
 
     def update_workload(self, cpu_load):
         """

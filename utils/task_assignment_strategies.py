@@ -5,7 +5,7 @@ def distribute_most_available(task, datacenters, logger):
     Assigns the task to the datacenter with the MOST available CPU.
     Now it only selects the datacenter but does NOT schedule the task.
     """    
-    best_dc = max(datacenters.values(), key=lambda dc: dc.available_cpus)
+    best_dc = max(datacenters.values(), key=lambda dc: dc.available_cores)
     return best_dc.dc_id  # Return selected datacenter ID, do NOT schedule the task
 
 
@@ -110,7 +110,7 @@ def distribute_lowest_utilization(task, datacenters, logger):
     """
     Assigns the task to the datacenter with the lowest overall utilization (CPU + GPU + Memory).
     """
-    best_dc = min(datacenters.values(), key=lambda dc: (dc.available_cpus / dc.total_cpus) +
+    best_dc = min(datacenters.values(), key=lambda dc: (dc.available_cores / dc.total_cores) +
                                                       (dc.available_gpus / dc.total_gpus) +
                                                       (dc.available_mem / dc.total_mem))
     if logger:
@@ -124,7 +124,7 @@ def distribute_weighted(task, datacenters, logger, weights={'cost': 0.3, 'carbon
     def score(dc):
         cost = dc.get_energy_price() * weights['cost']
         carbon = dc.get_carbon_intensity() * weights['carbon']
-        availability = ((dc.available_cpus / dc.total_cpus) + 
+        availability = ((dc.available_cores / dc.total_cores) + 
                         (dc.available_gpus / dc.total_gpus) + 
                         (dc.available_mem / dc.total_mem)) * weights['availability']
         return cost + carbon - availability  # Lower score is better

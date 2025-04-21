@@ -46,6 +46,10 @@ class SustainDC(gym.Env):
         self.max_bat_cap_Mw = env_config['max_bat_cap_Mw']
         
         self.datacenter_capacity_mw = env_config['datacenter_capacity_mw']
+        self.total_cores = env_config['total_cores']
+        self.total_gpus = env_config['total_gpus']
+        self.total_mem = env_config['total_mem']
+        
         self.dc_config_file = env_config['dc_config_file']
         self.timezone_shift = env_config['timezone_shift']
         
@@ -68,15 +72,16 @@ class SustainDC(gym.Env):
         # self.ls_env = make_ls_env(month=self.month, test_mode=self.evaluation_mode, n_vars_ci=n_vars_ci, 
         #                           n_vars_energy=n_vars_energy, n_vars_battery=n_vars_battery, queue_max_len=1000)
         self.dc_env, _ = make_dc_env(month=self.month, location=self.location, max_bat_cap_Mw=self.max_bat_cap_Mw, use_ls_cpu_load=True, 
-                                             datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file, add_cpu_usage=False)
+                                             datacenter_capacity_mw=self.datacenter_capacity_mw, dc_config_file=self.dc_config_file, add_cpu_usage=False,
+                                             total_cores=self.total_cores, total_gpus=self.total_gpus, total_mem=self.total_mem)
         self.bat_env = make_bat_fwd_env(month=self.month, max_bat_cap_Mwh=self.dc_env.ranges['max_battery_energy_Mwh'], 
-                                        max_dc_pw_MW=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][1] / 1e6, 
-                                        dcload_max=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][1],
-                                        dcload_min=self.dc_env.ranges['Facility Total Electricity Demand Rate(Whole Building)'][0],
+                                        max_dc_pw_MW=10, 
+                                        dcload_max=10,
+                                        dcload_min=1,
                                         n_fwd_steps=n_vars_ci, init_day=0)
 
-        self.bat_env.dcload_max = self.dc_env.power_ub_kW / 4  # Assuming 15 minutes timestep. Kwh
-        self.bat_env.dcload_min = self.dc_env.power_lb_kW / 4  # Assuming 15 minutes timestep. Kwh
+        # self.bat_env.dcload_max = self.dc_env.power_ub_kW / 4  # Assuming 15 minutes timestep. Kwh
+        # self.bat_env.dcload_min = self.dc_env.power_lb_kW / 4  # Assuming 15 minutes timestep. Kwh
         
         self._obs_space_in_preferred_format = True
         
@@ -84,12 +89,12 @@ class SustainDC(gym.Env):
         self.action_space = []
 
         # Get resource capacities from config, provide default values if not specified
-        self.total_cpus = env_config.get('total_cpus', 2000)
+        self.total_cores = env_config.get('total_cores', 2000)
         self.total_gpus = env_config.get('total_gpus', 220)
         self.total_mem = env_config.get('total_mem', 2000)
 
         # Set available resources equal to total at initialization
-        self.available_cpus = self.total_cpus
+        self.available_cores = self.total_cores
         self.available_gpus = self.total_gpus
         self.available_mem = self.total_mem
 
@@ -105,7 +110,7 @@ class SustainDC(gym.Env):
         return SustainDC(env_config)
     
     def can_schedule(self, task):
-        return (task.cpu_req <= self.available_cpus and
+        return (task.cores_req <= self.available_cores and
                 task.gpu_req <= self.available_gpus and
                 task.mem_req <= self.available_mem)
     
@@ -116,14 +121,14 @@ class SustainDC(gym.Env):
         finished_tasks = [task for task in self.running_tasks if task.finish_time <= current_time]
         
         for task in finished_tasks:
-            self.available_cpus += task.cpu_req
+            self.available_cores += task.cores_req
             self.available_gpus += task.gpu_req
             self.available_mem += task.mem_req
             task.sla_met = task.finish_time <= task.sla_deadline
 
             if logger:
                 logger.info(f"[{current_time}] Task {task.job_name} finished, resources released. "
-                            f"DC{self.dc_id} resources available: {self.available_cpus:.3f} CPUs, "
+                            f"DC{self.dc_id} resources available: {self.available_cores:.3f} CPUs, "
                             f"{self.available_gpus:.3f} GPUs, {self.available_mem:.3f} MEM.")
 
         self.running_tasks = [task for task in self.running_tasks if task.finish_time > current_time]
@@ -159,7 +164,7 @@ class SustainDC(gym.Env):
             
         if self.can_schedule(task):
             # **Allocate resources**
-            self.available_cpus -= task.cpu_req
+            self.available_cores -= task.cores_req
             self.available_gpus -= task.gpu_req
             self.available_mem -= task.mem_req
             task.start_time = current_time
@@ -173,9 +178,9 @@ class SustainDC(gym.Env):
             self.running_tasks.append(task)
 
             log_info(f"[{current_time}] Task {task.job_name} scheduled successfully on DC{self.dc_id}. "
-                    f"(CPU: {task.cpu_req:.2f}, GPU: {task.gpu_req:.2f}, MEM: {task.mem_req:.2f}, "
+                    f"(CPU: {task.cores_req:.2f}, GPU: {task.gpu_req:.2f}, MEM: {task.mem_req:.2f}, "
                     f"Bandwidth: {task.bandwidth_gb:.4f}GB). "
-                    f"Remaining: {self.available_cpus:.2f} CPUs, {self.available_gpus:.2f} GPUs, "
+                    f"Remaining: {self.available_cores:.2f} CPUs, {self.available_gpus:.2f} GPUs, "
                     f"{self.available_mem:.2f} GB MEM.")
 
             log_info(f"[{current_time}] Task {task.job_name} started and will finish at {task.finish_time}.")
@@ -224,7 +229,7 @@ class SustainDC(gym.Env):
         """
         self.set_seed(seed)
         # Reset resources to initial values
-        self.available_cpus = self.total_cpus
+        self.available_cores = self.total_cores
         self.available_gpus = self.total_gpus
         self.available_mem = self.total_mem
 
@@ -344,16 +349,16 @@ class SustainDC(gym.Env):
 
 
         # **3. Log resource utilization**
-        used_cpu = round(self.total_cpus, 6) - round(self.available_cpus, 6)
+        used_cores = round(self.total_cores, 6) - round(self.available_cores, 6)
         used_gpu = round(self.total_gpus, 6) - round(self.available_gpus, 6)
         used_mem = round(self.total_mem, 6) - round(self.available_mem, 6)
 
-        # Convert used_cpu => HPC environment usage
-        # e.g. self.dc_env.set_shifted_wklds(used_cpu / self.total_cpus) or similar
+        # Convert used_cores => HPC environment usage
+        # e.g. self.dc_env.set_shifted_wklds(used_cores / self.total_cores) or similar
         # HPC environment can produce the final usage metrics
         # I need a value between 0 and 1 for the workload.
         # At this time, we are only focused on the cpu usage.
-        cpu_workload = used_cpu / self.total_cpus
+        cpu_workload = used_cores / self.total_cores
         gpu_workload = used_gpu / self.total_gpus
         # print(f"[{self.current_time_task}] DC:{self.dc_id} Running: {len(self.running_tasks)}, Pending: {len(self.pending_tasks)}")
         if logger:
@@ -392,7 +397,7 @@ class SustainDC(gym.Env):
                 sla_stats["violated"] += 1
         
         # Calculate percentages
-        cpu_util = used_cpu / self.total_cpus
+        cpu_util = used_cores / self.total_cores
         gpu_util = used_gpu / self.total_gpus
         mem_util = used_mem / self.total_mem
 

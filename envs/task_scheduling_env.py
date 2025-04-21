@@ -37,7 +37,7 @@ class TaskSchedulingEnv(gym.Env):
         self.num_dcs = len(self.cluster_manager.datacenters)
         
         # Observation space: [4 sin/cos features, 4 task features features, 5 * num_dcs task features]
-        obs_dim = 4 + 4 + 5 * self.num_dcs
+        obs_dim = 4 + 5 + 5 * self.num_dcs
 
         self.observation_space = spaces.Box(
             low=0,
@@ -208,7 +208,7 @@ class TaskSchedulingEnv(gym.Env):
         # === Step 4: Extract DC resource and sustainability info ===
         for dc in self.cluster_manager.datacenters.values():
             dc_infos.append([
-                dc.available_cpus / dc.total_cpus,
+                dc.available_cores / dc.total_cores,
                 dc.available_gpus / dc.total_gpus,
                 dc.available_mem / dc.total_mem,
                 float(dc.ci_manager.get_current_ci(norm=False)/1000),  # carbon intensity
@@ -223,7 +223,8 @@ class TaskSchedulingEnv(gym.Env):
 
             task_features = [
                 task.origin_dc_id,
-                task.cpu_req,
+                task.cores_req,
+                task.gpu_req,
                 task.duration,
                 time_to_deadline
             ]

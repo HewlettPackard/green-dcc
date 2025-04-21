@@ -40,7 +40,7 @@ Each step returns:
 ## 3. Resource Model
 
 Resource units are simulated explicitly:
-- `total_cpus`, `total_gpus`, and `total_mem` from `datacenters.yaml`
+- `total_cores`, `total_gpus`, and `total_mem` from `datacenters.yaml`
 - Each task has CPU, GPU, and memory requirements
 - Resource allocation is enforced at scheduling time
 - GPU and memory modeling is **planned for upcoming extensions**
@@ -183,7 +183,7 @@ W_{usage} = 0.044 \cdot T_{wetbulb} + (0.3528 \cdot \Delta T + 0.101)
 ## 8. Configurability
 
 Each DC is defined in `datacenters.yaml` with:
-- Compute resource spec: `total_cpus`, `total_gpus`, `total_mem`
+- Compute resource spec: `total_cores`, `total_gpus`, `total_mem`
 - Thermal config via `dc_config_file`
 
 ---

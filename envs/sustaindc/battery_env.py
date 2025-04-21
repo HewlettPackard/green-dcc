@@ -68,7 +68,7 @@ class BatteryEnvFwd(gym.Env):
         self.dcload = self.dcload_min
         self.raw_obs = self._hist_data_collector()
         
-        self.temp_state = self._process_obs(self.raw_obs)
+        # self.temp_state = self._process_obs(self.raw_obs)
         return self.temp_state, {
             'action': -1,
             'avg_dc_power_mw': self.raw_obs[0],
@@ -76,7 +76,7 @@ class BatteryEnvFwd(gym.Env):
             'total_energy_with_battery': 0,
             'CO2_footprint': 0,
             'avg_CI': 0,
-            'bat_SOC': self.get_battery_soc(),
+            'bat_SOC': 0,
             'total_energy_with_battery': 0
         }
 
@@ -109,7 +109,7 @@ class BatteryEnvFwd(gym.Env):
 
         self.info = {
             'bat_action': action_id,
-            'bat_SOC': self.get_battery_soc(),
+            'bat_SOC': 0,
             'bat_CO2_footprint': self.CO2_total,
             'bat_avg_CI': self.ci,
             'bat_total_energy_without_battery_KWh': self.dcload * 1e3 * 0.25,
@@ -139,7 +139,7 @@ class BatteryEnvFwd(gym.Env):
         Returns:
             normalized_observations (List[float])
         """
-        scaled_value = (state - self.observation_min) / self.delta
+        scaled_value = (state - self.observation_min) / (self.delta + 1e-9)
         return np.float32(scaled_value)
 
     def _process_action(self, action_id):
@@ -211,7 +211,7 @@ class BatteryEnvFwd(gym.Env):
         else:
             discharge_energy = 0
             self.var_to_dc = 0
-        self.var_to_dc = self.var_to_dc / self.max_bat_cap
+        self.var_to_dc = self.var_to_dc 
         return discharge_energy
 
     def CO2_footprint(self, dc_load, ci, a_t, discharge_energy):

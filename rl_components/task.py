@@ -15,7 +15,7 @@ class Task:
         job_name (str): Unique identifier for the task.
         arrival_time (datetime): Timestamp when the task enters the system.
         duration (float): Required execution time (in minutes).
-        cpu_req (float): Number of CPU cores required.
+        cores_req (float): Number of CPU cores required.
         gpu_req (float): Number of GPU units required.
         mem_req (float): Memory required (in GB).
         bandwidth_gb (float): Bandwidth required (in GB).
@@ -36,7 +36,7 @@ class Task:
         job_name: str,
         arrival_time: datetime,
         duration: float,
-        cpu_req: float,
+        cores_req: float,
         gpu_req: float,
         mem_req: float,
         bandwidth_gb: float,
@@ -46,7 +46,7 @@ class Task:
         self.job_name = job_name
         self.arrival_time = arrival_time
         self.duration = duration
-        self.cpu_req = cpu_req
+        self.cores_req = cores_req
         self.gpu_req = gpu_req
         self.mem_req = mem_req
         self.bandwidth_gb = bandwidth_gb
@@ -86,7 +86,7 @@ class Task:
         """
         return (
             f"Task(job_name='{self.job_name}', arrival_time={self.arrival_time}, "
-            f"duration={self.duration}, cpu_req={self.cpu_req}, gpu_req={self.gpu_req}, "
+            f"duration={self.duration}, cores_req={self.cores_req}, gpu_req={self.gpu_req}, "
             f"mem_req={self.mem_req}, bandwidth_gb={self.bandwidth_gb}, start_time={self.start_time}, "
             f"finish_time={self.finish_time}, wait_intervals={self.wait_intervals}, origin_dc_id={self.origin_dc_id})"
         )

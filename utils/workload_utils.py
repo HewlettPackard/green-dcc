@@ -57,24 +57,25 @@ def extract_tasks_from_row(row, scale=1, datacenter_configs=None, current_time_u
     Returns:
         List[Task]: A list of Task objects extracted and scaled from the row.
     """
+    task_scale = 5  # To simulate tasks that are 5 times larger than the original
     tasks = []
     for task_data in row['tasks_matrix']:
         job_name = task_data[0]
         arrival_time = current_time_utc  # Task arrival time
         duration = float(task_data[4])
-        cpu_req = float(task_data[5]) / 100.0   # Convert percentage to CPU cores.
-        gpu_req = float(task_data[6]) / 100.0   # Convert percentage to fraction of GPUs count.
-        mem_req = float(task_data[7])           # Memory in GB
+        cores_req = task_scale * float(task_data[5]) / 100.0   # Convert percentage to CPU cores.
+        gpu_req = task_scale * float(task_data[6]) / 100.0   # Convert percentage to fraction of GPUs count.
+        mem_req = task_scale * float(task_data[7])           # Memory in GB
         bandwidth_gb = float(task_data[8])      # Bandwidth in GB
 
         # Create the original task
-        task = Task(job_name, arrival_time, duration, cpu_req, gpu_req, mem_req, bandwidth_gb)
+        task = Task(job_name, arrival_time, duration, cores_req, gpu_req, mem_req, bandwidth_gb)
         tasks.append(task)
 
         # Create scaled/augmented versions of the task (if scale > 1)
         for i in range(scale - 1):
             # Introduce random variation in CPU, GPU, Memory, and Bandwidth requirements
-            varied_cpu = max(0.5, cpu_req * np.random.uniform(0.8, 1.2))  # ±20% variation
+            varied_cpu = max(0.5, cores_req * np.random.uniform(0.8, 1.2))  # ±20% variation
             varied_gpu = max(0.0, gpu_req * np.random.uniform(0.8, 1.2))  # Ensure GPU usage isn't negative
             varied_mem = max(0.5, mem_req * np.random.uniform(0.8, 1.2))
             varied_bw = max(0.1, bandwidth_gb * np.random.uniform(0.8, 1.2))
@@ -101,7 +102,7 @@ def extract_tasks_from_row(row, scale=1, datacenter_configs=None, current_time_u
         for idx, t in enumerate(tasks):
             logger.debug(
                 f"  Task[{idx}]: {t.job_name} | origin=DC{t.origin_dc_id} | "
-                f"CPU={t.cpu_req:.2f}, GPU={t.gpu_req:.2f}, MEM={t.mem_req:.2f}, "
+                f"CPU={t.cores_req:.2f}, GPU={t.gpu_req:.2f}, MEM={t.mem_req:.2f}, "
                 f"BW={t.bandwidth_gb:.2f}, duration={t.duration:.2f}"
             )
 

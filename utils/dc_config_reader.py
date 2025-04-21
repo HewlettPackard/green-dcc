@@ -1,12 +1,13 @@
 """
 This file is used to read the data center configuration from  user inputs provided inside dc_config.json. It also performs some auxiliary steps to calculate the server power specifications based on the given parameters.
 """
-import json
 import os
+import math
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class DC_Config:
-    def __init__(self, dc_config_file='dc_config.json', datacenter_capacity_mw=1):
+    def __init__(self, dc_config_file='dc_config.json', total_cores=0, total_gpus=0, total_mem=0, datacenter_capacity_mw=0):
         """
         Initializes a new instance of the DC_Config class, loading configuration
         data from the specified JSON configuration file.
@@ -20,6 +21,15 @@ class DC_Config:
 
         # Keep the capacity parameter
         self.datacenter_capacity_mw = datacenter_capacity_mw
+        
+        self.total_cores = total_cores
+        self.total_gpus = total_gpus
+        self.total_mem = total_mem
+        
+        self.CORES_PER_SERVER = 64
+        self.MAX_W_PER_CORE = 6  # Watts per core
+        self.GPUS_PER_SERVER = 4
+        self.MAX_SERVERS_PER_RACK = 25
         
         # Load the JSON data from the configuration file
         self.config_data = self._load_config()
@@ -38,128 +48,120 @@ class DC_Config:
             return json.load(file)
     
     def _setup_config(self):
-        """
-        Sets up various configuration parameters based on the loaded JSON data.
-        """
-        ##################################################################
-        #################### GEOMETRY DEPENDENT PARAMETERS ###############
-        ##################################################################
-        json_obj = self.config_data
-        # Data Center Geometric configuration
-        self.NUM_ROWS = json_obj['data_center_configuration']['NUM_ROWS']  # number of rows in which data centers are arranged
-        self.NUM_RACKS_PER_ROW = json_obj['data_center_configuration']['NUM_RACKS_PER_ROW']  # number of racks/ITcabinets in each row
-        self.NUM_RACKS = self.NUM_ROWS * self.NUM_RACKS_PER_ROW  # calculate total number of racks/ITcabinets in the data center model
+        dc = self.config_data['data_center_configuration']
+        servers = self.config_data['server_characteristics']
+        hvac = self.config_data['hvac_configuration']
 
-        self.TOTAM_MAX_PWR = self.datacenter_capacity_mw * 1e6  # specify maximum allowed power consumption (W) for the entire data center
-        self.MAX_W_PER_RACK = int(self.TOTAM_MAX_PWR/self.NUM_RACKS)  # calculate maximum allowable power consumption for each rack/ITcabinet
+        # === Compute total number of servers needed ===
+        self.total_servers_cpu = math.ceil(self.total_cores / self.CORES_PER_SERVER)
+        self.total_servers_gpu = math.ceil(self.total_gpus / self.GPUS_PER_SERVER)
+        self.total_servers = max(self.total_servers_cpu, self.total_servers_gpu)
 
+        # === Racks based on max 25 servers per rack ===
+        self.NUM_RACKS = math.ceil(self.total_servers / self.MAX_SERVERS_PER_RACK)
+        self.CPUS_PER_RACK = math.ceil(self.total_cores / self.NUM_RACKS)
+        self.GPUS_PER_RACK = math.ceil(self.total_gpus / self.NUM_RACKS)
 
-        # CFD may be used to precompute the "supply/return approach temperature" for each rack under given
-        # geometry, containment, CRAC Air flow rate, Load
-        
-        # Supply approach temperature: It is the delta T i.e. the temperature difference between 
-        # CRAC_setpoint and the actual inlet temperature to the rack .Its value depends on the geometry
-        # of the data center rack arrangements and can be pre-computed from CFD analysis. The length of
-        # the list should be the same as NUM_RACKS; Default values are populated from paper [3] assuming:
-        # Scenario # 19 from Table 5
-        self.RACK_SUPPLY_APPROACH_TEMP_LIST = json_obj['data_center_configuration']['RACK_SUPPLY_APPROACH_TEMP_LIST']
+        print(f"[INFO] Using {self.NUM_RACKS} racks with max {self.MAX_SERVERS_PER_RACK} servers per rack")
+        print(f"[INFO] CPUs per rack: {self.CPUS_PER_RACK}, GPUs per rack: {self.GPUS_PER_RACK}")
 
-        # Return approach temperature: It is the delta T i.e. the temperature difference between 
-        # CRAC return temperature and the rack Outlet temperature .Its value also depends on the geometry
-        # of the data center rack arrangements and can be pre-computed from CFD analysis. The length of
-        # the list should be the same as NUM_RACKS; Default values are populated from paper [3] assuming:
-        # Scenario # 19 from Table 5
-        # we add some variation to the default values to highlight change in geometry
-        self.RACK_RETURN_APPROACH_TEMP_LIST = json_obj['data_center_configuration']['RACK_RETURN_APPROACH_TEMP_LIST']
+        # === Use average rack-level values ===
+        avg_supply_temp = sum(dc['RACK_SUPPLY_APPROACH_TEMP_LIST']) / len(dc['RACK_SUPPLY_APPROACH_TEMP_LIST'])
+        avg_return_temp = sum(dc['RACK_RETURN_APPROACH_TEMP_LIST']) / len(dc['RACK_RETURN_APPROACH_TEMP_LIST'])
 
-        # how many servers are assigned in each rack. The actual number of servers per rack may be limited while
-        self.CPUS_PER_RACK = json_obj['data_center_configuration']['CPUS_PER_RACK']
-        self.GPUS_PER_RACK = json_obj['data_center_configuration']['GPUS_PER_RACK']    
+        self.RACK_SUPPLY_APPROACH_TEMP_LIST = [avg_supply_temp] * self.NUM_RACKS
+        self.RACK_RETURN_APPROACH_TEMP_LIST = [avg_return_temp] * self.NUM_RACKS
 
-        ##################################################################
-        #################### SERVER CONFIGURATION ########################
-        ##################################################################
+        # avg_cpu_power = self._avg_pair_list(self.config_data['server_characteristics']['DEFAULT_SERVER_POWER_CHARACTERISTICS'])
+        # The average CPU power is calculated based on the 20 Watts per core and the number of cores per server
+        avg_cpu_power = [self.MAX_W_PER_CORE*self.CORES_PER_SERVER, 20]  # [full_load_pwr, idle_pwr]
+        avg_gpu_power = self._avg_pair_list(self.config_data['server_characteristics']['DEFAULT_GPU_POWER_CHARACTERISTICS'])
 
-        # Specify the CPU Config for each cpu/server in each rack 
-        # The full load power and the idle power may be populated using spec sheets from common servers in use
-        # This value may be ignored internally if total rack load exceeds MAX_W_PER_RACK
+        self.DEFAULT_SERVER_POWER_CHARACTERISTICS = [avg_cpu_power] * self.NUM_RACKS
+        self.DEFAULT_GPU_POWER_CHARACTERISTICS = [avg_gpu_power] * self.NUM_RACKS
 
+        # === Build power config per rack ===
+        def make_cpu_cfg(spec):
+            num_servers = math.ceil(self.CPUS_PER_RACK / self.CORES_PER_SERVER)
+            return [{'full_load_pwr': spec[0], 'idle_pwr': spec[1]} for _ in range(num_servers)]
+            # return [{'full_load_pwr': spec[0], 'idle_pwr': spec[1]} for _ in range(self.CPUS_PER_RACK)]
 
-        # CPU Power Parameters
-        self.DEFAULT_SERVER_POWER_CHARACTERISTICS = json_obj['server_characteristics']['DEFAULT_SERVER_POWER_CHARACTERISTICS']
+        def make_gpu_cfg(spec):
+            return [{'full_load_pwr': spec[0], 'idle_pwr': spec[1]} for _ in range(self.GPUS_PER_RACK)]
 
-        # GPU Power Parameters
-        # The idlepower of GPUs depends on the frequency
-        self.DEFAULT_GPU_POWER_CHARACTERISTICS = json_obj['server_characteristics']['DEFAULT_GPU_POWER_CHARACTERISTICS']
-
-        # These lists should be of length NUM_RACKS; Here DEFAULT_SERVER_POWER_CHARACTERISTICS and DEFAULT_GPU_POWER_CHARACTERISTICS are of same length as NUM_RACKS
-        assert len(self.DEFAULT_SERVER_POWER_CHARACTERISTICS) == self.NUM_RACKS, "DEFAULT_SERVER_POWER_CHARACTERISTICS should be of length as NUM_RACKS"
-        assert len(self.DEFAULT_GPU_POWER_CHARACTERISTICS) == self.NUM_RACKS, "DEFAULT_GPU_POWER_CHARACTERISTICS should be of length as NUM_RACKS"
-        # self.RACK_CPU_CONFIG = [[{'full_load_pwr' : j[0],
-                            # 'idle_pwr': j[-1]} for _ in range(int(self.CPUS_PER_RACK))] for j in self.DEFAULT_SERVER_POWER_CHARACTERISTICS]
-
-        # Parallelize the construction of RACK_CPU_CONFIG
-        def construct_cpu_config(server_power_characteristics):
-            """Function to construct CPU configuration for a single server."""
-            return [{'full_load_pwr': j[0], 'idle_pwr': j[-1]} for _ in range(int(self.CPUS_PER_RACK)) for j in server_power_characteristics]
-        
-        # Parallelize the construction of RACK_GPU_CONFIG
-        def construct_gpu_config(server_gpu_power_characteristics):
-            """Function to construct CPU configuration for a single server."""
-            return [{'full_load_pwr': j[0], 'idle_pwr': j[-1]} for _ in range(int(self.GPUS_PER_RACK)) for j in server_gpu_power_characteristics]
-        
-        # Use ThreadPoolExecutor to parallelize the operation
         with ThreadPoolExecutor() as executor:
-            # Submit tasks to the executor
-            futures = [executor.submit(construct_cpu_config, [j]) for j in self.DEFAULT_SERVER_POWER_CHARACTERISTICS]
-            futures_gpu = [executor.submit(construct_gpu_config, [j]) for j in self.DEFAULT_GPU_POWER_CHARACTERISTICS]
-            
-            # Wait for the futures and futures_gpu to complete and collect the results
-            self.RACK_CPU_CONFIG = [future.result() for future in as_completed(futures)]
-            self.RACK_GPU_CONFIG = [future.result() for future in as_completed(futures_gpu)]
+            cpu_futures = [executor.submit(make_cpu_cfg, spec) for spec in self.DEFAULT_SERVER_POWER_CHARACTERISTICS]
+            gpu_futures = [executor.submit(make_gpu_cfg, spec) for spec in self.DEFAULT_GPU_POWER_CHARACTERISTICS]
+            self.RACK_CPU_CONFIG = [f.result() for f in as_completed(cpu_futures)]
+            self.RACK_GPU_CONFIG = [f.result() for f in as_completed(gpu_futures)]
+        
+        # Compute actual MAX_W_PER_RACK based on final rack contents
+        self.MAX_W_PER_RACK = max(
+            sum(cpu['full_load_pwr'] for cpu in rack_cpu) + 
+            sum(gpu['full_load_pwr'] for gpu in rack_gpu)
+            for rack_cpu, rack_gpu in zip(self.RACK_CPU_CONFIG, self.RACK_GPU_CONFIG)
+        )
+        
+        print("\n[INFO] --- Rack Device Summary ---")
+        for i, (rack_cpu, rack_gpu) in enumerate(zip(self.RACK_CPU_CONFIG, self.RACK_GPU_CONFIG)):
+            num_servers = len(rack_cpu)
+            num_gpus = len(rack_gpu)
+
+            total_cores = num_servers * self.CORES_PER_SERVER
+            cpu_power = sum(cpu['full_load_pwr'] for cpu in rack_cpu)
+            gpu_power = sum(gpu['full_load_pwr'] for gpu in rack_gpu)
+
+            print(f"Rack {i+1:02d}: {num_servers} CPU servers × {self.CORES_PER_SERVER} cores → {total_cores} cores, "
+                f"{num_gpus} GPUs → Total theory Power ≈ {cpu_power + gpu_power:.1f} W")
 
         # A default value of HP_PROLIANT server for standalone testing
-        self.HP_PROLIANT = json_obj["server_characteristics"]['HP_PROLIANT']
+        self.HP_PROLIANT = servers['HP_PROLIANT']
 
         # A default value of HP_PROLIANT server for standalone testing
-        self.NVIDIA_V100 = json_obj["server_characteristics"]['NVIDIA_V100']
+        self.NVIDIA_V100 = servers['NVIDIA_V100']
 
         # Serve/cpu parameters; Obtained from [3]
-        self.CPU_POWER_RATIO_LB = json_obj['server_characteristics']['CPU_POWER_RATIO_LB']
-        self.CPU_POWER_RATIO_UB = json_obj['server_characteristics']['CPU_POWER_RATIO_UB']
-        self.IT_FAN_AIRFLOW_RATIO_LB = json_obj['server_characteristics']['IT_FAN_AIRFLOW_RATIO_LB']
-        self.IT_FAN_AIRFLOW_RATIO_UB = json_obj['server_characteristics']['IT_FAN_AIRFLOW_RATIO_UB']
-        self.IT_FAN_FULL_LOAD_V = json_obj['server_characteristics']['IT_FAN_FULL_LOAD_V']
-        self.ITFAN_REF_V_RATIO, self.ITFAN_REF_P = json_obj['server_characteristics']['ITFAN_REF_V_RATIO'], json_obj['server_characteristics']['ITFAN_REF_P']
-        self.INLET_TEMP_RANGE = json_obj['server_characteristics']['INLET_TEMP_RANGE']
+        self.CPU_POWER_RATIO_LB = servers['CPU_POWER_RATIO_LB']
+        self.CPU_POWER_RATIO_UB = servers['CPU_POWER_RATIO_UB']
+        self.IT_FAN_AIRFLOW_RATIO_LB = servers['IT_FAN_AIRFLOW_RATIO_LB']
+        self.IT_FAN_AIRFLOW_RATIO_UB = servers['IT_FAN_AIRFLOW_RATIO_UB']
+        self.IT_FAN_FULL_LOAD_V = servers['IT_FAN_FULL_LOAD_V']
+        self.ITFAN_REF_V_RATIO = servers['ITFAN_REF_V_RATIO']
+        self.ITFAN_REF_P = servers['ITFAN_REF_P']
+        self.INLET_TEMP_RANGE = servers['INLET_TEMP_RANGE']
 
         ##################################################################
         #################### HVAC CONFIGURATION ##########################
         ##################################################################
 
         # Air parameters
-        self.C_AIR = json_obj['hvac_configuration']['C_AIR']  # J/kg.K
-        self.RHO_AIR = json_obj['hvac_configuration']['RHO_AIR']  # kg/m3
+        self.C_AIR = hvac['C_AIR']  # J/kg.K
+        self.RHO_AIR = hvac['RHO_AIR']  # kg/m3
 
         # CRAC Unit paramters
-        self.CRAC_SUPPLY_AIR_FLOW_RATE_pu = json_obj['hvac_configuration']['CRAC_SUPPLY_AIR_FLOW_RATE_pu']
-        self.CRAC_REFRENCE_AIR_FLOW_RATE_pu = json_obj['hvac_configuration']['CRAC_REFRENCE_AIR_FLOW_RATE_pu']
-        self.CRAC_FAN_REF_P = json_obj['hvac_configuration']['CRAC_FAN_REF_P']
+        self.CRAC_SUPPLY_AIR_FLOW_RATE_pu = hvac['CRAC_SUPPLY_AIR_FLOW_RATE_pu']
+        self.CRAC_REFRENCE_AIR_FLOW_RATE_pu = hvac['CRAC_REFRENCE_AIR_FLOW_RATE_pu']
+        self.CRAC_FAN_REF_P = hvac['CRAC_FAN_REF_P']
 
         # Chiller Stats
-        self.CHILLER_COP = json_obj['hvac_configuration']['CHILLER_COP_BASE']
-        self.CW_PRESSURE_DROP = json_obj['hvac_configuration']['CW_PRESSURE_DROP'] #Pa 
-        self.CW_WATER_FLOW_RATE = json_obj['hvac_configuration']['CW_WATER_FLOW_RATE'] #m3/s
-        self.CW_PUMP_EFFICIENCY = json_obj['hvac_configuration']['CW_PUMP_EFFICIENCY'] #%
-        self.CHILLER_COP_K = json_obj['hvac_configuration']['CHILLER_COP_K']
-        self.CHILLER_COP_T_NOMINAL = json_obj['hvac_configuration']['CHILLER_COP_T_NOMINAL']
+        self.CHILLER_COP = hvac['CHILLER_COP_BASE']
+        self.CW_PRESSURE_DROP = hvac['CW_PRESSURE_DROP'] #Pa 
+        self.CW_WATER_FLOW_RATE = hvac['CW_WATER_FLOW_RATE'] #m3/s
+        self.CW_PUMP_EFFICIENCY = hvac['CW_PUMP_EFFICIENCY'] #%
+        self.CHILLER_COP_K = hvac['CHILLER_COP_K']
+        self.CHILLER_COP_T_NOMINAL = hvac['CHILLER_COP_T_NOMINAL']
 
         # Cooling Tower parameters
-        self.CT_FAN_REF_P = json_obj['hvac_configuration']['CT_FAN_REF_P']
-        self.CT_REFRENCE_AIR_FLOW_RATE = json_obj['hvac_configuration']['CT_REFRENCE_AIR_FLOW_RATE']
-        self.CT_PRESSURE_DROP = json_obj['hvac_configuration']['CT_PRESSURE_DROP'] #Pa 
-        self.CT_WATER_FLOW_RATE = json_obj['hvac_configuration']['CT_WATER_FLOW_RATE']#m3/s
-        self.CT_PUMP_EFFICIENCY = json_obj['hvac_configuration']['CT_PUMP_EFFICIENCY'] #%
+        self.CT_FAN_REF_P = hvac['CT_FAN_REF_P']
+        self.CT_REFRENCE_AIR_FLOW_RATE = hvac['CT_REFRENCE_AIR_FLOW_RATE']
+        self.CT_PRESSURE_DROP = hvac['CT_PRESSURE_DROP'] #Pa 
+        self.CT_WATER_FLOW_RATE = hvac['CT_WATER_FLOW_RATE']#m3/s
+        self.CT_PUMP_EFFICIENCY = hvac['CT_PUMP_EFFICIENCY'] #%
+    
+    def _avg_pair_list(self, pair_list):
+        avg_first = sum(p[0] for p in pair_list) / len(pair_list)
+        avg_second = sum(p[1] for p in pair_list) / len(pair_list)
+        return [avg_first, avg_second]
 
 
 #References:

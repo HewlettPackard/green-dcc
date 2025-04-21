@@ -44,13 +44,13 @@ class DatacenterClusterManager:
             config['init_hour'] = init_hour
             
             # Convert CPU/GPU/MEM to estimated MW
-            total_cpus = config["total_cpus"]
+            total_cores = config["total_cores"]
             total_gpus = config["total_gpus"]
             total_mem = config["total_mem"]
 
-            cpu_power = 20 * total_cpus      # watts per core
-            gpu_power = 300 * total_gpus     # watts per GPU
-            mem_power = 2.5 * total_mem      # watts per GB
+            cpu_power = 6 * total_cores      # max_watts per core
+            gpu_power = 500 * total_gpus     # max_watts per GPU
+            mem_power = 2.5 * total_mem      # max_watts per GB
 
             total_power_watt = cpu_power + gpu_power + mem_power
             capacity_mw = total_power_watt / 1e6
@@ -247,7 +247,7 @@ class DatacenterClusterManager:
 
             # STEP 3.5: Compute resource utilization snapshot
             resource_snapshot = {
-                "cpu": (dc.total_cpus - dc.available_cpus) / dc.total_cpus * 100,
+                "cpu": (dc.total_cores - dc.available_cores) / dc.total_cores * 100,
                 "gpu": (dc.total_gpus - dc.available_gpus) / dc.total_gpus * 100,
                 "mem": (dc.total_mem - dc.available_mem) / dc.total_mem * 100,
             }

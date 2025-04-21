@@ -12,7 +12,7 @@ class EnergyPriceReward(BaseReward):
         for task in current_tasks:
             dest_dc = getattr(task, "dest_dc", None)
             if dest_dc:
-                task_energy = task.cpu_req * task.duration
+                task_energy = task.cores_req * task.duration
                 task_cost = task_energy * dest_dc.price_manager.get_current_price()
                 total_task_cost += task_cost
 
