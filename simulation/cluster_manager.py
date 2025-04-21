@@ -249,7 +249,7 @@ class DatacenterClusterManager:
             resource_snapshot = {
                 "cpu": (dc.total_cores - dc.available_cores) / dc.total_cores * 100,
                 "gpu": (dc.total_gpus - dc.available_gpus) / dc.total_gpus * 100,
-                "mem": (dc.total_mem - dc.available_mem) / dc.total_mem * 100,
+                "mem": (dc.total_mem_GB - dc.available_mem) / dc.total_mem_GB * 100,
             }
             results["resource_usage"][dc_name].append(resource_snapshot)
 

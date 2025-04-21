@@ -210,7 +210,7 @@ class TaskSchedulingEnv(gym.Env):
             dc_infos.append([
                 dc.available_cores / dc.total_cores,
                 dc.available_gpus / dc.total_gpus,
-                dc.available_mem / dc.total_mem,
+                dc.available_mem / dc.total_mem_GB,
                 float(dc.ci_manager.get_current_ci(norm=False)/1000),  # carbon intensity
                 float(dc.price_manager.get_current_price())/100,       # energy price
             ])

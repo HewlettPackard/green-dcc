@@ -7,7 +7,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class DC_Config:
-    def __init__(self, dc_config_file='dc_config.json', total_cores=0, total_gpus=0, total_mem=0, datacenter_capacity_mw=0):
+    def __init__(self, dc_config_file='dc_config.json', total_cores=0, total_gpus=0, total_mem_GB=0, datacenter_capacity_mw=0):
         """
         Initializes a new instance of the DC_Config class, loading configuration
         data from the specified JSON configuration file.
@@ -24,7 +24,7 @@ class DC_Config:
         
         self.total_cores = total_cores
         self.total_gpus = total_gpus
-        self.total_mem = total_mem
+        self.total_mem_GB = total_mem_GB
         
         self.CORES_PER_SERVER = 64
         self.MAX_W_PER_CORE = 6  # Watts per core

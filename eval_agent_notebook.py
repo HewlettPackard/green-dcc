@@ -39,83 +39,47 @@ console_handler.setFormatter(logging.Formatter(
 logger.addHandler(console_handler)
 
 def make_eval_env(eval_mode=True):
-    simulation_year = 2023
-    simulated_month = 8
-    init_day = 1
-    init_hour = 5
-    init_minute = 0
+    from utils.config_loader import load_yaml
+    from rewards.predefined.composite_reward import CompositeReward
+    from torch.utils.tensorboard import SummaryWriter
 
-    start_time = datetime.datetime(simulation_year, simulated_month, init_day, init_hour, init_minute, tzinfo=datetime.timezone.utc)
-    end_time = start_time + datetime.timedelta(days=7)
-    start_time = pd.Timestamp(start_time)
-    end_time = pd.Timestamp(end_time)
+    sim_cfg = load_yaml("configs/env/sim_config.yaml")["simulation"]
+    dc_cfg = load_yaml("configs/env/datacenters.yaml")["datacenters"]
+    reward_cfg = load_yaml("configs/env/reward_config.yaml")["reward"]
 
-    datacenter_configs = [
-        {
-            'location': 'US-NY-NYIS', 'dc_id': 1, 'agents': [], 'timezone_shift': -5,
-            'dc_config_file': 'configs/dcs/dc_config.json',
-            'month': simulated_month,
-            'total_cores': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.25,
-        },
-        {
-            'location': 'DE-LU', 'dc_id': 2, 'agents': [], 'timezone_shift': 1,
-            'dc_config_file': 'configs/dcs/dc_config.json',
-            'month': simulated_month,
-            'total_cores': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.22,
-        },
-        {
-            'location': 'ZA', 'dc_id': 3, 'agents': [], 'timezone_shift': 2,
-            'dc_config_file': 'configs/dcs/dc_config.json',
-            'month': simulated_month,
-            'total_cores': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.13,
-        },
-        {
-            'location': 'SG', 'dc_id': 4, 'agents': [], 'timezone_shift': 8,
-            'dc_config_file': 'configs/dcs/dc_config.json',
-            'month': simulated_month,
-            'total_cores': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.25,
-        },
-        {
-            'location': 'AU-NSW', 'dc_id': 5, 'agents': [], 'timezone_shift': 11,
-            'dc_config_file': 'configs/dcs/dc_config.json',
-            'month': simulated_month,
-            'total_cores': 5000, 'total_gpus': 700,
-            'total_mem': 5000, 'population_weight': 0.15,
-        }
-    ]
-    tasks_file_path = "data/workload/alibaba_2020_dataset/result_df_full_year_2020.pkl"
-    # tasks_file_path = "data/workload/alibaba_2020_dataset/result_df_cropped.pkl"
+    start = pd.Timestamp(datetime.datetime(sim_cfg["year"], sim_cfg["month"], sim_cfg["init_day"],
+                                           sim_cfg["init_hour"], 0, tzinfo=datetime.timezone.utc))
+    end = start + datetime.timedelta(days=sim_cfg["duration_days"])
 
-
-    cluster_manager = DatacenterClusterManager(
-        config_list=datacenter_configs,
-        simulation_year=simulation_year,
-        init_day=int(simulated_month*30.5),
-        init_hour=init_hour,
-        strategy="manual_rl",
-        # strategy="lowest_price",
-        tasks_file_path=tasks_file_path,
-        shuffle_datacenter_order=not eval_mode  # shuffle only during training
+    cluster = DatacenterClusterManager(
+        config_list=dc_cfg,
+        simulation_year=sim_cfg["year"],
+        init_day=int(sim_cfg["month"] * 30.5),
+        init_hour=sim_cfg["init_hour"],
+        strategy=sim_cfg["strategy"],
+        tasks_file_path=sim_cfg["workload_path"],
+        shuffle_datacenter_order=not eval_mode,
+        cloud_provider=sim_cfg["cloud_provider"],
+        logger=logger
     )
-    
-    cluster_manager.logger = logger
+
+    reward_fn = CompositeReward(
+        components=reward_cfg["components"],
+        normalize=reward_cfg.get("normalize", False)
+    )
+
     env = TaskSchedulingEnv(
-        cluster_manager=cluster_manager,
-        start_time=start_time,
-        end_time=end_time,
-        reward_fn=None,
-        writer=None,
+        cluster_manager=cluster,
+        start_time=start,
+        end_time=end,
+        reward_fn=reward_fn,
+        writer=None
     )
     return env
 
 
-
 # Load trained actor model
-checkpoint_path = "checkpoints/train_20250414_144025/best_checkpoint.pth"  # Adjust path
+checkpoint_path = "checkpoints/train_20250421_091110/best_checkpoint.pth"  # Adjust path
 env = make_eval_env()
 obs, _ = env.reset(seed=123)
 obs_dim = env.observation_space.shape[0]
