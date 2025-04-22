@@ -52,7 +52,6 @@ def parse_args():
     parser.add_argument("--reward-config", type=str, default="configs/env/reward_config.yaml")
     parser.add_argument("--dc-config", type=str, default="configs/env/datacenters.yaml")
     parser.add_argument("--algo-config", type=str, default="configs/env/algorithm_config.yaml")
-    parser.add_argument("--checkpoint-path", type=str, default=None)
     parser.add_argument("--tag", type=str, default="", help="Optional run tag")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--enable-logger", type=str2bool, default=True, help="Enable logger")
