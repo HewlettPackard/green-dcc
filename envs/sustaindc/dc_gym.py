@@ -184,8 +184,8 @@ class dc_gymenv(gym.Env):
         result = self.dc.compute_datacenter_IT_load_outlet_temp(
             ITE_load_pct_list=ITE_load_pct_list, 
             CRAC_setpoint=self.raw_curr_stpt,
-            mem_load_pct_list=mem_load_pct_list,
-            GPU_load_pct_list=GPU_load_pct_list
+            GPU_load_pct_list=GPU_load_pct_list,
+            MEMORY_load_pct_list=mem_load_pct_list
         )
         
         # Unpack result based on whether it includes GPU power
@@ -301,33 +301,23 @@ class dc_gymenv(gym.Env):
 
         return obs
 
-    def update_workload(self, cpu_load):
+    def update_workloads(self, cpu_load, mem_load, gpu_load):
         """
-        Updates the current CPU workload utilization. Fraction between 0.0 and 1.0
+        Updates the current CPU, GPU amd MEMORY utilization. Fraction between 0.0 and 1.0
         """
         if 0.0 > cpu_load or cpu_load > 1.0:
             print('CPU load out of bounds')
         assert 0.0 <= cpu_load <= 1.0, 'CPU load out of bounds'
         self.cpu_load_frac = cpu_load
-    
-    def update_gpu_workload(self, gpu_load):
-        """
-        Updates the current GPU workload utilization. Fraction between 0.0 and 1.0
-        """
         if 0.0 > gpu_load or gpu_load > 1.0:
             print('GPU load out of bounds')
         assert 0.0 <= gpu_load <= 1.0, 'GPU load out of bounds'
         self.gpu_load_frac = gpu_load
-    
-    def update_mem_workload(self, mem_load):
-        """
-        Updates the current memory utilization. Fraction between 0.0 and 1.0
-        """
         if 0.0 > mem_load or mem_load > 1.0:
             print('Memory load out of bounds')
         assert 0.0 <= mem_load <= 1.0, 'Memory load out of bounds'
         self.mem_load_frac = mem_load
-
+    
     def set_ambient_temp(self, ambient_temp, wet_bulb):
         """
         Updates the external temperature.

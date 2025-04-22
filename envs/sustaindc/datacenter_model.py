@@ -370,7 +370,7 @@ class Rack():
                 'has_gpus': 1 if self.has_gpus else 0
             })
 
-    def compute_instantaneous_pwr_vecd(self, inlet_temp, ITE_load_pct, GPU_load_pct=0, mem_load_pct=0):
+    def compute_instantaneous_pwr_vecd(self, inlet_temp, ITE_load_pct, GPU_load_pct=0, MEMORY_load_pct=0):
         """Calculate the power consumption of the whole rack at the current step in a vectorized manner
 
         Args:
@@ -402,7 +402,7 @@ class Rack():
                     
         # IT fan power calculation - respond to the highest heat load
         # Add heats generated
-        effective_load = ITE_load_pct + GPU_load_pct if self.has_gpus else ITE_load_pct
+        effective_load = (ITE_load_pct + GPU_load_pct + MEMORY_load_pct)/3 if self.has_gpus else (ITE_load_pct + MEMORY_load_pct)/2
         base_itfan_v_ratio = self.m_itfan*self.m_coefficient*inlet_temp + self.c_itfan*self.c_coefficient
         
         # Calculate fan ratio at current inlet temperature
@@ -415,7 +415,7 @@ class Rack():
         self.v_fan_rack = self.IT_FAN_FULL_LOAD_V*itfan_v_ratio_at_inlet_temp
         
         # Log fan speed ratio and other relevant values
-        self.log_thermal_control_data(inlet_temp, itfan_v_ratio_at_inlet_temp, ITE_load_pct, GPU_load_pct, mem_load_pct, 
+        self.log_thermal_control_data(inlet_temp, itfan_v_ratio_at_inlet_temp, ITE_load_pct, GPU_load_pct, MEMORY_load_pct, 
                                 np.sum(cpu_power), np.sum(gpu_power), np.sum(itfan_pwr))
         
         return np.sum(cpu_power), np.sum(itfan_pwr), np.sum(gpu_power)
@@ -501,17 +501,14 @@ class DataCenter_ITModel():
         self.wet_bulb_temp = None  # °C
         self.cycles_of_concentration = 5
         self.drift_rate = 0.01
-
-    # def log_temperature(self, inlet_temp, outlet_temp):
-    #     """
-    #     Log temperature readings to a CSV file.
         
-    def compute_datacenter_IT_load_outlet_temp(self, ITE_load_pct_list, CRAC_setpoint, GPU_load_pct_list=None):
+    def compute_datacenter_IT_load_outlet_temp(self, ITE_load_pct_list, CRAC_setpoint, GPU_load_pct_list=None, MEMORY_load_pct_list=None):
         """Optimized power and thermal model assuming all racks are identical and utilization is uniform."""
         num_racks = len(self.racks_list)
         
         # === Validate that all utilization values are equal ===
         assert all(x == ITE_load_pct_list[0] for x in ITE_load_pct_list), "All CPU utilizations must be identical"
+        assert all(x == MEMORY_load_pct_list[0] for x in MEMORY_load_pct_list), "All MEMORY utilizations must be identical"
         if self.has_gpus:
             assert GPU_load_pct_list is not None, "GPU load list must be provided when GPUs are present"
             assert all(x == GPU_load_pct_list[0] for x in GPU_load_pct_list), "All GPU utilizations must be identical"
@@ -522,12 +519,14 @@ class DataCenter_ITModel():
         rack_inlet_temp = rack_supply_approach_temp + CRAC_setpoint
         
         cpu_util = ITE_load_pct_list[0]
+        mem_util = MEMORY_load_pct_list[0]
         gpu_util = GPU_load_pct_list[0] if self.has_gpus else 0
         
         rack_cpu_power, rack_itfan_power, rack_gpu_power = rack.compute_instantaneous_pwr_vecd(
             inlet_temp=rack_inlet_temp,
             ITE_load_pct=cpu_util,
-            GPU_load_pct=gpu_util
+            GPU_load_pct=gpu_util,
+            MEMORY_load_pct=mem_util
         )
         
         memory_power = 0.07 * self.dc_memory_GB / num_racks  # assume uniform per-rack memory power
@@ -765,7 +764,7 @@ def chiller_sizing(DC_Config, total_mem_GB, min_CRAC_setpoint=16, max_CRAC_setpo
     result = dc.compute_datacenter_IT_load_outlet_temp(
         ITE_load_pct_list=ITE_load_pct_list, 
         CRAC_setpoint=max_CRAC_setpoint,
-        mem_load_pct_list=mem_load_pct_list, 
+        MEMORY_load_pct_list=mem_load_pct_list, 
         GPU_load_pct_list=GPU_load_pct_list
     )
     

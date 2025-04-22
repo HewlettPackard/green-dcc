@@ -357,7 +357,7 @@ class SustainDC(gym.Env):
         # At this time, we are only focused on the cpu usage.
         cpu_workload = used_cores / self.total_cores
         gpu_workload = used_gpu / self.total_gpus
-        mem_util = used_mem / self.total_mem
+        mem_util = used_mem / self.total_mem_GB
         # print(f"[{self.current_time_task}] DC:{self.dc_id} Running: {len(self.running_tasks)}, Pending: {len(self.pending_tasks)}")
         if logger:
             logger.info(f"[{self.current_time_task}] DC:{self.dc_id} Running: {len(self.running_tasks)}, Pending: {len(self.pending_tasks)}")
@@ -454,9 +454,7 @@ class SustainDC(gym.Env):
         # self.ls_env.update_workload(workload)
         # self.ls_env.update_current_date(current_day, current_hour)
         self.dc_env.set_ambient_temp(temp, wet_bulb)
-        self.dc_env.update_workload(workload)
-        self.dc_env.update_mem_workload(mem_util)
-        self.dc_env.update_gpu_workload(gpu_workload)
+        self.dc_env.update_workloads(workload, mem_util, gpu_workload)
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
 
 
