@@ -262,9 +262,7 @@ class SustainDC(gym.Env):
         current_cpu_workload = 0.0  #self.workload_m.get_current_workload()
         current_gpu_workload = 0.0 
         current_mem_workload = 0.0
-        self.dc_env.update_workload(current_cpu_workload)
-        self.dc_env.update_gpu_workload(current_gpu_workload)
-        self.dc_env.update_mem_workload(current_mem_workload)
+        self.dc_env.update_workloads(current_cpu_workload, current_mem_workload, current_gpu_workload)
 
         # Update ci in the battery environment
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
