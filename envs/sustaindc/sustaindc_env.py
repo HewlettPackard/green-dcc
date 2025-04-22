@@ -261,8 +261,10 @@ class SustainDC(gym.Env):
                 
         current_cpu_workload = 0.0  #self.workload_m.get_current_workload()
         current_gpu_workload = 0.0 
+        current_mem_workload = 0.0
         self.dc_env.update_workload(current_cpu_workload)
         self.dc_env.update_gpu_workload(current_gpu_workload)
+        self.dc_env.update_mem_workload(current_mem_workload)
 
         # Update ci in the battery environment
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
@@ -286,6 +288,7 @@ class SustainDC(gym.Env):
                 'time': t_i,
                 'cpu_workload': current_cpu_workload,
                 'gpu_workload': current_gpu_workload,
+                'memory_utilization': current_mem_workload,
                 'weather': temp,
                 'ci': ci_i,
                 'ci_future': ci_i_future,
@@ -354,12 +357,13 @@ class SustainDC(gym.Env):
         # At this time, we are only focused on the cpu usage.
         cpu_workload = used_cores / self.total_cores
         gpu_workload = used_gpu / self.total_gpus
+        mem_util = used_mem / self.total_mem
         # print(f"[{self.current_time_task}] DC:{self.dc_id} Running: {len(self.running_tasks)}, Pending: {len(self.pending_tasks)}")
         if logger:
             logger.info(f"[{self.current_time_task}] DC:{self.dc_id} Running: {len(self.running_tasks)}, Pending: {len(self.pending_tasks)}")
 
         # Update environment states with new values from managers
-        self._update_environments(cpu_workload, gpu_workload, temp, wet_bulb, ci_i_denorm, ci_i_future, day, hour)
+        self._update_environments(cpu_workload, gpu_workload, mem_util, temp, wet_bulb, ci_i_denorm, ci_i_future, day, hour)
 
         # Create observations for the next step based on updated environment states
         # Populate observation dictionary based on updated states
@@ -445,12 +449,13 @@ class SustainDC(gym.Env):
 
 
 
-    def _update_environments(self, workload, gpu_workload, temp, wet_bulb, ci_i_denorm, ci_i_future, current_day, current_hour):
+    def _update_environments(self, workload, gpu_workload, mem_util, temp, wet_bulb, ci_i_denorm, ci_i_future, current_day, current_hour):
         """Update the environment states based on the manager's outputs."""
         # self.ls_env.update_workload(workload)
         # self.ls_env.update_current_date(current_day, current_hour)
         self.dc_env.set_ambient_temp(temp, wet_bulb)
         self.dc_env.update_workload(workload)
+        self.dc_env.update_mem_workload(mem_util)
         self.dc_env.update_gpu_workload(gpu_workload)
         self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
 
