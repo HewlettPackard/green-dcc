@@ -402,7 +402,9 @@ class Rack():
                     
         # IT fan power calculation - respond to the highest heat load
         # Add heats generated
+        
         effective_load = (ITE_load_pct + GPU_load_pct + MEMORY_load_pct)/3 if self.has_gpus else (ITE_load_pct + MEMORY_load_pct)/2
+  
         base_itfan_v_ratio = self.m_itfan*self.m_coefficient*inlet_temp + self.c_itfan*self.c_coefficient
         
         # Calculate fan ratio at current inlet temperature
@@ -529,9 +531,9 @@ class DataCenter_ITModel():
             MEMORY_load_pct=mem_util
         )
         
-        memory_power = 0.07 * self.dc_memory_GB / num_racks  # assume uniform per-rack memory power
+        background_memory_power = 0.07 * self.dc_memory_GB / num_racks  # assume uniform per-rack memory power
 
-        total_power_per_rack = rack_cpu_power + rack_itfan_power + rack_gpu_power + memory_power
+        total_power_per_rack = rack_cpu_power + rack_itfan_power + rack_gpu_power + background_memory_power
 
         # === Thermal model constants ===
         c = 1.918
@@ -556,7 +558,7 @@ class DataCenter_ITModel():
         rackwise_cpu_pwr = [rack_cpu_power] * num_racks
         rackwise_itfan_pwr = [rack_itfan_power] * num_racks
         rackwise_gpu_pwr = [rack_gpu_power] * num_racks
-        rackwise_memory_pwr = [memory_power] * num_racks
+        rackwise_memory_pwr = [background_memory_power] * num_racks
         rackwise_outlet_temp = [outlet_temp] * num_racks
 
         self.rackwise_inlet_temp = [rack_inlet_temp] * num_racks

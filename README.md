@@ -1,70 +1,161 @@
-# GreenDCC: Geo‑Distributed Sustainable Scheduling Benchmark
+# Multi-Data Center Sustainable Scheduling Benchmark
 
-We propose **GreenDCC**, a open benchmark for **sustainable, geo‑temporal task scheduling** across globally distributed data centers.
-Optimize AI workloads based on **carbon emissions**, **energy cost**, **resource efficiency**, **transmission costs**, and **SLA guarantees**.
+## 1. Introduction
 
-> **Goal**: 
-> Given a continuous stream of AI tasks (training or inference) with resource demands and deadlines, a centralized scheduler must decide, at each 15‑minute interval, whether to defer or to dispatch each task to one of `N` data centers to optimize sustainability and operational metrics under capacity and timing constraints.
+The rapid growth of large-scale AI and machine learning workloads in globally distributed data centers has brought with it unprecedented computing power and, with it, an ever-increasing carbon footprint. Today’s hyperscale training jobs routinely consume megawatt‑hours of electricity and generate tonnes of CO₂, driven not only by the compute itself but also by the energy and cooling required to keep racks humming. At the same time, modern cloud providers span dozens of regions with wildly varying grid carbon intensities, wholesale electricity prices, and inter‑datacenter network characteristics.
 
+Existing schedulers and benchmarks tend to focus on either local resource utilization, energy cost, or carbon intensity in isolation. None capture the full picture of geo‑temporal trade‑offs: the fact that one site may be greener at 2 AM but more expensive at 2 PM, while another site has cheaper power but sits on a carbon‑intensive grid, or suffers from high network latency and limited throughput. To make sustainable AI scheduling truly realistic, a benchmark must tie together five dimensions simultaneously:
+- **Geographic diversity** (multi‑region cloud / edge locations)  
+- **Time‑of‑day dynamics** (15‑minute resolution of prices, carbon, weather)  
+- **Energy pricing** (normalized \$ / kWh from heterogeneous markets)  
+- **Grid carbon intensity** (region‑specific gCO₂eq / kWh)  
+- **Network transfer** (per‑GB cost, serialization + propagation delay)
+
+We introduce **GreenDCC** (“Green Data‑Center Cluster”), an open‑source benchmark and Gym‑compatible simulation environment designed to fill this gap. GreenDCC provides:
+1. A **reproducible**, end‑to‑end pipeline from real‑world datasets (Alibaba GPU trace, Open‑Meteo, Electricity Maps, cloud bandwidth pricing) to RL‑ready scenarios.  
+2. A **centralized global scheduler** that observes system‑wide state and issues “defer or assign” global decisions every 15 minutes.  
+3. A **full physics‑informed datacenter model** (CPU/GPU power curves, thermal response, HVAC proxy) coupled with transmission‑aware routing (cost + delay).  
+4. A **modular reward engine** supporting single or multi‑objective optimization (energy cost, carbon emissions, SLA adherence, transfer overhead).
+
+By proposing GreenDCC, we aim to foster among the scientific community and enterprises a common testbed for sustainable scheduling of AI workloads that captures the nuanced, geo‑temporal trade‑offs of modern cloud workloads must overcome.
 
 <p align="center">
   <img src="assets/figures/global_map.svg" alt="Geo-Distributed Data Centers" width="1000"/>
 </p>
 
----
+# Table of Contents
+- [Multi-Data Center Sustainable Scheduling Benchmark](#multi-data-center-sustainable-scheduling-benchmark)
+  - [1. Introduction](#1-introduction)
+- [Table of Contents](#table-of-contents)
+  - [2. Features \& Highlights](#2-features--highlights)
+  - [3. Benchmark Design](#3-benchmark-design)
+    - [3.1 State, Action \& Reward Overview](#31-state-action--reward-overview)
+    - [3.2 Supported Optimization Objectives](#32-supported-optimization-objectives)
+    - [3.3 Task Lifecycle \& Routing Penalty (cost + delay)](#33-task-lifecycle--routing-penalty-cost--delay)
+    - [3.4 Time Granularity](#34-time-granularity)
+  - [4. Real‑World Datasets \& Visualizations](#4-realworld-datasets--visualizations)
+    - [4.1 AI Workloads (Alibaba GPU Cluster Trace)](#41-ai-workloads-alibaba-gpu-cluster-trace)
+    - [4.2 Electricity Prices](#42-electricity-prices)
+    - [4.3 Carbon Intensity](#43-carbon-intensity)
+    - [4.4 Weather](#44-weather)
+    - [4.5 Transmission Costs (per‑GB)](#45-transmission-costs-pergb)
+    - [4.6 Dataset Visualizations](#46-dataset-visualizations)
+  - [5. Supported Locations \& Custom Regions](#5-supported-locations--custom-regions)
+  - [6. Datacenter Modeling](#6-datacenter-modeling)
+    - [6.1 Short Explanation of the DC Models](#61-short-explanation-of-the-dc-models)
+    - [6.2 Customizing Datacenter](#62-customizing-datacenter)
+    - [6.3 Modeling Details](#63-modeling-details)
+  - [7. Environment \& API](#7-environment--api)
+    - [7.1 Observations](#71-observations)
+    - [7.2 Actions \& Deferral](#72-actions--deferral)
+    - [7.3 Task Origin Logic](#73-task-origin-logic)
+    - [7.4 SLA Modeling](#74-sla-modeling)
+    - [7.5 Transmission Delay Model](#75-transmission-delay-model)
+  - [8. Modular Reward System](#8-modular-reward-system)
+    - [8.1 Built-in Reward Functions](#81-built-in-reward-functions)
+    - [8.2 Composite \& Custom Rewards](#82-composite--custom-rewards)
+  - [9. Code Organization](#9-code-organization)
+    - [9.1 Code Architecture](#91-code-architecture)
+    - [9.2 Directory Structure](#92-directory-structure)
+  - [10. Quickstart \& Examples](#10-quickstart--examples)
+    - [10.1 Installation](#101-installation)
+    - [10.2 Training (SAC + Configs)](#102-training-sac--configs)
+    - [10.3 Monitoring (TensorBoard)](#103-monitoring-tensorboard)
+    - [10.4 Checkpointing](#104-checkpointing)
+  - [11. Evaluation \& Demo](#11-evaluation--demo)
+    - [11.1 Rule-based vs RL Evaluation](#111-rule-based-vs-rl-evaluation)
+    - [11.2 Google Colab Notebook](#112-google-colab-notebook)
+    - [11.3 Key Benchmark Metrics / Dashboard](#113-key-benchmark-metrics--dashboard)
+  - [12. Planned Features \& Roadmap](#12-planned-features--roadmap)
+  - [13. Citation, License \& Contributors](#13-citation-license--contributors)
+    - [13.1 Citation / Credits](#131-citation--credits)
+    - [13.2 License](#132-license)
+    - [13.3 Contributors](#133-contributors)
+  
+## 2. Features & Highlights
 
-## Features
+GreenDCC provides a comprehensive and realistic benchmark environment for developing and evaluating sustainable task scheduling algorithms across geo-distributed data centers. Key features include:
 
-- **Centralized global scheduler** with decentralized task generation
-- Real-world data from Alibaba, Electricity Maps, Open-Meteo, AWS/GCP/Azure
-- Transfer-aware routing (latency, bandwidth, transmission cost)
-- Transmission delay modeling based on real inter‑datacenter throughput & RTT (Persico et al., IEEE GLOBECOM 2016)
-- Detailed simulation of:
-  - Energy use
-  - Carbon emissions
-  - Cooling (temperature-based proxy)
-  - Transmission emissions
-- Supports:
-  - Rule-based controllers
-  - Deep RL agents (SAC pre-implemented)
-- Modular reward function system
-- RL-ready Gym-compatible environments
-- Fully extensible and interpretable
+*   **Rich Real-World Data Integration:** Incorporates time-series data for **over 20 global locations**, including:
+    *   **AI Workloads:** Based on the Alibaba Cluster Trace 2020 GPU dataset.
+    *   **Electricity Prices:** Sourced from Electricity Maps, GridStatus, and regional operators.
+    *   **Grid Carbon Intensity:** Real gCO₂eq/kWh data from Electricity Maps.
+    *   **Weather Data:** From Open-Meteo for temperature-aware cooling models.
+    *   **Transmission Costs:** Region-to-region per-GB pricing from AWS, GCP, and Azure.
+*   **Physics-Informed Datacenter Modeling:** Simulates detailed energy consumption within each datacenter, including CPU/GPU/Memory power draw based on utilization, and a temperature-aware cooling/HVAC proxy model grounded in established thermal dynamics.
+*   **Transmission-Aware Routing (Cost & Delay):** Accounts for both monetary transfer costs (per-GB pricing) and realistic transmission delays calculated using empirical inter-datacenter throughput and RTT data (based on [Persico et al. (IEEE GLOBECOM 2016)](https://www.sciencedirect.com/science/article/abs/pii/S138912861630353X)), impacting task arrival times at remote sites.
+*   **Centralized Global Scheduler Simulation:** Models a scheduler overseeing multiple distributed data centers, making dispatch or deferral decisions for incoming tasks based on global system state.
+*   **Gymnasium-Compatible Environment:** Offers a standard Reinforcement Learning interface (`TaskSchedulingEnv`) compatible with common RL libraries, facilitating agent development and evaluation.
+*   **Flexible Multi-Objective Optimization:** Features a modular reward system enabling users to define custom reward functions or combine built-in components (e.g., energy cost, carbon emissions, SLA violations, transmission overhead) with configurable weights.
+*   **Support for Diverse Schedulers:** Natively supports training Deep RL agents (with SAC example) and includes a suite of rule-based controllers (e.g., lowest carbon, lowest price, most available) for baseline comparisons.
+*   **Extensible and Configurable:** Designed with modularity, allowing users to easily customize datacenter configurations, add new locations, define new reward structures, or integrate custom scheduling policies.
+*   **Reproducible Scenarios:** Enables consistent experimental setups through configuration files and seeding, crucial for benchmarking research.
 
----
+## 3. Benchmark Design
+GreenDCC simulates a centralized global task scheduler interacting with a cluster of geographically distributed data centers. At each time step, the simulation proceeds as follows:
 
-## Benchmark Design
+1.  **Task Generation:** New AI tasks (derived from the real-world trace) may arrive at their designated origin datacenters based on a population and time-zone probabilistic model. Any tasks previously time-deferred are also reconsidered.
+2.  **Observation:** The central agent (scheduler) observes the current global state, including time, environmental factors (price, carbon intensity), the state of each datacenter (resource availability, load), and the details of all pending tasks (requirements, origin, deadline).
+3.  **Action:** For *each* pending task, the agent decides whether to **defer** it to the next timestep or **assign** it to one of the `N` available datacenters for execution.
+4.  **Routing & Delay:** When a task is assigned to a remote datacenter (different from its origin), the system calculates and tracks the associated transmission **cost, energy consumption, and carbon emissions**. Additionally, a **transmission delay** (modeling data serialization and network propagation time) is computed. The task is held "in transit" during this delay and only becomes available for execution at the destination DC after it elapses.
+5.  **Execution & State Update:** Each datacenter attempts to schedule its queued tasks based on resource availability. Internal models simulate **energy consumption, carbon emissions, and thermal dynamics**. The global clock advances by 15 minutes.
+6.  **Reward Calculation:** A scalar reward signal is computed based on the outcomes of the timestep (e.g., total cost, emissions, SLA violations) according to the configured reward function.
 
-At every 15-minute timestep:
+This cycle repeats, allowing RL agents or rule-based controllers to learn or apply scheduling policies that optimize long-term objectives.
 
-1. Task Generation: 
-   - Tasks are generated in multiple datacenters using population and time-zone-aware logic.
-2. Global Scheduling:
-   - A centralized agent observes system-wide state and decides a destination DC for each task.
-3. Routing Penalty:
-   - Tasks sent to remote DCs incur transfer cost, *and are delayed* by the measured serialization‑time + propagation‑time before they arrive (per `get_transmission_delay`).
-4. Execution:
-   - Each DC executes tasks when resources are available.
-   - Energy, cost, and carbon metrics are recorded.
 
-### Why a 15-Minute Timestep?
+### 3.1 State, Action & Reward Overview
 
-We use a 15-minute timestep for our simulation to reflect how real data center operations and sustainability metrics work:
+*   **State Observation:** The environment provides a detailed observation at each step `t`. This observation is structured as a **list**, where each element corresponds to one of the `k_t` currently pending tasks.
+    *   **Per-Task Vector:** By default (`_get_obs` in `TaskSchedulingEnv`), the vector for each pending task `i` contains:
+        *   **Global Time Features:** Sine/cosine encoding of the day of the year and hour of the day (4 features).
+        *   **Task-Specific Features:** Origin DC ID, CPU core requirement, GPU requirement, estimated duration, and time remaining until SLA deadline (5 features).
+        *   **Per-Datacenter Features:** For each of the `N` datacenters: available CPU %, available GPU %, available Memory %, current carbon intensity (kgCO₂/kWh), and current electricity price ($/kWh) (5 * `N` features).
+    *   **Variable State Shape:** The full observation `s_t` returned by `env.step()` or `env.reset()` is this list of `k_t` vectors. Since the number of pending tasks `k_t` changes from one timestep to the next (i.e., `k_t` may differ from `k_{t+1}`), the overall **shape of the state observation varies across timesteps**. For example, `s_t` might be a list of 10 vectors (10 tasks), while `s_{t+1}` might be a list of 5 vectors (5 tasks). In general, `s_t` has a shape of `(k_t, 4 + 5 + 5 * N)`, where `N` is the number of datacenters.
+    *   **Handling Variability:** Standard RL algorithms often assume fixed-size observations.
+        *   The provided *off-policy* SAC example handles this using a replay buffer (`FastReplayBuffer`) that pads the list of observations up to a `max_tasks` length and uses masking during batch processing.
+        *   *On-policy* algorithms like A2C can handle this without padding by processing the list of tasks sequentially during rollouts and using appropriate aggregation for the value function.
+    *   **Customization:** Users can easily modify `_get_obs` to include other available information from `self.cluster_manager.datacenters` (e.g., pending queue lengths, detailed thermal state, forecasted carbon intensity) or `self.current_tasks` (the current pending tasks) to extract task-specific features to create custom state representations tailored to their specific agent architecture, scheduling strategy or reward function.
 
-- **Real-world data sources** like Electricity Maps and grid APIs commonly provide energy prices, carbon intensity, and weather data at 15-minute or hourly intervals.
-- **Cloud billing models** from AWS, GCP, and Azure often round usage in 5–15-minute blocks, making 15-minute scheduling windows practical and cost-relevant.
-- **Batch scheduling and resource planning** in large clusters is typically done in intervals, not every minute, to smooth loads and reduce overhead.
+*   **Action Space:** At each timestep `t`, the agent is presented with a list of `k_t` pending tasks. For **each task** in this list, the agent must output a single discrete action `a_i` from the set `{0, 1, ..., N}`:
+    *   `a_i = 0`: **Defer** the i-th task. The task is held and reconsidered in the next 15-minute timestep.
+    *   `a_i = j` (where `1 ≤ j ≤ N`): **Assign** the i-th task to datacenter `j`. The task is sent towards that DC's queue (potentially incurring transmission cost and delay if `j` is different to the DC task's origin).
+    *   Therefore, the agent needs to produce a sequence of `k_t` actions in total at step `t`. As `k_t` varies, this constitutes a **variable-length action requirement** per timestep. Refer to the State Observation section for how the provided RL agent examples handle this variability.
 
-More importantly, our simulator models the **thermal and electrical dynamics of data centers**, including:
-- CPU-level energy and fan modeling (based on inlet temperature and utilization)
-- Rack-level airflow, temperature, and power draw
-- HVAC systems: CRAC setpoints, chiller loads, cooling tower behavior, and water usage
+*   **Reward Signal:** After all actions for a timestep are taken and the simulation advances, a single, global scalar reward `r_t` is returned. This reward is calculated by a configurable `RewardFunction` (see Section 8). This function aggregates various performance and sustainability metrics based on user-defined weights and objectives, such as minimizing operational costs, carbon footprint, energy consumption, or SLA violations.
 
-Thermal systems respond **relatively slowly** to changes in temperature, airflow, and cooling power have delayed effects. So simulating every minute adds unnecessary noise, while 15-minute steps allow:
-- Stable tracking of thermal responses
-- Meaningful HVAC control decisions
-- Realistic latency and SLA trade-offs
 
+### 3.2 Supported Optimization Objectives
+GreenDCC allows users to optimize for various objectives, either individually or combined through the modular reward system. Key optimizable metrics tracked by the simulator include:
+
+*   Total operational energy cost (USD) across all datacenters.
+*   Total energy consumption (kWh).
+*   Total carbon emissions (kg CO₂eq) from compute, cooling, and data transmission.
+*   Number or severity of Service Level Agreement (SLA) violations.
+*   Total inter-datacenter data transmission costs (USD).
+*   Resource utilization efficiency (e.g., minimizing idle power).
+*   Multi-objective combinations balancing these factors (e.g., minimizing cost subject to an emissions cap).
+
+
+### 3.3 Task Lifecycle & Routing Penalty (cost + delay)
+When the scheduler assigns a task originating at DC `A` to a remote destination DC `B`, the following steps occur:
+
+1.  **Transmission Cost:** An immediate monetary cost is calculated based on the task's data size (`bandwidth_gb`) and the per-gigabyte egress/transfer cost between the origin and destination regions (using cloud provider pricing tiers from AWS, Azure, GCP). This cost can be included in the reward calculation.
+2.  **Transmission Delay Calculation:** A network delay is computed using the formula:
+    `delay (s) = (task_size_GB * 8000 / throughput_Mbps) + (RTT_ms / 1000)`
+    where `throughput_Mbps` and `RTT_ms` are empirically measured values between the macro-regions (EU, US, SA, AP) based on Persico et al. (2016). This captures both serialization time (dependent on data size and effective bandwidth) and propagation time.
+3.  **In-Transit Hold:** The task is conceptually held "in transit". It does not immediately appear in DC `B`'s queue.
+4.  **Delayed Enqueue:** Only after `delay` seconds have passed (potentially spanning multiple 15-minute simulation steps) does the task arrive and get added to the pending queue at the destination datacenter (DC `B`), becoming eligible for execution. This accurately models the real-world impact of network latency on task start times.
+
+### 3.4 Time Granularity
+
+GreenDCC operates on a **15-minute timestep**. This granularity was chosen carefully to balance realism and simulation efficiency:
+
+*   **Data Availability:** Key real-world data sources like Electricity Maps (carbon intensity) and grid APIs (electricity prices) typically provide data at 15-minute or hourly intervals.
+*   **Cloud Billing:** Major cloud providers often bill compute resources in increments of minutes (sometimes 1, 5, or 15), making 15-minute scheduling decisions relevant for cost optimization.
+*   **Operational Cadence:** Large-scale cluster scheduling and resource planning often happen at coarser intervals than per-second or per-minute to reduce overhead and smooth out load variations.
+*   **Thermal Inertia:** Datacenter cooling systems (HVAC, chillers) have significant thermal inertia. Their response to changes in load or setpoints occurs over minutes, not seconds. Simulating at a 15-minute interval allows for stable tracking of these thermal dynamics without excessive computational cost or noise.
+*   **Supporting Literature:** Several studies on data center energy optimization, cooling control, and job scheduling using RL have successfully employed similar time granularities (e.g., 5-15 minutes) to model system dynamics effectively.
 This timestep design is **backed by multiple studies** in the field:
 
 - *DeepEE: Joint Optimization of Job Scheduling and Cooling Control*, ICDCS 2019  
@@ -86,222 +177,29 @@ This timestep design is **backed by multiple studies** in the field:
   https://doi.org/10.1109/TCC.2018.2834376  
   → Models energy transitions and sleep states using coarse time intervals to minimize server wake/sleep cycles.
 
-In short, a 15-minute timestep is not only realistic but it’s also **recommended** when simulating complex physical systems like cooling and power in large-scale data centers like the ones we model here.
+## 4. Real‑World Datasets & Visualizations
+GreenDCC integrates multiple real-world datasets to create realistic and challenging scheduling scenarios that reflect the dynamic nature of global infrastructure and environmental factors.
 
----
+Summary table of datasets:
+| Dataset | Source | Description |
+| ------- | ------ | ----------- |
+| AI Workloads | Alibaba Cluster Trace 2020 | Real-world GPU workload traces from Alibaba's data centers. |
+| Electricity Prices | Electricity Maps, GridStatus | Real-time electricity prices for various regions. |
+| Carbon Intensity | Electricity Maps | Real-time carbon intensity data (gCO₂eq/kWh) for various regions. |
+| Weather | Open-Meteo | Real-time weather data (temperature, humidity) for cooling proxy. |
+| Transmission Costs | AWS, GCP, Azure | Per-GB transfer costs between regions. |
 
-## Supported Optimization Objectives
+### 4.1 AI Workloads (Alibaba GPU Cluster Trace)
 
-- Total energy cost (USD)
-- Carbon emissions (kg CO₂)
-- Energy consumption (kWh)
-- SLA violations
-- Inter-datacenter transmission costs
-- Multi-objective trade-offs (via composite rewards)
+*   **Source:** We use the [Alibaba Cluster Trace 2020](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020), a real-world dataset of GPU jobs from a large production cluster operated by Alibaba PAI (Platform for AI). It covers two months (July–August 2020), including over **6,500 GPUs** across **~1800 machines**. This trace contains **training and inference jobs** using frameworks like TensorFlow, PyTorch, and Graph-Learn. These jobs span a wide range of machine learning workloads, and each job may consist of multiple tasks with multiple instances.
+*   **Preprocessing:** To prepare the trace for long-term sustainable scheduling simulation, we perform several preprocessing steps:
+    *   **Filtering:** Remove very short tasks, keeping only those ≥ 15 minutes (typical of substantial training or inference workloads).
+    *   **Temporal Extension:** Extend the 2-month trace to cover a full year by replicating observed daily and weekly patterns.
+    *   **Origin Assignment:** Assign a **probabilistic origin** datacenter to each task based on regional **population** weights and local **time-of-day** activity boosts (simulating higher generation during business hours). See Section 7.3 for details.
+    *   **Grouping:** Aggregate tasks into 15-minute intervals based on their arrival times to align with the simulation timestep.
+*   **Dataset Format (After Cleaning):** The cleaned dataset is saved as a Pandas `.pkl` DataFrame file with the following structure:
 
----
-
-## Real-World Datasets
-
-| Type               | Source                                                                 |
-|--------------------|------------------------------------------------------------------------|
-| AI Workloads       | [Alibaba Cluster Trace 2020](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020)  |
-| Weather Data       | [Open-Meteo](https://open-meteo.com/)                                  |
-| Carbon Intensity   | [Electricity Maps](https://www.electricitymaps.com/)                   |
-| Energy Prices      | [Electricity Maps](https://www.electricitymaps.com/), [GridStatus](https://gridstatus.io/) |
-| Transmission Costs | [AWS](https://aws.amazon.com/ec2/pricing/on-demand/), [GCP](https://cloud.google.com/vpc/pricing), [Azure](https://azure.microsoft.com/en-us/pricing/details/bandwidth/) |
-| Transmission Latency | [AWS](https://www.cloudping.co/)|
-
-
-GreenDCC includes full-year datasets for:
-- **Weather**, **carbon intensity**, and **electricity prices** from **2021 to 2024**
-- Pricing normalized to $/kWh across supported regions
-- Transmission costs based on **cloud-specific regional bandwidth pricing**
-
-For more details on how electricity prices are collected, normalized, and aligned with simulation timezones, refer to:
-📄 [`data/electricity_prices/README.md`](data/electricity_prices/README.md)
-
----
-
-### 🌐 Supported Datacenter Locations
-
-Use the following `location` codes in `datacenters.yaml` to enable real data integration:
-
-| Code         | Region / Market                          |
-|--------------|------------------------------------------|
-| US-NY-NYIS   | New York (NYISO)                         |
-| US-CAL-CISO  | California (CAISO)                       |
-| US-TEX-ERCO  | Texas (ERCOT)                            |
-| DE-LU        | Germany + Luxembourg (ENTSO-E)           |
-| FR           | France (ENTSO-E)                         |
-| SG           | Singapore (USEP)                         |
-| JP-TK        | Japan - Tokyo Area (JEPX)                |
-| IN           | India - Mumbai (POSOCO)                  |
-| AU-NSW       | Australia - New South Wales (AEMO)       |
-| BR-SP        | Brazil - São Paulo (ONS)                 |
-| ZA           | South Africa (Eskom)                     |
-| PT           | Portugal (OMIE)                          |
-| ES           | Spain (OMIE)                             |
-| BE           | Belgium (ENTSO-E)                        |
-| CH           | Switzerland (ENTSO-E)                    |
-| KR           | South Korea (KPX)                        |
-| CA-ON        | Ontario (IESO)                           |
-| CL-SIC       | Chile (CDEC-SIC)                         |
-| AT           | Austria (ENTSO-E)                        |
-| NL           | Netherlands (ENTSO-E)                    |
-
-We plan to continuously expand this list in future releases.
-➡️ Have a region you'd like to see supported? Open an issue or submit a PR!
-
-### Climate Variability Across Regions
-
-We analyze **historical temperature trends** in datacenter regions using weather data from [Open-Meteo](https://open-meteo.com/), covering years **2021 to 2024**. Temperature impacts both **cooling needs** and **energy efficiency**, making it an important factor in sustainable infrastructure planning.
-
-<p align="center">
-  <img src="assets/figures/temperature_trends.svg" alt="Temperature Trends" width="800"/>
-</p>
-
-<p align="center">
-  <em>Average daily temperature across selected datacenter regions (°C)</em>
-</p>
-
-This figure reveals the **seasonal variations** across locations:
-
-- Northern hemisphere locations show strong temperature swings between summer and winter.
-- Regions like Singapore or Mumbai maintain **stable warm climates** year-round.
-- This information helps **model cooling-related energy demands** in simulations and energy estimation.
-
-
-### Carbon Intensity Trends and Variability
-
-To highlight how **carbon intensity varies across locations and times**, we also analyze the carbon intensity real-world data collected between **2021 and 2024** from [Electricity Maps](https://www.electricitymaps.com/). These insights guide **GreenDCC**’s energy-aware task scheduling policies.
-
-<p align="center">
-  <img src="assets/figures/carbon_intensity_trends.svg" alt="Carbon Intensity Trends" width="800"/>
-</p>
-
-<p align="center">
-  <em>Average daily carbon intensity across selected datacenter regions (gCO₂eq/kWh)</em>
-</p>
-
-<p align="center">
-  <img src="assets/figures/carbon_intensity_variation.svg" alt="Carbon Intensity Daily Variation" width="800"/>
-</p>
-
-<p align="center">
-  <em>Average hourly carbon intensity profile over a typical day (UTC time)</em>
-</p>
-
-These figures show that:
-
-- **Carbon intensity is highly region-dependent** (e.g., countries with renewable-heavy grids have lower values like Toronto/CA, or Sao Paulo/BR).
-- **Time-of-day plays a big role**: some regions show large carbon intensity variations throughout the day (e.g., Sydney/AU, California/USA).
-- This variability can be used by **GreenDCC’s scheduling engine** to route tasks at the most sustainable moments.
-
-### Electricity Prices Dataset
-
-We include real hourly electricity price data across 20+ global regions, covering the years 2020–2024.  
-Prices are stored in standardized format: **UTC timestamps** and **USD/MWh** units, extracted from sources like ElectricityMaps, GridStatus, CAISO, OMIE, and regional APIs.
-
-Each region has a yearly CSV file under:  
-`data/electricity_prices/standardized/<REGION>/<YEAR>/<REGION>_electricity_prices_<YEAR>.csv`
-
-The dataset enables dynamic, cost-aware scheduling across regions.
-
-#### Learn More
-For full region list, folder structure, sources, and extraction scripts:  
-📄 [`data/electricity_prices/README.md`](data/electricity_prices/README.md)
-
-####  Visualization
-We also include this figure showing the **typical daily electricity price patterns** (averaged by hour-of-day) for some regions:
-
-<p align="center">
-  <img src="assets/figures/electricity_price_patterns.svg" alt="Electricity Price Trends" width="800"/>
-</p>
-
-<p align="center">
-  <em>Average hourly electricity price profile over a typical day (UTC time)</em>
-</p>
-
----
-
-### Transmission Delay
-
-To accurately account for the time required to transfer task data between geographically distributed datacenters, we model a **transmission delay** composed of:
-
-- **Serialization time**, determined by the data volume and the available TCP throughput;  
-- **Propagation delay**, represented by the round‑trip time (RTT) of the path.
-
-These parameters are obtained from Persico et al. [1], who measured the mean inter‑datacenter TCP throughput and RTT across four macro‑clusters: **EU** (Europe), **US** (North America), **SA** (South America), and **AP** (Asia–Pacific).
-
-#### 1. Regional Clustering  
-Map each cloud‑provider region identifier (e.g. `us‑east‑1`, `East US`) into one of the four clusters: **EU**, **US**, **SA**, or **AP**.
-
-#### 2. Empirical Metrics  
-Use the published mean TCP throughput (Mbps) and RTT (ms) between clusters (Figures 3 and 6 in [1]).
-
-#### 3. Data Size Conversion  
-Convert the task’s data volume from gigabytes to megabits:
-```python
-size_Mb = size_GB * 8 * 1000
-```
-
-#### 4. Transmission Delay Calculation
-Compute the total transmission delay (in seconds) as:
-```math
-   delay\,(s) = \frac{\text{size\_Mb}}{\text{throughput\_Mbps}} \;+\; \frac{\text{RTT\_ms}}{1000}\,.
-```
-
-#### 5. Deferred Enqueue
-Once a destination is selected, the scheduler holds the task in transit for the calculated delay before enqueuing it at the target datacenter.
-
-All of this logic is implemented in the `data/network_cost/network_delay.py` file.
-```python
-def get_transmission_delay(src_region, dst_region, provider, size_GB):
-    # … cluster lookup …
-    # … throughput & latency (rtt_ms) lookup from Persico et al. …
-    return size_Mb/throughput_mbps + rtt_ms/1000
-```
-
-> Reference:
-> [1] V. Persico, A. Botta, A. Montieri, A. Pescape, “A First Look at Public‑Cloud Inter‑datacenter Network Performance,” IEEE GLOBECOM, 2016. doi:10.1109/GLOCOM.2016.7841498
----
-
-## AI Workloads Dataset (Alibaba GPU Cluster Trace)
-
-We use the [Alibaba Cluster Trace 2020](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020), a real-world dataset of GPU jobs from a large production cluster operated by Alibaba PAI (Platform for AI). It covers two months (July–August 2020), including over **6,500 GPUs** across **~1800 machines**.
-
-This trace contains **training and inference jobs** using frameworks like TensorFlow, PyTorch, and Graph-Learn. These jobs span a wide range of machine learning workloads, and each job may consist of multiple tasks with multiple instances.
-
-📄 *Original dataset paper*:  
-**"MLaaS in the Wild: Workload Analysis and Scheduling in Large-Scale Heterogeneous GPU Clusters"**  
-NSDI ’22  
-[Link to paper](https://www.usenix.org/system/files/nsdi22-paper-weng.pdf)
-
----
-
-### Preprocessing & Simulation Format
-
-To use this data in long-term sustainable scheduling, we:
-
-- **Filtered** short or trivial tasks. Only jobs ≥15 minutes are kept (typical of model fine-tuning, etc.)
-- **Extended** the 2-month trace to a **full year** by replicating temporal patterns
-- **Assigned origin datacenters** using a probabilistic model based on **population** and **local activity time**
-- **Grouped** tasks into 15-minute intervals to match sustainability data (e.g., weather, energy, emissions)
-
-Each task is **not guaranteed to be executed at its origin DC**. The global scheduler decides execution based on sustainability goals (carbon, cost, SLA, etc.), and tasks may be routed between datacenters.
-
-For each transfer, we compute:
-```python
-transmission_cost = task_bandwidth_GB * cost_per_GB(origin_region, destination_region)
-```
-
----
-
-### Dataset Format (After Cleaning)
-The cleaned dataset is saved as a Pandas `.pkl` DataFrame file with the following structure:
-
-| interval_15m       | tasks_matrix                                            |
+| interval_15m       | tasks_matrix                                           |
 |--------------------|--------------------------------------------------------|
 | 2020-03-01 08:00   | [[job1, tstart, tend, start_dt, duration, cpu, gpu, mem, gpu_mem, bw, day_name, day_num], ...] |
 | 2020-03-01 08:15   | [[jobN, tstart, tend, start_dt, duration, cpu, gpu, mem, gpu_mem, bw, day_name, day_num], ...] |
@@ -324,7 +222,7 @@ Where:
   11. **weekday_name**: Day name (e.g., Monday).
   12. **weekday_num**: Integer from 0 (Monday) to 6 (Sunday).
 
-> ⚠️ **Note:**  
+>   **Resource Normalization:**
 > In the original Alibaba dataset, both CPU and GPU requirements are stored as percentages:
 > - `600.0` = 6 vCPU cores  
 > - `50.0` = 0.5 GPUs  
@@ -345,781 +243,572 @@ tasks.append(task)
 
 This transformation allows for more intuitive interpretation and visualization.
 
-### 📊 Dataset Visualizations
+### 4.2 Electricity Prices
+*   **Sources:** Real historical electricity price data is collected from various sources, including [Electricity Maps](https://www.electricitymaps.com/), [GridStatus.io](https://gridstatus.io/), and regional Independent System Operator (ISO) APIs (e.g., CAISO, NYISO, ERCOT, OMIE).
+*   **Coverage:** Data covers the years 2020–2024 for over 20 global regions corresponding to the supported datacenter locations.
+*   **Standardization:** Prices are cleaned, converted to a standard format (UTC timestamp, USD/MWh), and aligned with the simulation's 15-minute intervals. For simulation purposes, prices are typically normalized further (e.g., to USD/kWh).
+*   **Storage:** Data is organized by region and year in CSV files located under `data/electricity_prices/standardized/`. See `data/electricity_prices/README.md` for details.
 
-To better understand the characteristics of the **Alibaba GPU Cluster Trace**, we include a set of figures showing task distributions, resource demands, and scheduling patterns across time.
+### 4.3 Carbon Intensity
+*   **Source:** Grid carbon intensity data (measuring the grams of CO₂ equivalent emitted per kilowatt-hour of electricity consumed) is sourced from the [Electricity Maps API](https://www.electricitymaps.com/).
+*   **Coverage:** Provides historical data (2021–2024) for the supported global regions.
+*   **Resolution:** Data is typically available at hourly or sub-hourly resolution and is aligned with the simulation's 15-minute timestep.
+*   **Units:** Stored and used as gCO₂eq/kWh.
 
----
+### 4.4 Weather
+*   **Source:** Historical weather data, primarily air temperature and potentially wet-bulb temperature (relevant for certain cooling models), is obtained via the [Open-Meteo API](https://open-meteo.com/).
+*   **Coverage:** Data covers the years 2021–2024 for the supported datacenter locations.
+*   **Usage:** Temperature data directly influences the simulated efficiency and energy consumption of datacenter cooling systems (HVAC).
 
-#### 1. **Task Duration Distribution**
+### 4.5 Transmission Costs (per‑GB)
+*   **Sources:** Inter-region data transfer costs are based on publicly available pricing information from major cloud providers: [AWS](https://aws.amazon.com/ec2/pricing/on-demand/), [GCP](https://cloud.google.com/vpc/pricing), and [Azure](https://azure.microsoft.com/en-us/pricing/details/bandwidth/).
+*   **Format:** We compile this information into matrices representing the cost (in USD) to transfer 1 GB of data between different cloud regions. The specific matrix used depends on the `cloud_provider` configured in the simulation.
+*   **Storage:** These cost matrices are typically stored as CSV files within the `data/` directory and loaded by the `transmission_cost_loader.py` utility.
 
-Shows the histogram of task durations (in minutes) for all jobs ≥15 minutes. Most tasks range between 15–120 minutes, with a long tail of heavier training workloads.
+### 4.6 Dataset Visualizations
+To provide insights into the characteristics of the integrated datasets, the repository includes several visualizations (located in `assets/figures/` and generated by scripts like `plot_alibaba_workload_stats.py`).
 
-<div align="center">
-  <img src="assets/figures/alibaba_task_durations.svg" width="600">
-</div>
+*   **Workload Characteristics:**
+    *   *Task Duration Distribution:* Shows the distribution of task lengths.
 
----
+      <p align="center">
+        <img src="assets/figures/alibaba_task_durations.svg" alt="Task Duration Distribution" width="50%">
+      </p>
 
-#### 2. **Resource Usage Distributions**
+    *   *Resource Usage Distributions:* Illustrate the distribution of CPU, GPU, memory, and bandwidth requirements per task.
 
-We plot histograms for the resource requests:
+      <p align="center">
+        <img src="assets/figures/alibaba_resource_usage.svg" alt="Resource Usage Distributions" width="90%">
+      </p>
 
-- **CPU cores** (converted from 100-based scale)
-- **GPU units** (e.g., 0.5 = half GPU)
-- **Memory (GB)**
-- **Bandwidth (GB)** – used to estimate transmission cost
+    *   *Temporal Patterns (Heatmap):* Visualize task arrival rates across different hours of the day and days of the week.
 
-<div align="center">
-  <img src="assets/figures/alibaba_resource_usage.svg" width="50%">
-</div>
+      <p align="center">
+        <img src="assets/figures/alibaba_task_count_heatmap.svg" alt="Task Load Heatmap" width="50%">
+      </p>
 
----
+    *   *Temporal Patterns (Boxplots):* Show hourly distribution of resource requests.
 
-#### 3. **Task Load Heatmap (Hourly x Weekday)**
+      <p align="center">
+        <img src="assets/figures/alibaba_hourly_cpu_requests.svg" alt="Hourly CPU Requests" width="90%">
+        <br><br>
+        <img src="assets/figures/alibaba_hourly_gpu_requests.svg" alt="Hourly GPU Requests" width="90%">
+        <br><br>
+        <img src="assets/figures/alibaba_hourly_memory_requests.svg" alt="Hourly Memory Requests" width="90%">
+      </p>
 
-Shows the **average number of tasks submitted** per hour, across all weekdays. Highlights peak hours of activity (e.g., business hours, time zone effects).
+    *   *Gantt Chart Sample:* Provides a visual timeline of task execution, colored by resource usage.
 
-<div align="center">
-  <img src="assets/figures/alibaba_task_count_heatmap.svg" width="25%">
-</div>
+      <p align="center">
+        <img src="assets/figures/alibaba_task_gantt_resources.svg" alt="Task Gantt Chart" width="90%">
+      </p>
 
----
+*   **Environmental Factors:**
+    *   *Temperature Trends:* Line plots showing average daily temperatures across different regions.
 
-#### 4. **Hourly Distribution of Resource Requests**
+      <p align="center">
+        <img src="assets/figures/temperature_trends.svg" alt="Temperature Trends" width="75%"/>
+      </p>
+      <p align="center">
+        <em>Average daily temperature across selected datacenter regions (°C)</em>
+      </p>
 
-Boxplots of CPU, GPU, and memory usage across **hours of the day**, aggregated over July–August. Useful for modeling time-of-day-aware scheduling or load shaping.
+    *   *Carbon Intensity Trends:* Line plots showing average daily carbon intensity and average hourly profiles.
 
-<div align="center">
-  <img src="assets/figures/alibaba_hourly_cpu_requests.svg" width="50%">
-  <br><br>
-  <img src="assets/figures/alibaba_hourly_gpu_requests.svg" width="50%">
-  <br><br>
-  <img src="assets/figures/alibaba_hourly_memory_requests.svg" width="50%">
-</div>
+      <p align="center">
+        <img src="assets/figures/carbon_intensity_trends.svg" alt="Carbon Intensity Trends" width="75%"/>
+      </p>
+      <p align="center">
+        <em>Average daily carbon intensity across selected datacenter regions (gCO₂eq/kWh)</em>
+      </p>
+      <p align="center">
+        <img src="assets/figures/carbon_intensity_variation.svg" alt="Carbon Intensity Daily Variation" width="75%"/>
+      </p>
+      <p align="center">
+        <em>Average hourly carbon intensity profile over a typical day (UTC time)</em>
+      </p>
 
----
+    *   *Electricity Price Hourly Profiles:* Plots showing average price for each hour of the day.
 
-#### 5. **Gantt Chart of Tasks with Resource Colors**
+      <p align="center">
+        <img src="assets/figures/electricity_price_patterns.svg" alt="Electricity Price Trends" width="75%"/>
+      </p>
+      <p align="center">
+        <em>Average hourly electricity price profile over a typical day (UTC time)</em>
+      </p>
 
-Visualizes a 10-hour simulation window, showing task durations on the timeline. Each panel maps the same tasks, colored by:
+These visualizations help understand the input data driving the simulation and the potential opportunities and challenges for sustainable scheduling algorithms.
 
-- CPU cores requested  
-- GPU units requested  
-- Memory requested
 
-This gives a compact view of temporal and resource variation across jobs.
+## 5. Supported Locations & Custom Regions
 
-<div align="center">
-  <img src="assets/figures/alibaba_task_gantt_resources.svg" width="50%">
-</div>
+GreenDCC includes integrated real-world data (electricity price, carbon intensity, weather) for a growing list of **over 20 global locations**. Use the following `location` codes within your `datacenters.yaml` configuration file to associate a simulated datacenter with these datasets.
 
----
+The table below shows the built-in locations, the corresponding cloud provider region used for **transmission cost** lookups (based on `utils/transmission_region_mapper.py`), and the macro-cluster used for **transmission delay** lookups (based on `data/network_cost/network_delay.py`). Data availability (Price=P, Carbon Intensity=CI, Weather=W) is indicated based on files present in the `data/` directory (dynamic API calls may supplement missing files).
 
-These plots offer a comprehensive summary of the workload behavior, temporal distribution, and compute intensity of the original trace, helping validate its realism for sustainable AI scheduling.
+| Code         | Region / Market                          | Data | Cloud Region Mapping (for Cost) (GCP / AWS / Azure) | Macro-Cluster (for Delay) |
+| :----------- | :------------------------------------------- | :--- | :-------------------------------------------------- | :------------------------ |
+| US-NY-NYIS   | New York (NYISO)                         | P,CI,W | `us-east1` / `us-east-1` / `East US`                | US                        |
+| US-CAL-CISO  | California (CAISO)                       | P,CI,W | `us-west1` / `us-west-1` / `West US`                | US                        |
+| US-TEX-ERCO  | Texas (ERCOT)                            | P,CI,W | `us-central1`\* / `us-east-1-dwf-1` / `South Central US` | US                        |
+| US-MIDA-PJM  | PJM Interconnection (Mid-Atlantic US)    | P,CI,W | `us-central1`\* / `us-east-1-dwf-1` / `South Central US` | US                 |
+| CA-ON        | Ontario (IESO)                           | P,CI,W | `us-east1`\* / `ca-central-1` / `Canada Central`      | US                        |
+| BR-SP        | Brazil - São Paulo (ONS)                 | P,CI,W | `southamerica-east1` / `sa-east-1` / `Brazil South`   | SA                        |
+| CL-SIC       | Chile (CDEC-SIC)                         | P,CI,W | `southamerica-east1` / `us-east-1-chl-1` / `Chile North` | SA                        |
+| DE-LU        | Germany + Luxembourg (ENTSO-E)           | P,CI,W | `europe-west1` / `eu-central-1` / `Germany West Central` | EU                        |
+| FR           | France (ENTSO-E)                         | P,(CI),W | `europe-west4` / `eu-west-3` / `France Central`     | EU                        |
+| ES           | Spain (OMIE)                             | P,(CI),(W) | `europe-west1` / `eu-south-1` / `Spain Central`       | EU                        |
+| PT           | Portugal (OMIE)                          | P,(CI),(W) | `europe-west1` / `eu-south-1` / `Portugal North`      | EU                        |
+| BE           | Belgium (ENTSO-E)                        | P,(CI),(W) | `europe-west1` / `eu-west-1` / `West Europe`        | EU                        |
+| NL           | Netherlands (ENTSO-E)                    | P,(CI),(W) | `europe-west1` / `eu-west-1` / `North Europe`         | EU                        |
+| AT           | Austria (ENTSO-E)                        | P,(CI),(W) | `europe-west4` / `eu-central-1` / `Austria East`      | EU                        |
+| CH           | Switzerland (ENTSO-E)                    | P,(CI),(W) | `europe-west4` / `eu-central-1` / `Switzerland North` | EU                        |
+| SG           | Singapore (USEP)                         | P,CI,W | `asia-southeast1` / `ap-southeast-1` / `Southeast Asia` | AP                        |
+| JP-TK        | Japan - Tokyo Area (JEPX)                | P,CI,W | `asia-northeast1` / `ap-northeast-1` / `Japan East`   | AP                        |
+| KR           | South Korea (KPX)                        | P,CI,W | `asia-northeast1` / `ap-northeast-2` / `Korea Central`  | AP                        |
+| IN-WE        | India - Mumbai (POSOCO)                  | P,CI,W | `asia-south1` / `ap-south-1` / `Central India`      | AP                        |
+| AU-NSW       | Australia - New South Wales (AEMO)       | P,CI,W | `australia-southeast1` / `ap-southeast-2` / `Australia East` | AP                        |
+| AU-VIC       | Australia - Victoria (AEMO)              | P,CI,W | `australia-southeast1` / `ap-southeast-2` / `Australia East` | AP                        |
+| ZA           | South Africa (Eskom)                     | P,CI,W | `africa-south1`\* / `af-south-1` / `South Africa North` | SA \*\*\*             |
 
-📂 Code to generate these figures can be found in: `data/workload/alibaba_2020_dataset/plot_alibaba_workload_stats.py`
+*(\* Approximation used where direct mapping isn't available. \*\* Africa (AF) cluster may use default/proxy values if not explicitly in the Persico et al. delay data.)*
 
----
+*Data Availability: P=Price, CI=Carbon Intensity, W=Weather (based on files in `data/`). Parentheses indicate data might be partially missing.*
+*(\* Approximation used in the code where a direct mapping isn't available.)*
+*(\*\*\* Based on current code (`network_delay.py`), South African regions map to the `SA` macro-cluster for delay calculations.)*
 
-### Additional Logic Injected at Runtime
+We plan to continuously expand this list in future releases.
+➡️ Have a region you'd like to see supported? Open an issue or submit a PR!
 
-During training or simulation, **two more fields are computed dynamically** for each task:
+**How to Add Custom Locations or Regions:**
 
-- `dc_origin`:  
-  The **origin datacenter** is assigned using a **probabilistic population-based + local time** logic.  
-  - Higher population DCs have more weight.
-  - During their local business hours (08:00–20:00), they are more likely to generate tasks.
-  - Implemented in: `assign_task_origins()`
+While GreenDCC provides data for these common locations, the framework is designed to be extensible:
 
-- `SLA`:  
-  Each task is given a **service deadline** via a **linear SLA multiplier**:
-  ```python
-  sla_deadline = arrival_time + sla_multiplier * duration
-  ```
-  - `sla_multiplier`: A configurable value (default: `1.5`) that defines the allowable slack.
-  - Configurable per task, allowing for different urgency levels (e.g., urgent, normal, flexible).
-  - Logic inspired by [*Sustainable AIGC Scheduling (2023)*](https://ieeexplore.ieee.org/document/10437617) for sustainable AIGC workloads.
-As can be seen, at each timestep we can have different number of tasks to be determined their destination datacenter.
+1.  **Define New Location Code:** Add a new entry in `datacenters.yaml` with a unique `location` code (e.g., `"My-Custom-Region"`).
+2.  **Provide Data:** Place corresponding time-series data files (electricity price, carbon intensity, weather) into the respective subdirectories within `data/` (e.g., `data/electricity_prices/standardized/My-Custom-Region/2023/...`). Ensure the format matches the existing files.
+3.  **Map to Transmission Region:** Update the mapping logic (likely found in `utils/transmission_region_mapper.py` or similar configuration) to associate your new `location` code with:
+    *   A cloud provider region (e.g., `us-west-2`) used for looking up per-GB transmission costs from the provider's matrix (e.g., `data/network_cost/aws_transmission_costs.csv`).
+    *   A macro-cluster (`EU`, `US`, `SA`, `AP`) used for looking up empirical delay parameters (throughput/RTT) from the Persico et al. data integrated into `data/network_cost/network_delay.py`.
+4.  **(Optional) Custom Transmission Data:** If the default cloud provider costs or empirical delay data do not suit your needs, you can modify the loading functions (e.g., `utils/transmission_cost_loader.py`, `data/network_cost/network_delay.py`) to point to your own custom CSV files containing region-to-region costs or delay parameters.
 
-📄 For detailed scripts used to clean and expand the dataset, refer to `data/workload/README.md`.
+This flexibility allows researchers to adapt GreenDCC to specific geographical footprints or network assumptions beyond the initially provided datasets.
 
----
+## 6. Datacenter Modeling
 
-## Datacenter Modeling
+Each simulated datacenter within GreenDCC incorporates a physics-informed model to estimate energy consumption, carbon emissions, and thermal behavior based on the scheduled workload and environmental conditions.
 
-Each datacenter in this benchmark simulates physical infrastructure using a layered thermal and electrical model. Internally, we model:
+### 6.1 Short Explanation of the DC Models
 
-- **CPU-level power and fan dynamics** based on workload and inlet temperature
-- **Rack-level airflow and temperature response**
-- **HVAC systems** (CRAC, chiller, cooling tower, water use)
-- **Battery and thermal envelope interaction** (optional modules)
+The datacenter model operates in layers, capturing the relationship between IT workload, power draw, heat generation, and cooling requirements:
 
-These models are grounded in equations from EnergyPlus, Breen et al. (2010), and Sun et al. (2021), and simulate realistic energy use, carbon emissions, and water consumption.
+*   **IT Power Modeling:**
+    *   **CPU Power:** Calculated based on utilization (`Load`) and the server's inlet air temperature (`T_in`), using configurable idle/max power values and efficiency curves (`P_cpu = f(Load, T_in)`).
+    *   **GPU Power:** Modeled based on assigned workload, contributing significantly to IT power, especially for training tasks. Uses configurable idle/max power characteristics (e.g., based on NVIDIA V100 defaults in `dc_config.json`).
+    *   **Memory Power:** A baseline power overhead associated with memory capacity is included in the IT load calculation.
+    *   **Fan Power:** Server fan power scales cubically with required airflow (`V_fan`), which itself depends on the heat generated by CPU/GPU/Memory and the inlet temperature.
+*   **Thermal Modeling:**
+    *   **Heat Generation:** The total IT power (CPU + GPU + Memory + Fans) is treated as heat generated within the racks.
+    *   **Rack Airflow:** Air flows through racks, picking up heat. The outlet air temperature (`T_out`) is calculated based on inlet temperature, IT heat load, and fan airflow.
+    *   **Room Mixing:** Return air temperature to the cooling units (`avg_CRAC_return_temp`) is estimated based on the average rack outlet temperatures, adjusted for rack-specific approach temperatures.
+*   **HVAC System (Cooling):**
+    *   **Cooling Load:** The CRAC (Computer Room Air Conditioner) units must remove the heat generated by the IT equipment (`Q_CRAC`).
+    *   **CRAC Fan Power:** Power consumed by CRAC fans depends on the required air circulation rate (`CRAC_Fan_load = P_ref * (flow_rate / ref_flow_rate)^3`).
+    *   **Chiller Power:** Modeled using performance curves derived from **EnergyPlus** simulation data. The chiller power dynamically adjusts based on the current cooling `load`, the `ambient_temp` (from weather data), its design specifications (e.g., `rated_cop`, `design_cond_temp`), and part-load ratio (PLR) characteristics. The model (`calculate_chiller_power`) accounts for efficiency variations at different load levels and ambient conditions.
+    *   **Cooling Tower & Pumps:** Power for associated pumps (`power_consumed_CW`, `power_consumed_CT`) and cooling tower fans (`CT_Fan_pwr`) are calculated based on flow rates, pressure drops, efficiencies, and ambient conditions.
+*   **Water Usage:** Water evaporation in the cooling tower is estimated based on load and ambient wet-bulb temperature (derived from weather data).
+*   **Total Power:** The sum of all IT power components and all HVAC power components (`CRAC_Fan_load`, `chiller_power`, `CT_Fan_pwr`, pump powers) constitutes the total instantaneous power draw of the datacenter. This is used alongside electricity price and carbon intensity data to calculate cost and emissions.
 
-If you're interested in the **mathematical details and equations**, check the full modeling description in:
+### 6.2 Customizing Datacenter
+
+Users configure the cluster of datacenters via the `datacenters.yaml` file. Each entry defines a single datacenter and its high-level properties:
+
+*   `dc_id`: A unique integer identifier for the datacenter.
+*   `location`: A location code (e.g., `"US-NY-NYIS"`, `"DE-LU"`) used to link the DC to corresponding real-world datasets (price, carbon, weather) and network region mappings (see Section 5).
+*   `timezone_shift`: The timezone offset from UTC in hours (e.g., `-5` for US East, `+1` for Central Europe). Used for local time calculations (e.g., task origin logic).
+*   `population_weight`: A relative weight used in the probabilistic task origin generation logic (see Section 7.3).
+*   `total_cores`: The total number of schedulable CPU cores in the datacenter.
+*   `total_gpus`: The total number of schedulable GPUs in the datacenter.
+*   `total_mem`: The total memory capacity in GB.
+*   `dc_config_file`: Path to a JSON file containing detailed low-level parameters for the physical model, such as:
+    *   Datacenter layout (rows, racks per row, CPUs/GPUs per rack).
+    *   HVAC system parameters (reference fan power, flow rates, chiller coefficients, pump efficiencies). **Note:** The chiller model uses coefficients derived from EnergyPlus test files, as implemented in `calculate_chiller_power`.
+    *   Server power characteristics (idle/max power for CPU/GPU types, fan curves).
+    *   Thermal properties (approach temperatures).
+
+An example `dc_config.json` is provided in `configs/dcs/`, allowing users to simulate different hardware efficiencies or cooling system designs by modifying these parameters.
+
+### 6.3 Modeling Details
+
+For a comprehensive description of the underlying mathematical models, equations, and assumptions used in the datacenter simulation (particularly the thermal and HVAC components inherited from the core SustainDC environment), please refer to:
 
 📄 [`envs/sustaindc/README_SustainDC.md`](envs/sustaindc/README_SustainDC.md)
 
----
+This document details the CPU power curves, fan laws, heat transfer calculations, and general cooling system component models, citing key references such as [Sun et al. (2021)](https://www.sciencedirect.com/science/article/abs/pii/S0378778820333892) and [Breen et al. (2010)](https://pure.ul.ie/en/publications/from-chip-to-cooling-tower-data-center-modeling-part-i-influence-).
 
-## Customizing Datacenter
-Datacenters are configured in the `datacenters.yaml` file. Each entry defines a single datacenter with:
-  - A unique `dc_id`
-  - A `location` code (e.g. `"US-NY-NYIS"`), which maps to energy, weather, and carbon datasets
-  - A `timezone_shift` (hours from UTC)
-  - A `population_weight` (used for task origination distribution)
-  - Resource specs: number of CPUs, GPUs, and memory in GB
-  - A `dc_config_file` for layout configuration and low-level energy and cooling models
+The specific implementation of the **chiller power calculation** (`calculate_chiller_power` function, used within `calculate_HVAC_power`) is based on performance curves and part-load ratio logic derived from **EnergyPlus** examples and documentation (refer to code comments for specific source links within the EnergyPlus GitHub repository).
 
-### Resource Parameters
-  - `total_cores`: Simulated number of CPU cores
-  - `total_gpus`: Simulated number of discrete GPUs
-  - `total_mem`: Total memory capacity in GB
+**Note:** While the detailed `README_SustainDC.md` focuses heavily on the CPU and cooling aspects, the implementation within GreenDCC **has been extended** to explicitly incorporate **GPU and Memory power consumption** into the total IT load (`P_IT`) calculations, using parameters defined in the `dc_config_file` (e.g., `DEFAULT_GPU_POWER_CHARACTERISTICS`). This ensures that the energy impact of these critical components for AI workloads is accounted for in the simulation.
 
-These parameters define the computational capacity of each datacenter and are used internally to:
-  - Enforce scheduling constraints (e.g., task fits in resources or not)
-  - Track real-time utilization (CPU, GPU, MEM)
-  - Drive energy and cooling models via datacenter_model.py
-  - Trigger SLA violations when overloaded
+## 7. Environment & API
 
-The values are fully customizable, letting you simulate:
-  - Small edge DCs vs. large hyperscale ones
-  - GPU-rich training hubs vs. CPU-dense inference zones
-  - Memory-optimized configurations for big models
+GreenDCC provides a standard Reinforcement Learning interface through its `TaskSchedulingEnv` class, compatible with the [Gymnasium](https://gymnasium.farama.org/) API. This wrapper manages the interaction between the RL agent and the `DatacenterClusterManager` backend.
 
-### Example `datacenters.yaml` Configuration
+### 7.1 Observations
 
-```yaml
-datacenters:
-  - dc_id: 1
-    location: "US-NY-NYIS"
-    timezone_shift: -5
-    population_weight: 0.25
-    total_cores: 25000         # Total virtual CPUs
-    total_gpus: 700           # Total GPUs
-    total_mem: 80000          # Total memory in GB
-    dc_config_file: "configs/dcs/dc_config.json"
+As described in Section 3.1, the environment state observation varies in shape depending on the number of pending tasks (`k_t`) at each timestep `t`.
 
-  - dc_id: 2
-    location: "DE-LU"
-    timezone_shift: 1
-    population_weight: 0.22
-    total_cores: 15000
-    total_gpus: 1000
-    total_mem: 80000
-    dc_config_file: "configs/dcs/dc_config.json"
+*   **API Structure:** The `env.reset()` and `env.step()` methods return the observation `s_t` as a Python **list** of NumPy arrays. If `k_t > 0`, the list contains `k_t` arrays, each representing the feature vector for one pending task. If `k_t = 0`, an empty list is returned.
+*   **Default Features:** The default implementation (`TaskSchedulingEnv._get_obs`) constructs each per-task feature vector by concatenating global time features, task-specific attributes (requirements, deadline), and the current state of all datacenters (resource availability, price, carbon intensity). See the code comments in `_get_obs` for the exact default feature order and composition.
+*   **Customization:** Users can tailor the observation space by modifying the `_get_obs` method. The full state of the simulation is accessible within the environment instance, primarily through:
+    *   `self.cluster_manager.datacenters`: A dictionary providing access to each `SustainDC` instance and its internal state (e.g., `dc.available_cores`, `dc.pending_tasks`, `dc.price_manager.get_current_price()`).
+    *   `self.current_tasks`: The list of `Task` objects currently awaiting agent decisions.
+    *   `self.current_time`: The current simulation timestamp.
+    This allows adding features like forecasted data, queue lengths, detailed thermal states, task bandwidth/memory needs, or pre-calculated transmission metrics.
 
-   - dc_id: 3
-      location: "US-CAL-CISO"
-      timezone_shift: -8
-      population_weight: 0.20
-      total_cores: 20000
-      total_gpus: 600
-      total_mem: 80000
-      dc_config_file: "configs/dcs/dc_config.json"
-  ...
-```
+### 7.2 Actions & Deferral
 
-### Modeling Guidelines (Based on 1 MW Capacity)
+Consistent with the design outlined in Section 3.1, the agent must provide an action for each pending task.
 
-If you want to simulate realistic datacenter configurations, you can use the following reference values based on typical power distribution across components:
+*   **API Interaction:** The `env.step()` method expects an `actions` argument which should be a **list** or array of integers with length `k_t` (matching the number of tasks in the observation list returned by the previous step).
+*   **Action Values:** Each integer `a_i` in the `actions` list must be in the range `{0, 1, ..., N}`, where `N` is the number of datacenters. `a_i = 0` signifies deferral of the i-th task, while `a_i = j` (for `1 <= j <= N`) assigns the task to datacenter `j`.
+*   **Handling `k_t = 0`:** If no tasks are pending (`k_t = 0`), the agent should pass an empty list `[]` to `env.step()`.
 
-| Datacenter Type      | total_cores | total_gpus | total_mem (GB) |
-|----------------------|-------------|------------|----------------|
-| GPU-heavy (training) | 50,000      | 1000       | 80,000         |
-| Balanced (general)   | 85,000      | 600        | 80,000         |
-| CPU-heavy (inference)| 110,000     | 300        | 60,000         |
+### 7.3 Task Origin Logic
 
-These values assume approximately 1 MW of compute power, split into:
-- ~20 W per CPU core
-- ~500 W per GPU
-- ~2.5 W per GB of RAM
+To simulate realistic workload arrival patterns across the globe, tasks extracted from the trace are assigned an origin datacenter using a hybrid probabilistic model implemented in `utils/workload_utils.py::assign_task_origins()`. This logic aims to reflect that different regions generate varying amounts of work at different times of day.
 
-You can scale up or down linearly (e.g., use 0.5× for 500 kW or 2× for 2 MW) depending on your simulation scope.
+*   **Population Weight:** Each datacenter defined in `datacenters.yaml` is assigned a `population_weight`. This parameter represents the relative size or baseline activity level of the region the datacenter serves. Datacenters with higher weights have a proportionally higher base probability of being selected as a task's origin.
+*   **Local Time Activity Boost:** Task generation probability for a specific datacenter is temporarily increased if the current simulation time (UTC) corresponds to its local business hours (defined as 8:00 AM to 8:00 PM local time within the code). This simulates temporal peaks in user activity or workload submission during typical working hours in that datacenter's timezone (calculated using its `timezone_shift`). An `activity_factor` (e.g., `1.0` during peak hours, `0.3` otherwise) multiplies the population weight.
+*   **Probabilistic Sampling:** For each task extracted from the trace, the final probability of originating from a specific datacenter is calculated by normalizing the combined score (`population_weight * activity_factor`) across all datacenters. The origin DC ID is then randomly sampled according to this calculated probability distribution (`np.random.choice`).
+*   **Implementation:** This assignment happens within the `extract_tasks_from_row()` function immediately after tasks for the current timestep are created from the raw trace data and before they are passed to the environment or scheduler.
 
-This helps to:
-- Keep your configuration physically realistic
-- Ensure energy/cooling models are meaningful
-- Avoid over-provisioning resources in an unrealistic way
+### 7.4 SLA Modeling
 
----
+GreenDCC incorporates Service Level Agreement (SLA) constraints to evaluate the timeliness of task completion.
 
-## Architecture
+*   **Deadline Calculation:** Each task is assigned an SLA deadline upon arrival, calculated as:
+    `sla_deadline = arrival_time + sla_multiplier * duration`
+    where `arrival_time` is when the task *first* becomes available (either initially or after transmission delay), `duration` is the task's estimated execution time, and `sla_multiplier` controls the allowed slack (default: `1.5`, meaning a task must finish within 150% of its duration).
+*   **Violation:** An SLA violation occurs if a task's actual completion time exceeds its calculated `sla_deadline`. The number of violations can be tracked and penalized via the reward function (using the `sla_penalty` component).
+*   **Per-Task Urgency:** The framework supports assigning different `sla_multiplier` values per task (e.g., 1.1 for urgent, 2.0 for flexible) to model workloads with mixed time sensitivities, although this is not implemented by default in the current task generation.
 
-```
-           +------------------+ 
-           | Global Scheduler |
-           +------------------+ 
-                    ↑  
-               [All Tasks]  
-                    ↑  
-+----------+   +----------+   +----------+  
-|   DC1    |   |   DC2    |   |   DC3    |   ...
-+----------+   +----------+   +----------+ 
-```
-Each DC: local environment with
-- Resource tracking
-- Energy & carbon simulation
-- Scheduling queue
+### 7.5 Transmission Delay Model
 
----
-## 🧠 Action Space: How the Agent Makes Decisions
+To accurately model the impact of network latency when routing tasks between geographically distant datacenters, GreenDCC calculates and applies a transmission delay.
 
-In this benchmark, at every decision step, the agent (**Global Scheduler**) is presented with a list of pending tasks. It must decide, for each task, what to do next.
+*   **Purpose:** Represents the time taken for the task's input data to travel from the origin DC to the destination DC.
+*   **Calculation (`get_transmission_delay` in `data/network_cost/network_delay.py`):** The delay is composed of two parts:
+    *   **Serialization Time:** `(task_size_GB * 8000) / throughput_Mbps` (Time to push bits onto the wire).
+    *   **Propagation Time:** `RTT_ms / 1000` (Time for the first bit to travel across the network and back, approximated as one-way latency).
+*   **Empirical Data Source:** The `throughput_Mbps` and `RTT_ms` values are derived from empirical measurements between major cloud regions (macro-clusters: EU, US, SA, AP) published by [Persico et al. (IEEE GLOBECOM 2016)](https://www.sciencedirect.com/science/article/abs/pii/S138912861630353X). The code maps the specific origin/destination locations to these macro-clusters to look up the relevant parameters.
+*   **Simulation Impact:** When a task is assigned remotely, it is held "in transit" for the calculated `delay` (in seconds) before being added to the destination DC's pending queue. This delay can significantly impact when a task starts execution and whether it meets its SLA.
 
-The **action space** is defined as:
+## 8. Modular Reward System
 
-```python
-action ∈ {0, 1, 2, ..., N}
-```
+A core feature of GreenDCC is its highly flexible and extensible reward system, designed to facilitate research into multi-objective sustainable scheduling. Instead of a single fixed reward, users can easily define complex reward signals that balance various environmental, economic, and operational goals.
 
-Where:
-- **N** is the total number of datacenters in the simulation (e.g., 5).
-- The **action** is an integer that represents the decision for a given task.
+The system is built around the concept of composable reward functions, located in the `rewards/` directory.
 
-### What Each Action Means
+### 8.1 Built-in Reward Functions
 
-| Action Value | Meaning |
-|--------------|---------|
-| `0`          | **Defer the task**: Temporarily hold the task to be reconsidered in the next time step. This allows the agent to wait for better scheduling conditions (e.g., cheaper, greener, or less loaded datacenter). |
-| `1` to `N`   | **Assign to datacenter `i`**: Send the task to the selected datacenter (e.g., `1 = DC1`, `2 = DC2`, ...). The task will enter that datacenter’s scheduling queue and execute when resources are available. |
+GreenDCC provides several pre-defined reward components, each inheriting from `rewards.base_reward.BaseReward` and targeting a specific optimization objective. These components calculate a reward value based on the simulation results (`cluster_info`) from the latest timestep:
 
-### Why Deferring Matters
+| Reward Name                  | File (`rewards/predefined/`)           | Description                                                     | Key Input from `cluster_info`                                     |
+| :--------------------------- | :------------------------------------- | :-------------------------------------------------------------- | :---------------------------------------------------------------- |
+| `energy_price`               | `energy_price_reward.py`               | Penalizes the total monetary cost of energy consumed.           | `energy_cost_usd` per DC                                          |
+| `carbon_emissions`           | `carbon_emissions_reward.py`           | Penalizes total CO₂ equivalent emissions (compute + transfer).  | `carbon_emissions_kg` per DC, `transmission_emissions_total_kg` |
+| `energy_consumption`         | `energy_consumption_reward.py`         | Penalizes total energy consumed (kWh) (compute + transfer).     | `energy_consumption_kwh` per DC, `transmission_energy_total_kwh`|
+| `transmission_cost`          | `transmission_cost_reward.py`          | Penalizes the monetary cost of inter-datacenter data transfers. | `transmission_cost_total_usd`                                     |
+| `transmission_emissions`     | `transmission_emissions_reward.py`     | Specifically penalizes CO₂ emissions from data transfers.       | `transmission_emissions_total_kg`                                 |
+| `sla_penalty`                | `sla_penalty_reward.py`                | Applies a penalty for each task that violates its SLA deadline. | `sla_violations` count per DC                                     |
+| `efficiency` (Example)       | `efficiency_reward.py`                 | Rewards scheduling efficiency (e.g., tasks completed per kWh).  | Task completion counts, energy consumption                        |
+| `composite`                  | `composite_reward.py`                  | Meta-reward: Combines multiple other reward components.         | Aggregates outputs of constituent reward functions                |
 
-Deferring (action `0`) enables **temporal flexibility**. It gives the agent an option to wait for:
-- **Lower carbon intensity**
-- **Cheaper electricity prices**
-- **Higher resource availability**
+Most basic reward functions accept a `normalize_factor` argument during initialization to scale the raw metric into a suitable reward range (typically negative for penalties).
 
-However, every task has a **deadline (SLA)**. If it waits too long, it will **violate the SLA** and may incur a penalty.
+### 8.2 Composite & Custom Rewards
 
-This flexible action space supports **more intelligent and sustainability-aware scheduling strategies**.
+The power of the system lies in its ability to combine these building blocks or introduce entirely new ones:
 
----
+*   **Composite Rewards:** The `CompositeReward` class allows users to define a multi-objective reward function by specifying a dictionary of components and their respective weights. It automatically instantiates the required sub-reward functions and calculates the final reward as a weighted sum.
+    *   **Configuration:** This is typically done in the `reward_config.yaml` file passed during training setup.
+    *   **Example (`reward_config.yaml`):**
+        ```yaml
+        reward:
+          normalize: false # Normalization can be handled by CompositeReward if needed
+          components:
+            energy_price:
+              weight: 0.4
+              args: { normalize_factor: 10000 } # Optional args for sub-rewards
+            carbon_emissions:
+              weight: 0.4
+              args: { normalize_factor: 100 }
+            sla_penalty:
+              weight: 0.2
+              args: { penalty_per_violation: 5.0 }
+            transmission_cost:
+              weight: 0.1
+              args: { normalize_factor: 50 }
+        ```
+    *   **Instantiation:** The `CompositeReward` class uses a registry system (`rewards.reward_registry`) to find and instantiate the necessary sub-reward classes (`EnergyPriceReward`, `CarbonEmissionsReward`, etc.) based on the names provided in the configuration.
+    *   **Internal Normalization (Optional):** `CompositeReward` itself can optionally apply running mean/std normalization to the raw output of each component before weighting and summing, providing adaptive reward scaling during training (`normalize=True`).
 
-## Task Origin Generation Logic
+*   **Custom Rewards:** Users can easily implement novel reward criteria:
+    1.  Create a new Python file in `rewards/predefined/`.
+    2.  Define a class inheriting from `BaseReward`.
+    3.  Implement the `__call__(self, cluster_info, current_tasks, current_time)` method to calculate the custom reward logic based on the simulation state.
+    4.  Register the new class using the `@register_reward("your_custom_reward_name")` decorator (imported from `rewards.registry_utils`).
+    5.  Import the new class within `rewards/reward_registry.py` to ensure the decorator runs and the reward is available for use in composite configurations.
 
-In our benchmark, tasks are not generated randomly across data centers. Instead, we simulate a more realistic scenario by incorporating a **hybrid logic** that accounts for both population and time-zone activity.
+This modular design facilitates reproducible experiments comparing different objective functions and allows researchers to easily inject domain-specific knowledge or novel sustainability metrics into the RL training process.
 
-### Key Concepts
+A more detailed explanation of the reward system, including the mathematical formulations and examples of how to create custom rewards, can be found in the `rewards/README.md` file.
 
-We model task origins using a **weighted probability distribution** that is influenced by:
+## 9. Code Organization
 
-- **Population-Based Weights**: Each data center is assigned a base weight representing its population and economic importance.
-- **Local Time-of-Day**: Task generation is more likely during local business hours (8:00 to 20:00 local time).
+The GreenDCC repository is structured to separate concerns, making it easier to understand, configure, and extend the benchmark.
 
-### Algorithm Steps
+### 9.1 Code Architecture
 
-1. **Score Computation**:
-   - For each datacenter, compute:
-     ```
-     score = population_weight × activity_factor
-     ```
-     where:
-     - `population_weight` is a static weight from the config (e.g. 0.25 for New York).
-     - `activity_factor` is `1.0` if local hour is within [8, 20), else `0.3`.
-
-2. **Probabilistic Sampling**:
-   - Normalize the scores into probabilities.
-   - For each task to generate, sample a datacenter as its origin according to this probability distribution.
-
-3. **Result**:
-   - Tasks originate in a realistic, time-aware way: more tasks are generated in large/populous regions, especially during their business hours.
-
-### Motivation
-
-This approach ensures:
-- Realistic global usage patterns
-- Dynamic variation throughout the day
-- Load balancing across DCs with appropriate biases
-
-This logic is implemented in the utility function `assign_task_origins()` used during task extraction in the pipeline.
-
-- **Geographic and Policy-based Transfer Constraints**  
-  We plan to introduce restrictions on task transmission between datacenters based on geographic or regulatory constraints (e.g., GDPR compliance, national data residency laws, inter-region data sovereignty). This will allow more realistic simulations of compliance-aware task placement.
-
----
-
-## 📁 Code Structure
+The core simulation and RL interaction follows a hierarchical structure:
 
 ```
-envs/                         # RL-compatible Gym environments
-├── env_config.py            # Config class for environments
-├── task_scheduling_env.py   # Global Gym wrapper for training & evaluation
-├── sustaindc/               # Internal simulation for datacenter agents
-│   ├── __init__.py
-│   ├── sustaindc_env.py     # Main multi-agent SustainDC environment
-│   ├── battery_env.py       # Battery simulation (not used)
-│   ├── battery_model.py     # Battery power & capacity dynamics (not used)
-│   ├── timeloadshifting_env.py # Load shifting queue & SLA simulation (not used)
-│   ├── datacenter_model.py  # Physical data center IT & HVAC model
-│   └── dc_gym.py            # Gym interface for the datacenter model
+         +-----------------------+
+         |  TaskSchedulingEnv    |  <- Gymnasium Env Wrapper (envs/task_scheduling_env.py)
+         |  (Agent Interface)    |  - Provides step(), reset(), observation/action spaces
+         +-----------+-----------+
+                     | (Manages)
+                     v
+ +---------------------------------------------+
+ |      DatacenterClusterManager               |  <- Cluster Simulation Backend (simulation/cluster_manager.py)
+ |  (Manages DCs, Task Routing, Global Clock)  |  - Loads tasks, handles routing/deferral/delay logic
+ |                                             |  - Steps individual DCs, aggregates results
+ |  +----------------+    +----------------+   |
+ |  | SustainDC(DC1) |    | SustainDC(DC2) |...|  <- Individual DC Simulators (envs/sustaindc/sustaindc_env.py)
+ |  +-------+--------+    +-------+--------+   |  - Simulate IT load, cooling, energy, carbon, resources
+ |          | (Uses)              | (Uses)     |
+ |          v                     v            |
+ |  +-------+--------+    +-------+--------+   |
+ |  | DatacenterModel|    | DatacenterModel|   |  <- Physics Models (envs/sustaindc/datacenter_model.py)
+ |  +----------------+    +----------------+   |  - Equations for power, thermal, HVAC dynamics
+ +---------------------------------------------+
 ```
 
-```
-simulation/                  # High-level simulator
-├── __init__.py
-└── datacenter_cluster_manager.py   # Manages multiple datacenters + task routing
-```
-
-```
-rl_components/               # RL agent logic and training utilities
-├── agent_net.py             # Actor neural network (for SAC or other RL)
-├── replay_buffer.py         # Experience replay buffer
-└── task.py                  # Task class (job ID, resource needs, SLA, etc.)
-```
-
-```
-rewards/                     # Reward function system
-├── base_reward.py           # Reward interface
-├── reward_registry.py       # Auto-loading and registry
-└── predefined/              # All predefined rewards
-    ├── energy_price_reward.py       # Energy price reward
-    ├── carbon_emissions_reward.py   # Carbon emissions reward
-    ├── energy_consumption_reward.py # Energy consumption reward
-    ├── sla_penalty_reward.py        # SLA penalty reward
-    ├── efficiency_reward.py         # Efficiency reward
-    └── composite_reward.py          # Composite reward for multiple objectives
-
-```
-```
-utils/                       # Utilities and managers
-├── make_envs_pyenv.py       # Functions to construct internal envs
-├── managers.py              # CI, price, time, weather managers
-├── utils_cf.py              # Config and helper utilities
-├── dc_config_reader.py      # Parse & process DC config files
-└── task_assignment_strategies.py  # Rule-based task routing policies
-```
-
----
-
-## Example Use Cases
-
-- RL agent for low-cost, low-carbon scheduling
-- Rule-based heuristics (most available, least emissions, etc.)
-- Evaluate multi-objective optimization strategies
-- Ablation on reward signals (carbon vs. cost vs. transfer)
-
----
-
-## Example Metrics Output
-
-Datacenter DC1:
-   - Total Tasks Executed: 14640
-   - Total Energy Used: 285,481.07 kWh
-   - Average CPU Usage: 58.99%
-   - Total Bandwidth Used: 58,818 GB
-
-Datacenter DC2:
-   - Task Share: 18.95%
-   - Avg Energy per Step: 275.63 kWh
-
----
+*   **`TaskSchedulingEnv`:** The top-level Gymnasium-compatible environment that RL agents interact with. It translates agent actions (defer/assign) into simulation commands, manages the flow of observations (constructing per-task state vectors), calls the reward function, and advances the simulation clock via the `DatacenterClusterManager`.
+*   **`DatacenterClusterManager`:** The main backend simulation orchestrator. It initializes and holds instances of all `SustainDC` environments. It manages the master simulation clock, loads tasks from the workload trace, implements routing logic (rule-based or receiving assignments from `TaskSchedulingEnv`), handles transmission delays, calls the `step()` method of each individual `SustainDC`, and aggregates their results (energy, cost, emissions, etc.).
+*   **`SustainDC`:** Represents a single datacenter. It manages the internal state (resource availability, running/pending tasks), interacts with its own physical model (`DatacenterModel`), and tracks local metrics. It receives tasks assigned by the `DatacenterClusterManager`, simulates their execution, and reports its status back.
+*   **`DatacenterModel`:** Contains the core physics-based equations for calculating IT power (CPU, GPU, Memory, Fans), heat generation, airflow, cooling load, and HVAC system power consumption based on workload, configuration, and environmental conditions.
+
+### 9.2 Directory Structure
+
+The codebase is organized into the following main directories:
+
+*   `configs/`: Contains YAML configuration files for simulation parameters (`sim_config.yaml`), datacenter definitions (`datacenters.yaml`), reward functions (`reward_config.yaml`), RL algorithm hyperparameters (`algorithm_config.yaml`), and detailed DC physical parameters (`configs/dcs/dc_config.json`).
+*   `data/`: Stores all input datasets and related processing scripts.
+    *   `carbon_intensity/`: Real-world grid carbon intensity data (gCO₂/kWh), organized by location code and year.
+    *   `electricity_prices/`: Real-world electricity price data (USD/MWh), organized by location code and year, including raw data, processing scripts, and standardized outputs.
+    *   `network_cost/`: Data and logic for inter-datacenter transmission costs (per-GB matrices for AWS/GCP/Azure) and transmission delay calculations (`network_delay.py`).
+    *   `weather/`: Historical weather data (temperature), organized by location code and year.
+    *   `workload/`: Processed Alibaba GPU cluster trace (`.pkl` file), raw trace files (if downloaded), analysis/processing scripts, and documentation.
+*   `envs/`: Contains the Gymnasium environment implementations.
+    *   `task_scheduling_env.py`: The main top-level environment (`TaskSchedulingEnv`) for RL agents.
+    *   `sustaindc/`: Sub-package implementing the individual datacenter simulation (`SustainDC`) and its underlying physical models (`DatacenterModel`, `battery_model.py`, etc.).
+*   `rewards/`: Defines the modular reward system.
+    *   `base_reward.py`: Abstract base class for all reward functions.
+    *   `predefined/`: Implementations of built-in reward components (e.g., `energy_price_reward.py`, `carbon_emissions_reward.py`, `composite_reward.py`).
+    *   `reward_registry.py`, `registry_utils.py`: System for registering and dynamically loading reward functions.
+*   `rl_components/`: Contains building blocks for RL agents.
+    *   `agent_net.py`: Neural network definitions (e.g., `ActorNet`, `CriticNet` used by SAC).
+    *   `replay_buffer.py`: Replay buffer implementation (`FastReplayBuffer`) handling variable task lists via padding/masking.
+    *   `task.py`: Defines the `Task` class holding job information.
+*   `simulation/`: Core simulation logic outside the Gym environment structure.
+    *   `cluster_manager.py`: Implements the `DatacenterClusterManager` responsible for orchestrating multiple DCs.
+*   `utils/`: Helper functions and utilities for various tasks.
+    *   Configuration loading (`config_loader.py`), logging (`config_logger.py`), checkpointing (`checkpoint_manager.py`).
+    *   Data loading and management (`managers.py`, `transmission_cost_loader.py`, `dc_config_reader.py`).
+    *   Task processing (`workload_utils.py`), rule-based assignment strategies (`task_assignment_strategies.py`), region mapping (`transmission_region_mapper.py`).
+*   `assets/`: Static files like figures and potentially CSS/JS for future dashboards.
+*   `checkpoints/`: Default directory for saving RL agent checkpoints during training.
+*   `logs/`: Default directory for saving log files during training or evaluation.
+*   `tests/`: Unit tests for various components of the codebase.
+*   `train_rl_agent.py`: Example script for training the default SAC agent.
+*   `eval_agent_notebook.py`: Script/notebook for evaluating trained agents or rule-based controllers.
+*   `requirements.txt`: Python package dependencies.
+
+
+## 10. Quickstart & Examples
+
+This section provides instructions on how to quickly set up the environment, run the provided Reinforcement Learning training example, and monitor its progress.
+
+### 10.1 Installation
+
+Ensure you have Conda (or Miniconda/Mamba) installed.
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/HewlettPackard/green-dcc/
+    cd green-dcc
+    ```
+2.  **Create Conda Environment:**
+    ```bash
+    conda create -n green-dcc python=3.10
+    conda activate green-dcc
+    ```
+3.  **Install Dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+4.  **Workload Dataset (Automatic Unzip):**
+    *   The processed Alibaba workload trace is expected as a `.pkl` file (e.g., `data/workload/alibaba_2020_dataset/result_df_full_year_2020.pkl`, path defined in `sim_config.yaml`).
+    *   Due to its size, this `.pkl` file is distributed within a `.zip` archive (e.g., `result_df_full_year_2020.zip`) located in the *same directory* where the `.pkl` file is expected.
+    *   **No manual unzipping is required.** The first time you run a simulation or training script that needs the workload data (`DatacenterClusterManager`), the code will automatically detect if the `.pkl` file is missing and attempt to extract it from the corresponding `.zip` file in the same location.
+    *   Ensure the `.zip` archive containing the workload data is present in the correct directory (`data/workload/alibaba_2020_dataset/` by default) after cloning or downloading the repository.
+
+### 10.2 Training (SAC + Configs)
+
+GreenDCC includes an example training script (`train_rl_agent.py`) using the Soft Actor-Critic (SAC) algorithm. The training process is highly configurable via YAML files located in `configs/env/`.
+
+*   **Configuration Files:**
+    *   `sim_config.yaml`: Controls simulation settings.
+        *   `year`, `month`, `init_day`, `init_hour`: Start date/time of the simulation period.
+        *   `duration_days`: Length of the simulation period.
+        *   `timestep_minutes`: Simulation step duration (fixed at 15).
+        *   `workload_path`: Path to the processed workload trace file (`.pkl`).
+        *   `cloud_provider`: Specifies which provider's transmission cost matrix to use (`aws`, `gcp`, `azure`, or `custom`).
+        *   `shuffle_datacenters`: Whether to randomize DC order internally (can affect some rule-based strategies).
+        *   `strategy`: Set to `"manual_rl"` for RL training, allowing the agent to control assignments. Other values invoke rule-based controllers.
+        *   `use_tensorboard`: Enable/disable TensorBoard logging.
+    *   `datacenters.yaml`: Defines the cluster composition: list of DCs with their `dc_id`, `location`, resource capacities (`total_cores`, `total_gpus`, `total_mem`), `timezone_shift`, `population_weight`, and path to the detailed `dc_config_file`.
+    *   `reward_config.yaml`: Specifies the reward function, typically a `CompositeReward` combining multiple objectives with weights and normalization arguments (see Section 8).
+    *   `algorithm_config.yaml`: Configures the RL algorithm's hyperparameters (specific to SAC in the default example).
+        *   `gamma`: Discount factor.
+        *   `alpha`: SAC entropy temperature coefficient.
+        *   `actor_learning_rate`, `critic_learning_rate`: Learning rates for optimizers.
+        *   `batch_size`: Number of transitions sampled from the replay buffer per update.
+        *   `tau`: Soft update coefficient for target networks.
+        *   `replay_buffer_size`: Capacity of the experience replay buffer.
+        *   `warmup_steps`: Number of initial steps using random actions before training starts.
+        *   `total_steps`: Total number of environment steps for the training run.
+        *   `update_frequency`: Perform RL updates every N environment steps.
+        *   `policy_update_frequency`: Delay actor updates relative to critic updates (SAC specific).
+        *   `save_interval`, `log_interval`: Frequency for saving checkpoints and logging metrics.
+        *   `hidden_dim`: Size of hidden layers in actor/critic networks.
+        *   `max_tasks`: Maximum number of tasks per timestep the replay buffer pads to. Crucial for memory usage; should be large enough to accommodate peak task arrivals but not excessively large.
+        *   `device`: `cpu`, `cuda`, or `auto`.
 
----
-## Code Architecture
+*   **Start Training:**
+    *   **Default Configuration:**
+        ```bash
+        python train_rl_agent.py
+        ```
+    *   **Custom Configuration:** Specify paths to your modified config files:
+        ```bash
+        python train_rl_agent.py \
+            --sim-config path/to/your/sim_config.yaml \
+            --dc-config path/to/your/datacenters.yaml \
+            --reward-config path/to/your/reward_config.yaml \
+            --algo-config path/to/your/algorithm_config.yaml \
+            --enable-logger True \
+            --tag my_custom_experiment_run # Optional tag for organizing runs
+        ```
 
-```
-             +-----------------------+
-             |  TaskSchedulingEnv    |  ← Gym wrapper for RL agents
-             +-----------------------+
-                         ↓
-     +---------------------------------------------+
-     |      DatacenterClusterManager               |  ← Manages DCs and task routing
-     |  +----------------+    +----------------+   |
-     |  | SustainDC (DC1)|    | SustainDC (DC2)|...|
-     |  +----------------+    +----------------+   |
-     +---------------------------------------------+
-```
+### 10.3 Monitoring (TensorBoard)
 
-- `TaskSchedulingEnv`: A Gym-compatible wrapper. It presents observations to an RL agent, handles action dispatching, deferral logic, and reward computation using the cluster manager.
-- `DatacenterClusterManager`: Manages the state and operation of all individual datacenters. It is responsible for task routing (RBC), resource management, and step simulation inside each DC.
-- `SustainDC`: Simulates internal DC operation (power, scheduling, HVAC, etc.).
+Training progress, including rewards, losses, entropy, and potentially custom metrics, can be monitored using TensorBoard.
 
+*   **Log Location:** TensorBoard logs are saved by default to the `runs/` directory, within a subdirectory named `train_<timestamp>` or `train_<tag>_<timestamp>`. Debug logs are separately saved to the `logs/` directory.
+*   **Launch TensorBoard:** From the root directory of the project:
+    ```bash
+    tensorboard --logdir runs/
+    ```
+*   **Access Dashboard:** Open your web browser and navigate to `http://localhost:6006` (or the URL provided by TensorBoard). You can compare multiple training runs side-by-side.
 
-## Modular Reward System
+### 10.4 Checkpointing
 
-GreenDCC comes with a powerful modular reward engine. You can:
+Model checkpoints (actor, critic networks, and optimizer states) are saved during training to allow for resumption or later evaluation.
 
-- Optimize for **single** or **multiple** objectives
-- Use built-in rewards like `energy_price`, `carbon_emissions`, `transmission_cost`
-- Create **custom rewards** easily
-- Combine multiple rewards with weights using `CompositeReward`
+*   **Save Location:** Checkpoints are saved by default to the `checkpoints/` directory, within a subdirectory named `train_<timestamp>` or `train_<tag>_<timestamp>`.
+*   **Save Frequency:** Controlled by `save_interval` in `algorithm_config.yaml`.
+*   **Best Model:** The checkpoint corresponding to the best average reward (over a trailing window, e.g., 10 episodes) is typically saved as `best_checkpoint.pth`.
 
+## 11. Evaluation & Demo
 
-## Built-in Reward Functions
+GreenDCC provides tools and examples for evaluating the performance of different scheduling strategies, including trained RL agents and rule-based controllers.
 
-The following reward components are already available:
+### 11.1 Rule-based vs RL Evaluation
 
-| Reward Name          | Description                                      | Params                     |
-|----------------------|--------------------------------------------------|----------------------------|
-| `energy_price`       | Penalizes total energy cost of tasks             | `normalize_factor`         |
-| `carbon_emissions`   | Penalizes total kgCO₂ emissions                  | `normalize_factor`         |
-| `energy_consumption` | Penalizes total energy used (in kWh)             | `normalize_factor`         |
-| `efficiency`         | Penalizes energy per scheduled task              | _None_                     |
-| `sla_penalty`        | Penalizes number of SLA violations               | `penalty_per_violation`    |
-| `composite`          | Combines multiple reward components              | See below                  |
+You can compare the performance of a trained RL agent against various built-in rule-based heuristics using the provided evaluation script.
 
+*   **Available Rule-Based Controllers (RBCs):** These strategies are implemented in `utils/task_assignment_strategies.py` and can be selected by setting the `strategy` parameter in `configs/env/sim_config.yaml` (or by modifying the evaluation script):
+    *   `random`: Assigns tasks randomly to any available DC.
+    *   `round_robin`: Cycles through DCs in order for assignment.
+    *   `most_available`: Assigns tasks to the DC with the most available resources (e.g., highest percentage of free cores).
+    *   `least_pending`: Assigns tasks to the DC with the fewest tasks already in its pending queue.
+    *   `lowest_carbon`: Assigns tasks to the DC with the lowest current grid carbon intensity.
+    *   `lowest_price`: Assigns tasks to the DC with the lowest current electricity price.
+    *   *(Note: These RBCs do not utilize the "defer" action.)*
 
-👉 [See full reward documentation here »](rewards/README.md)
+*   **Running Evaluation:** The script `eval_agent_notebook.py` is designed for this comparison.
+    1.  **Configure the Run:**
+        *   **For RL Agent:** Set `use_actor = True` (or ensure `strategy: "manual_rl"` is set in `sim_config.yaml` used by the script). Update the `checkpoint_path` variable in the script to point to your trained agent's `.pth` file.
+        *   **For RBC:** Set `use_actor = False`. Modify the `sim_config.yaml` file loaded by the `make_eval_env` function within the script to set the desired `strategy` (e.g., `"lowest_carbon"`).
+    2.  **Execute:** Run the script (e.g., as a Python script or within a Jupyter environment):
+        ```bash
+        python eval_agent_notebook.py
+        ```
+        or execute the cells within a notebook interface.
+    3.  **Output:** The script simulates a predefined period (e.g., 7 days), collects detailed metrics at each timestep, and generates:
+        *   A summary table (`summary` DataFrame) aggregating key metrics (Total Energy Cost, Total CO₂, SLA Violation Rate, Avg Utilizations, etc.) per datacenter over the evaluation period.
+        *   A series of plots visualizing the time evolution of metrics like energy price, carbon intensity, resource utilization, running tasks, assigned tasks, transmission costs, and (for RL agents) the number of deferred tasks per step.
+        *   A log file (`logs/evaluation_<timestamp>.log`) capturing detailed simulation events.
 
----
+*   **Comparing Results:** Run the script once for your trained RL agent and then separately for each RBC you want to compare against (by changing the `strategy` in the config) and using the same random seed. Compare the generated summary tables and plots to assess the trade-offs achieved by each approach across different objectives (cost, carbon, SLA, utilization).
 
-## 📊 Example Composite Reward
+### 11.2 Google Colab Notebook
 
-```python
-from rewards.predefined.composite_reward import CompositeReward
+For convenience and easy experimentation without local setup, a Google Colab notebook is provided:
 
-reward_fn = CompositeReward(
-    components={
-        "energy_price": {
-            "weight": 0.5,
-            "args": {"normalize_factor": 100000}
-        },
-        "carbon_emissions": {
-            "weight": 0.3,
-            "args": {"normalize_factor": 100}
-        },
-        "sla_penalty": {
-            "weight": 0.2,
-            "args": {"penalty_per_violation": 5.0}
-        }
-    }
-)
-```
+👉 **[Run GreenDCC Evaluation in Colab](https://colab.research.google.com/drive/1LLw313sG56l2I29E0Q9zh6KM0q5Z23WX?usp=sharing)**
 
+This notebook typically includes functionality to:
 
----
+*   Set up the GreenDCC environment within Colab.
+*   Upload a pre-trained agent checkpoint file (`.pth`).
+*   Run a simulation for a specified duration (e.g., 7 days) using either the uploaded agent or a selected rule-based controller.
+*   Generate summary statistics and visualizations similar to the local evaluation script, allowing for quick analysis and demonstration of scheduling performance.
 
-## SLA Modeling
+*(Note: The specific features and usage might evolve; refer to the notebook itself for the latest instructions.)*
 
-GreenDCC includes built-in SLA (Service-Level Agreement) constraints to evaluate how well policies meet time-sensitive requirements.
+### 11.3 Key Benchmark Metrics / Dashboard
 
-Each task is assigned a **deadline** calculated as:
+While a dedicated real-time dashboard is a planned feature, the standard evaluation output focuses on comparing strategies across key performance indicators (KPIs). Common ways to present benchmark results include:
 
+*   **Summary Tables:** Showing aggregated totals and averages for cost, energy, carbon, SLA violations, and utilization per DC and globally for each tested strategy (similar to the `summary` DataFrame in `eval_agent_notebook.py`).
+*   **Trade-off Plots:** Scatter plots visualizing the Pareto frontier or trade-offs between conflicting objectives (e.g., plotting Total Energy Cost vs. Total Carbon Emissions for different agents/strategies).
+*   **Time-Series Visualizations:** Line plots showing how key metrics evolve over the simulation period for different strategies (as generated by the evaluation script), highlighting dynamic behavior and adaptation to changing conditions.
 
-```python
-sla_deadline = arrival_time + sla_multiplier * duration
-```
+These metrics and visualizations provide a quantitative basis for comparing the effectiveness of different sustainable scheduling approaches within the GreenDCC benchmark.
 
-where:
-- `arrival_time`: The time when the task arrives at the datacenter.
-- `sla_multiplier`: A configurable value (default: `1.5`) that defines the allowable slack.
-- `duration`: The expected duration of the task.
+## 12. Planned Features & Roadmap
 
-For example, a task with a duration of 60 minutes and a `sla_multiplier` of `1.5` must finish within 90 minutes (60 * 1.5) from its arrival time.
+GreenDCC is under active development. We plan to enhance the benchmark with several features to increase its realism, scope, and usability:
 
-This mechanism introduces flexibility in scheduling, allowing the agent to **temporarily defer tasks** for greener or more cost-effective options while still respecting SLA constraints.
+*   **Geographic and Policy-based Transfer Constraints:** Introduce mechanisms to model and enforce restrictions on inter-datacenter task transfers based on data residency requirements (e.g., GDPR), national regulations, or other policy constraints.
+*   **Refined Transmission Emissions Modeling:** Move beyond the current origin-based approximation for transmission carbon emissions towards more sophisticated bottom-up network models that account for path routing, network segment efficiencies (core vs. access), and potentially dynamic energy consumption based on traffic load (e.g., based on [Guennebaud et al., 2024](https://doi.org/10.1111/jiec.13513)).
+*   **Enhanced GPU/Memory Power Modeling:** Further refine the power models for GPUs and memory components to better capture variations based on specific workload types (e.g., training vs. inference) or hardware generations, potentially incorporating idle power states.
+*   **Workload Prioritization and Tiers:** Integrate distinct job types with varying priorities or SLA strictness (e.g., critical vs. best-effort, interactive vs. batch) and resource guarantees.
+*   **Expanded Regional Coverage:** Continue adding support for more datacenter locations and associated real-world datasets, particularly focusing on underrepresented regions in Africa, South America, and Southeast Asia.
+*   **Co-location and Multi-Tenancy Modeling:** Introduce features to simulate scenarios where multiple tenants or services with different objectives share the same physical infrastructure.
+*   **Visualization Dashboard:** Develop a web-based dashboard for real-time visualization of key metrics (energy, carbon, cost, utilization, queue lengths) during simulation runs or for interactive exploration of results.
+*   **Advanced Cooling Models:** Option to integrate more detailed HVAC models or allow agent control over cooling setpoints (e.g., CRAC temperature).
+*   **Battery Storage Integration:** Activate and enhance the battery simulation module, potentially allowing RL agents to control charging/discharging cycles for cost/carbon arbitrage or peak shaving.
 
-> This approach is inspired by the slack-based methodology in:
-> *Sustainable AIGC Workload Scheduling of Geo-Distributed Data Centers: A Multi-Agent Reinforcement Learning Approach*  
-> [https://arxiv.org/abs/2304.07948](https://arxiv.org/abs/2304.07948)
+We welcome contributions and suggestions from the community! Feel free to open an issue on GitHub to discuss potential features or enhancements.
 
-In that paper, the authors simulate fixed job slack times proportional to job duration, a structure also mirrored here.
+## 13. Citation, License & Contributors
+If you use the GreenDCC benchmark or codebase in your research, please cite our work. 
 
-### Per-Task SLA Tiers
-GreenDCC also supports assigning custom `sla_factor` values per task to reflect different urgency levels:
-
-| Priority | SLA Factor | Description                    |
-|----------|------------|--------------------------------|
-| Urgent   | 1.1        | Must be executed immediately.  |
-| Normal   | 1.5        | Standard SLA, can be deferred. |
-| Flexible | 2.0        | Can be delayed significantly.  |
-
-This allows mixed workloads where some tasks are highly time-sensitive and others tolerate longer delays.
-
-You can set this directly when constructing tasks via:
-
-```python
-Task(..., sla_factor=1.5)
-```
-
-
-### SLA Violation Penalty
-
-If a task misses its SLA deadline, it will be marked as **violated**. You can penalize such violations in your reward by using the built-in `sla_penalty` component:
-
-```python
-"sla_penalty": {
-    "weight": 0.2,
-    "args": {"penalty_per_violation": 5.0}
-}
-```
-This allows policies to be evaluated based on both sustainability **and** reliability metrics.
-
-### Why this matters
-
-Not all users have the same priorities:
-
-- **Cloud providers** might care about minimizing **energy price** and **resource efficiency**.
-- **Sustainability-focused** deployments may want to reduce **carbon emissions** or **energy consumption**.
-- Others may want to enforce strict **SLA guarantees**.
-
-With our modular system, you can **define custom reward combinations** that align with your specific optimization objectives.
-This flexibility allows you to tailor the training process to your unique needs, whether you're focused on cost, carbon emissions, etc. or a combination of multiple factors.
-
----
-
-### Carbon Emissions from Inter-Datacenter Transfers
-
-GreenDCC simulates not only compute-related emissions, but also **carbon emissions associated with data transfers** between datacenters.
-
-This matters for sustainable workload scheduling because AI workloads (especially training or fine-tuning) involve **large data transfers**, and moving that data across long distances consumes non-negligible electricity in the **network infrastructure**.
-
-#### Current Model (Simple, Efficient Approximation)
-
-At this stage, we estimate **transmission-related carbon emissions** using a linear model:
-
-```python
-emissions_kg = task.bandwidth_gb × 0.06 kWh/GB × carbon_intensity_origin
-```
-
-- `bandwidth_gb`: size of the task to be transmitted (from Alibaba 2020 dataset)
-- `0.06 kWh/GB`: average electricity required to transmit 1 GB of data (from [Aslan et al., 2017](https://doi.org/10.1111/jiec.12630))
-- `carbon_intensity_origin`: current carbon intensity (kgCO₂/kWh) at the **origin datacenter’s** location
-
-This approach assumes that most of the energy consumption for transmission happens near the **origin region**, which aligns with findings from empirical network energy studies (e.g., [Guennebaud et al., 2024](https://doi.org/10.1111/jiec.13513)).
-
-#### Example
-
-If a 50 GB task is transferred from a region with:
-- Carbon intensity = 400 gCO₂/kWh (i.e., 0.4 kgCO₂/kWh)
-
-Then:
-```python
-emissions = 50 × 0.06 × 0.4 = 1.2 kgCO₂
-```
-
-This emission is recorded and optionally **penalized via reward** in the RL training loop.
-
-#### Planned Improvements
-
-We plan to introduce a more realistic **bottom-up network model** based on:
-> *Energy consumption of data transfer: Intensity indicators versus absolute estimates*, Guennebaud et al. (2024)  
-> [https://doi.org/10.1111/jiec.13513](https://doi.org/10.1111/jiec.13513)
-
-This will account for:
-- Core vs. access network separation
-- Dynamic peak vs. idle energy allocation
-- Long-haul routing paths
-- Origin/destination asymmetry
-
-That model will enable **better estimation of network emissions under complex scenarios**, but our current approach gives fast and robust results for sustainability-aware scheduling.
-
----
-
-## Installation
-### Requirements
-```bash
-pip install -r requirements.txt
-```
-### Environment Setup
-```bash
-conda create -n green-dcc python=3.10
-conda activate green-dcc
-pip install -r requirements.txt
-```
-
----
-# 🏋️‍♂️ Training the RL Agent in GreenDCC
-
-GreenDCC supports training Deep Reinforcement Learning agents using **Soft Actor-Critic (SAC)**. The training loop is fully configurable via YAML files and supports easy experimentation across different sustainability and efficiency goals.
-
----
-
-## Configuration Overview
-
-Training is driven by four modular config files:
-
-| Config File | Purpose |
-|-------------|---------|
-| `sim_config.yaml` | Simulation time, strategy, task sources |
-| `datacenters.yaml` | DCs with location, resource specs, energy model |
-| `reward_config.yaml` | Reward weights for carbon, cost, SLA, etc. |
-| `algorithm_config.yaml` | RL hyperparameters (batch size, learning rate, etc.) |
-
----
-
-## Start Training
-
-Default:
-
-```bash
-python train_rl_agent.py
-```
-
-With custom paths:
-
-```bash
-python train_rl_agent.py \
-    --sim-config configs/env/sim_config.yaml \
-    --dc-config configs/env/datacenters.yaml \
-    --reward-config configs/env/reward_config.yaml \
-    --algo-config configs/env/algorithm_config.yaml \
-    --tag my_experiment
-```
-
-Use `--checkpoint-path` to resume from a previous run.
-
----
-
-## RL Algorithm
-
-The default training method is **Soft Actor-Critic (SAC)**, which features:
-
-- Stable off-policy learning
-- Entropy-based exploration
-- Replay buffer optimization
-
-The agent learns to **defer or route tasks** for better long-term trade-offs in carbon, cost, and load balancing.
-
----
-
-## Checkpointing
-
-Model checkpoints are saved in:
-
-```
-checkpoints/train_<timestamp>/
-├── checkpoint_step_5000.pth
-├── checkpoint_step_10000.pth
-└── best_checkpoint.pth
-```
-
-Use them to resume training or for evaluation.
-
----
-
-## Customize Everything
-
-Want to test a new reward? Just edit `reward_config.yaml`.
-
-Want a different datacenter mix? Update `datacenters.yaml`.
-
-Want faster updates or a longer warmup? Modify `algorithm_config.yaml`.
-
-GreenDCC’s config-driven design makes it easy to explore new ideas.
-
----
-
-## 📈 Tracking Training with TensorBoard
-
-GreenDCC logs all major training metrics to **TensorBoard**, including:
-
-- Total and per-step rewards
-- Actor policy entropy
-- Q-value estimates and loss
-- Policy gradients and loss
-- Reward component breakdowns (for composite rewards)
-
-### 🏁 How to Launch
-
-From the root directory:
-
-```bash
-tensorboard --logdir runs/
-```
-
-Then navigate to:
-
-👉 http://localhost:6006
-
-Each run logs to:
-
-```
-runs/train_<timestamp>/
-```
-
-You can compare multiple runs simultaneously for performance diagnostics or ablations.
-
----
-## Customize Everything
-
-Want to test a new reward? Just edit `reward_config.yaml`.
-
-Want a different datacenter mix? Update `datacenters.yaml`.
-
-Want faster updates or a longer warmup? Modify `algorithm_config.yaml`.
-
-GreenDCC’s config-driven design makes it easy to explore new ideas.
-
----
-
-## Evaluation
-
-### Evaluation using Rule-based Controllers or RL Agents
-
-You can evaluate different controllers by plugging them into the DatacenterClusterManager. Available strategies:
-
-- random
-- round_robin
-- most_available
-- least_pending
-- lowest_carbon
-- lowest_price
-- manual_rl (custom RL policy)
-
-To run the evaluation, take a look to:
-
-```bash
-python eval_agent_notebook.py
-```
-This will run a simulation for 7 days and compare the performance of the selected controller against a rule-based controller.
-You need to specify the controller you want to evaluate in the `controller` variable.
-Also you need to specify the checkpoint if using a RL agent.
-
----
-
-## Google Colab Evaluation
-
-A ready-to-run Google Colab notebook is available for testing and evaluation:
-
-👉 **[Run it here](https://colab.research.google.com/drive/1LLw313sG56l2I29E0Q9zh6KM0q5Z23WX?usp=sharing)**
-
-The notebook supports:
-- Uploading a trained agent checkpoint
-- Running simulation for 7 days
-- Comparing with a rule-based controller
-- Visualizing energy, carbon, and resource usage
-
----
-
-## 🛣️ Planned Features and Enhancements
-
-GreenDCC is actively evolving. Upcoming features include:
-
-- **Geographic and Policy-based Transfer Constraints**  
-  Enforce restrictions on inter-datacenter transfers based on legal or geopolitical constraints, such as GDPR or cross-border data regulations.
-
-- **Expanded Regional Coverage**  
-  Support for more datacenter locations and energy markets in Africa, South America, and Southeast Asia.
-
-- **Transmission Emissions Refinement**  
-  Upgrade from fixed energy intensities to path-based dynamic models for data transmission.
-
-- **GPU + Memory Energy Modeling**  
-  Extend energy consumption models to include GPU and memory usage, enabling more accurate sustainability tracking of training and inference tasks.
-
-- **Workload Prioritization and Tiers**  
-  Integrate flexible vs. non-flexible job types, with varying SLA strictness and resource guarantees.
-
-- **Colocation-aware Modeling**  
-  Add support for shared infrastructure scenarios with multiple tenants or service-level priorities.
-
-- **Visualization Dashboard**  
-  Real-time dashboards to visualize energy, carbon, and cost metrics during training or evaluation.
-
-Want to contribute or suggest features? Open an issue or reach out!
-
-## TODO
-
-- More rule-based controllers for baseline comparison
-- Improve the Google colab notebook
-
----
-
-## Citation / Credits
+### 13.1 Citation / Credits
 
 This project builds on work from:
 
@@ -1128,14 +817,10 @@ This project builds on work from:
 - Open-Meteo API
 - GridStatus.io
 
----
-
-## License
+### 13.2 License
 
 MIT License. Attribution to original dataset sources is required.
 
----
-
-## Contributors
+### 13.3 Contributors
 
 Feel free to open issues or PRs for improvements, bugs, or suggestions.

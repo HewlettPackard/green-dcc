@@ -276,11 +276,3 @@ class TaskSchedulingEnv(gym.Env):
             obs.append(full_obs)
 
         return obs
-
-
-
-    def render(self):
-        pass
-
-    def close(self):
-        pass
