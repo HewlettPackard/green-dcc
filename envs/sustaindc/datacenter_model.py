@@ -157,7 +157,50 @@ class Rack():
         self.num_gpus = self.num_servers if self.has_gpus else 0
         self.server_and_fan_init()
         self.v_fan_rack = None
-  
+
+# class Rack():
+#     def __init__(self, server_config_list, gpu_config_list=None, max_W_per_rack=10000, rack_config=None):
+#         """Defines the rack as a collection of servers with improved fan control"""
+#         self.rack_config = rack_config
+#         self.server_list = []
+#         self.has_gpus = gpu_config_list is not None
+#         self.current_rack_load = 0
+
+#         # Fan control parameters
+#         # start at moderate fan speed to prevent thermal runaway
+#         self.prev_fan_ratio_rack = 0.5
+#         self.smoothing_alpha = 0.1  # very slow smoothing: 10% new, 90% old    # slower response: 30% new, 70% old
+#         self.max_delta_ratio = 0.02  # tight rate limit: 2% change per step    # limit change per step
+#         # moderate sensitivity
+#         self.m_coefficient = 1  # baseline sensitivity
+#         self.c_coefficient = 0  # baseline offset
+#         self.it_slope = 20
+
+#         for i, server_config in enumerate(server_config_list):
+#             gpu_full_load_pwr = None
+#             gpu_idle_pwr = None
+#             if self.has_gpus and i < len(gpu_config_list):
+#                 gpu_full_load_pwr = gpu_config_list[i]['full_load_pwr']
+#                 gpu_idle_pwr = gpu_config_list[i]['idle_pwr']
+#             self.server_list.append(Server(
+#                 full_load_pwr=server_config['full_load_pwr'],
+#                 idle_pwr=server_config['idle_pwr'],
+#                 gpu_full_load_pwr=gpu_full_load_pwr,
+#                 gpu_idle_pwr=gpu_idle_pwr,
+#                 server_config=self.rack_config
+#             ))
+#             self.current_rack_load += self.server_list[-1].full_load_pwr
+#             if self.has_gpus and i < len(gpu_config_list):
+#                 self.current_rack_load += self.server_list[-1].gpu_full_load_pwr
+#             if self.current_rack_load >= max_W_per_rack:
+#                 self.server_list.pop()
+#                 break
+
+#         self.num_servers = len(self.server_list)
+#         self.num_gpus = self.num_servers if self.has_gpus else 0
+#         self.server_and_fan_init()
+#         self.v_fan_rack = None
+
     def server_and_fan_init(self,):
         """
         Initialize the Server and Fan parameters for the servers in each rack with the specified data center configurations
@@ -178,7 +221,7 @@ class Rack():
         self.m_coefficient = 10 #1 -> 10 
         self.c_coefficient = 5 #1 -> 5
         self.it_slope = 20 #100 -> 20
-            
+
         for server_item in self.server_list:
             
             #common to both cpu and fan
@@ -251,13 +294,90 @@ class Rack():
 
         return tot_cpu_pwr, np.array(tot_itfan_pwr).sum(), tot_gpu_pwr
 
-    def compute_instantaneous_pwr_vecd(self, inlet_temp, ITE_load_pct, GPU_load_pct=0):
+    def log_system_values(self, cpu_load, mem_load, gpu_load):
+        """
+        Simple function to append CPU, memory, and GPU load values to a CSV file.
+        
+        Args:
+            cpu_load (float): CPU load percentage (0-100)
+            mem_load (float): Memory load percentage (0-100)
+            gpu_load (float): GPU load percentage (0-100)
+            csv_path (str): Path to the CSV file
+        """
+        # Check if file exists to determine if we need to write 
+        import datetime
+        import csv
+        file_exists = os.path.isfile("system_resources.csv")
+        
+        # Open file in append mode
+        with open("system_resources.csv", 'a', newline='') as csvfile:
+            fieldnames = ['cpu_load', 'mem_load', 'gpu_load']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            # Write header if file is new
+            if not file_exists:
+                writer.writeheader()
+            
+            # Write the data row
+            writer.writerow({
+                'cpu_load': cpu_load,
+                'mem_load': mem_load,
+                'gpu_load': gpu_load
+            })
+    
+    def log_thermal_control_data(self, inlet_temp, fan_ratio, cpu_load, gpu_load, mem_load, cpu_power, gpu_power, fan_power):
+        """
+        Logs thermal control data to CSV for analysis and visualization.
+        """
+        import os
+        import csv
+        import datetime
+        import numpy as np
+        
+        # Get current timestamp
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Create file if it doesn't exist
+        filename = "thermal_control_data.csv"
+        file_exists = os.path.isfile(filename)
+        
+        # If fan_ratio is an array, use the average value
+        if hasattr(fan_ratio, '__iter__') and not isinstance(fan_ratio, str):
+            fan_ratio = float(np.mean(fan_ratio))
+        
+        with open(filename, 'a', newline='') as csvfile:
+            fieldnames = [
+                'timestamp', 'inlet_temp', 'fan_ratio', 'cpu_load', 'gpu_load', 'mem_load',
+                'cpu_power', 'gpu_power', 'fan_power', 'has_gpus'
+            ]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            # Write headers if file is new
+            if not file_exists:
+                writer.writeheader()
+            
+            # Write data row
+            writer.writerow({
+                'timestamp': timestamp,
+                'inlet_temp': inlet_temp,
+                'fan_ratio': fan_ratio,
+                'cpu_load': cpu_load,
+                'gpu_load': gpu_load,
+                'mem_load': mem_load,
+                'cpu_power': cpu_power,
+                'gpu_power': gpu_power,
+                'fan_power': fan_power,
+                'has_gpus': 1 if self.has_gpus else 0
+            })
+
+    def compute_instantaneous_pwr_vecd(self, inlet_temp, ITE_load_pct, GPU_load_pct=0, MEMORY_load_pct=0):
         """Calculate the power consumption of the whole rack at the current step in a vectorized manner
 
         Args:
             inlet_temp (float): Room temperature
             ITE_load_pct (float): Current CPU usage
             GPU_load_pct (float): Current GPU usage (optional, defaults to 0)
+            mem_load_pct (float): Current memory usage (optional, defaults to 0)
 
         Returns:
             tuple: (cpu_power, itfan_power, gpu_power)
@@ -266,13 +386,10 @@ class Rack():
         base_cpu_power_ratio = (self.m_cpu+0.05)*inlet_temp + self.c_cpu
         cpu_power_ratio_at_inlet_temp = base_cpu_power_ratio + self.ratio_shift_max_cpu*(ITE_load_pct/100)
         temp_arr = np.concatenate((self.idle_pwr.reshape(1,-1),
-                               (self.full_load_pwr*cpu_power_ratio_at_inlet_temp).reshape(1,-1)),
-                              axis=0)
+                            (self.full_load_pwr*cpu_power_ratio_at_inlet_temp).reshape(1,-1)),
+                            axis=0)
         cpu_power = np.max(temp_arr, axis=0)
 
-        # Memory power calculation and add to CPU power
-        memory_load = 0 # Based on the memory utilization 
-        
         # GPU power calculation
         gpu_power = np.zeros_like(cpu_power) if self.has_gpus else np.zeros(1)
         if self.has_gpus and GPU_load_pct >= 0:
@@ -285,11 +402,23 @@ class Rack():
                     
         # IT fan power calculation - respond to the highest heat load
         # Add heats generated
-        effective_load = ITE_load_pct + GPU_load_pct + memory_load if self.has_gpus else ITE_load_pct
+        
+        effective_load = (ITE_load_pct + GPU_load_pct + MEMORY_load_pct)/3 if self.has_gpus else (ITE_load_pct + MEMORY_load_pct)/2
+  
         base_itfan_v_ratio = self.m_itfan*self.m_coefficient*inlet_temp + self.c_itfan*self.c_coefficient
+        
+        # Calculate fan ratio at current inlet temperature
         itfan_v_ratio_at_inlet_temp = base_itfan_v_ratio + self.ratio_shift_max_itfan*(effective_load/self.it_slope)
+        
+        # Calculate fan power based on ratio
         itfan_pwr = self.ITFAN_REF_P * (itfan_v_ratio_at_inlet_temp/self.ITFAN_REF_V_RATIO)
+        
+        # Set fan rack velocity for later use
         self.v_fan_rack = self.IT_FAN_FULL_LOAD_V*itfan_v_ratio_at_inlet_temp
+        
+        # Log fan speed ratio and other relevant values
+        self.log_thermal_control_data(inlet_temp, itfan_v_ratio_at_inlet_temp, ITE_load_pct, GPU_load_pct, MEMORY_load_pct, 
+                                np.sum(cpu_power), np.sum(gpu_power), np.sum(itfan_pwr))
         
         return np.sum(cpu_power), np.sum(itfan_pwr), np.sum(gpu_power)
 
@@ -375,12 +504,13 @@ class DataCenter_ITModel():
         self.cycles_of_concentration = 5
         self.drift_rate = 0.01
         
-    def compute_datacenter_IT_load_outlet_temp(self, ITE_load_pct_list, CRAC_setpoint, GPU_load_pct_list=None):
+    def compute_datacenter_IT_load_outlet_temp(self, ITE_load_pct_list, CRAC_setpoint, GPU_load_pct_list=None, MEMORY_load_pct_list=None):
         """Optimized power and thermal model assuming all racks are identical and utilization is uniform."""
         num_racks = len(self.racks_list)
         
         # === Validate that all utilization values are equal ===
         assert all(x == ITE_load_pct_list[0] for x in ITE_load_pct_list), "All CPU utilizations must be identical"
+        assert all(x == MEMORY_load_pct_list[0] for x in MEMORY_load_pct_list), "All MEMORY utilizations must be identical"
         if self.has_gpus:
             assert GPU_load_pct_list is not None, "GPU load list must be provided when GPUs are present"
             assert all(x == GPU_load_pct_list[0] for x in GPU_load_pct_list), "All GPU utilizations must be identical"
@@ -391,12 +521,14 @@ class DataCenter_ITModel():
         rack_inlet_temp = rack_supply_approach_temp + CRAC_setpoint
         
         cpu_util = ITE_load_pct_list[0]
+        mem_util = MEMORY_load_pct_list[0]
         gpu_util = GPU_load_pct_list[0] if self.has_gpus else 0
         
         rack_cpu_power, rack_itfan_power, rack_gpu_power = rack.compute_instantaneous_pwr_vecd(
             inlet_temp=rack_inlet_temp,
             ITE_load_pct=cpu_util,
-            GPU_load_pct=gpu_util
+            GPU_load_pct=gpu_util,
+            MEMORY_load_pct=mem_util
         )
         
         background_memory_power = 0.07 * self.dc_memory_GB / num_racks  # assume uniform per-rack memory power
@@ -619,6 +751,7 @@ def chiller_sizing(DC_Config, total_mem_GB, min_CRAC_setpoint=16, max_CRAC_setpo
     
     # Set maximum load for both CPU and GPU if present
     cpu_load = 100.0
+    mem_load = 100.0
     ITE_load_pct_list = [cpu_load for i in range(DC_Config.NUM_RACKS)]
     
     # Set GPU load if GPU config is available
@@ -627,10 +760,13 @@ def chiller_sizing(DC_Config, total_mem_GB, min_CRAC_setpoint=16, max_CRAC_setpo
         gpu_load = 100.0
         GPU_load_pct_list = [gpu_load for i in range(DC_Config.NUM_RACKS)]
     
+    mem_load_pct_list = [mem_load for i in range(DC_Config.NUM_RACKS)]
+    
     # Calculate with both CPU and GPU loads if GPU is present
     result = dc.compute_datacenter_IT_load_outlet_temp(
         ITE_load_pct_list=ITE_load_pct_list, 
         CRAC_setpoint=max_CRAC_setpoint,
+        MEMORY_load_pct_list=mem_load_pct_list, 
         GPU_load_pct_list=GPU_load_pct_list
     )
     
