@@ -84,9 +84,10 @@ class dc_gymenv(gym.Env):
         
         self.CRAC_Fan_load, self.CRAC_cooling_load, self.Compressor_load, self.CW_pump_load, self.CT_pump_load = None, None, None, None, None
         self.HVAC_load = self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]
-        self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_gpu_pwr, self.rackwise_outlet_temp = [], [], [], []
+        self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_memory_power, self.rackwise_gpu_pwr, self.rackwise_outlet_temp = [], [], [], [], []
         self.cpu_load_frac = 0.5
         self.gpu_load_frac = 0.5
+        self.mem_load_frac = 0.5
         self.bat_SoC = 300*1e3  # all units are SI
         
         self.raw_curr_state = None
@@ -124,7 +125,7 @@ class dc_gymenv(gym.Env):
 
         self.CRAC_Fan_load, self.CRAC_cooling_load, self.Compressor_load, self.CW_pump_load, self.CT_pump_load = None, None, None, None, None
         self.HVAC_load = self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]
-        self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_gpu_pwr, self.rackwise_outlet_temp = [], [], [], []
+        self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_gpu_pwr, self.rackwise_outlet_temp, self.rackwise_memory_power = [], [], [], [], []
         self.water_usage = None
         
         # self.raw_curr_state = self.get_obs()
@@ -143,6 +144,7 @@ class dc_gymenv(gym.Env):
             'dc_crac_setpoint': 16,
             'dc_cpu_workload_fraction': 1,
             'dc_gpu_workload_fraction': 1 if self.has_gpus else 0,  # Added GPU workload
+            'dc_mem_workload_fraction': 1,
             'dc_int_temperature': 16,
             'dc_exterior_ambient_temp': 16,
             'dc_CW_pump_power_kW': 0,
@@ -171,6 +173,7 @@ class dc_gymenv(gym.Env):
     
         # Prepare load percentages for all racks
         ITE_load_pct_list = [self.cpu_load_frac*100 for i in range(self.DC_Config.NUM_RACKS)]
+        mem_load_pct_list = [self.mem_load_frac*100 for i in range(self.DC_Config.NUM_RACKS)]
         
         # Prepare GPU load if GPUs are present
         GPU_load_pct_list = None
@@ -181,7 +184,8 @@ class dc_gymenv(gym.Env):
         result = self.dc.compute_datacenter_IT_load_outlet_temp(
             ITE_load_pct_list=ITE_load_pct_list, 
             CRAC_setpoint=self.raw_curr_stpt,
-            GPU_load_pct_list=GPU_load_pct_list
+            GPU_load_pct_list=GPU_load_pct_list,
+            MEMORY_load_pct_list=mem_load_pct_list
         )
         
         # Unpack result based on whether it includes GPU power
@@ -297,23 +301,22 @@ class dc_gymenv(gym.Env):
 
         return obs
 
-    def update_workload(self, cpu_load):
+    def update_workloads(self, cpu_load, mem_load, gpu_load):
         """
-        Updates the current CPU workload utilization. Fraction between 0.0 and 1.0
+        Updates the current CPU, GPU amd MEMORY utilization. Fraction between 0.0 and 1.0
         """
         if 0.0 > cpu_load or cpu_load > 1.0:
             print('CPU load out of bounds')
         assert 0.0 <= cpu_load <= 1.0, 'CPU load out of bounds'
         self.cpu_load_frac = cpu_load
-    
-    def update_gpu_workload(self, gpu_load):
-        """
-        Updates the current GPU workload utilization. Fraction between 0.0 and 1.0
-        """
         if 0.0 > gpu_load or gpu_load > 1.0:
             print('GPU load out of bounds')
         assert 0.0 <= gpu_load <= 1.0, 'GPU load out of bounds'
         self.gpu_load_frac = gpu_load
+        if 0.0 > mem_load or mem_load > 1.0:
+            print('Memory load out of bounds')
+        assert 0.0 <= mem_load <= 1.0, 'Memory load out of bounds'
+        self.mem_load_frac = mem_load
     
     def set_ambient_temp(self, ambient_temp, wet_bulb):
         """

@@ -187,14 +187,17 @@ def make_dc_env(month : int = 1,
     raw_curr_stpt = 27            # coldest setpoint → max HVAC response
     cpu_load = 100                # full CPU load
     gpu_load = 100                # full GPU load
+    mem_load = 100                # full MEMORY load
 
     ITE_load_pct_list = [cpu_load for _ in range(dc_config.NUM_RACKS)]
     GPU_load_pct_list = [gpu_load for _ in range(dc_config.NUM_RACKS)]
+    MEMORY_load_pct_list = [mem_load for _ in range(dc_config.NUM_RACKS)]
 
     result = dc.compute_datacenter_IT_load_outlet_temp(
         ITE_load_pct_list=ITE_load_pct_list,
         CRAC_setpoint=raw_curr_stpt,
-        GPU_load_pct_list=GPU_load_pct_list
+        GPU_load_pct_list=GPU_load_pct_list,
+        MEMORY_load_pct_list=MEMORY_load_pct_list
     )
     rackwise_gpu_pwr = 0
     if len(result) == 5:  # GPU and memory included
