@@ -133,7 +133,6 @@ for step in tqdm(range(steps)):
 info["datacenter_infos"]
 
 #%%
-
 flat_records = []
 
 for t, timestep_info in enumerate(infos_list):

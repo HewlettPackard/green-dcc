@@ -21,8 +21,8 @@ class ActorNet(nn.Module):
         return self.net(obs_batch)
 
     def sample_actions(self, obs_batch):
-        logits = self.forward(obs_batch)  # [T, act_dim]
-        probs = F.softmax(logits, dim=-1)  # [T, act_dim]
+        logits = self.forward(obs_batch)  # [T, obs_dim]
+        probs = F.softmax(logits, dim=-1)  # [T, obs_dim]
         dist = torch.distributions.Categorical(probs)
         actions = dist.sample()            # [T]
         log_probs = dist.log_prob(actions)  # [T]

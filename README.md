@@ -82,6 +82,7 @@ GreenDCC provides a comprehensive and realistic benchmark environment for develo
     *   **Grid Carbon Intensity:** Real gCO₂eq/kWh data from Electricity Maps.
     *   **Weather Data:** From Open-Meteo for temperature-aware cooling models.
     *   **Transmission Costs:** Region-to-region per-GB pricing from AWS, GCP, and Azure.
+
 *   **Physics-Informed Datacenter Modeling:** Simulates detailed energy consumption within each datacenter, including CPU/GPU/Memory power draw based on utilization, and a temperature-aware cooling/HVAC proxy model grounded in established thermal dynamics.
 *   **Transmission-Aware Routing (Cost & Delay):** Accounts for both monetary transfer costs (per-GB pricing) and realistic transmission delays calculated using empirical inter-datacenter throughput and RTT data (based on [Persico et al. (IEEE GLOBECOM 2016)](https://www.sciencedirect.com/science/article/abs/pii/S138912861630353X)), impacting task arrival times at remote sites.
 *   **Centralized Global Scheduler Simulation:** Models a scheduler overseeing multiple distributed data centers, making dispatch or deferral decisions for incoming tasks based on global system state.
@@ -97,7 +98,12 @@ GreenDCC simulates a centralized global task scheduler interacting with a cluste
 1.  **Task Generation:** New AI tasks (derived from the real-world trace) may arrive at their designated origin datacenters based on a population and time-zone probabilistic model. Any tasks previously time-deferred are also reconsidered.
 2.  **Observation:** The central agent (scheduler) observes the current global state, including time, environmental factors (price, carbon intensity), the state of each datacenter (resource availability, load), and the details of all pending tasks (requirements, origin, deadline).
 3.  **Action:** For *each* pending task, the agent decides whether to **defer** it to the next timestep or **assign** it to one of the `N` available datacenters for execution.
-4.  **Routing & Delay:** When a task is assigned to a remote datacenter (different from its origin), the system calculates and tracks the associated transmission **cost, energy consumption, and carbon emissions**. Additionally, a **transmission delay** (modeling data serialization and network propagation time) is computed. The task is held "in transit" during this delay and only becomes available for execution at the destination DC after it elapses.
+4.  **Routing & Delay:** When a task is assigned to a remote datacenter (different from its origin), the system calculates and tracks associated transmission impacts:
+    *   **Cost:** Monetary cost based on per-GB cloud provider rates (see Section 4.5).
+    *   **Energy:** Estimated using a fixed factor (currently 0.06 kWh/GB based on findings in [Aslan et al., 2017](https://doi.org/10.1111/jiec.12630)) multiplied by the task's data size (`bandwidth_gb`).
+    *   **Carbon Emissions:** Calculated as Transmission Energy × Origin Grid Carbon Intensity (using real-time data for the origin DC's location).
+    *   **Delay:** Computed using serialization + propagation time based on empirical data ([Persico et al., 2016](https://doi.org/10.1109/GLOCOM.2016.7841498)). See Section 7.5 for the formula.
+    The task is held "in transit" during this delay and only becomes available for execution at the destination DC after it elapses.
 5.  **Execution & State Update:** Each datacenter attempts to schedule its queued tasks based on resource availability. Internal models simulate **energy consumption, carbon emissions, and thermal dynamics**. The global clock advances by 15 minutes.
 6.  **Reward Calculation:** A scalar reward signal is computed based on the outcomes of the timestep (e.g., total cost, emissions, SLA violations) according to the configured reward function.
 
