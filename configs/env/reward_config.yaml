@@ -1,0 +1,47 @@
+# reward:
+#   normalize: false
+#   components:
+#     energy_price:
+#       weight: 0.5
+#       args:
+#         normalize_factor: 100000
+#     carbon_emissions:
+#       weight: 0.3
+#       args:
+#         normalize_factor: 10
+#     transmission_cost:
+#       weight: 0.2
+#       args:
+#         normalize_factor: 1
+#     sla_penalty:
+#       weight: 0.1
+#       args:
+#         penalty_per_violation: 5.0
+#     transmission_emissions:
+#       weight: 0.1
+#       args:
+#         normalize_factor: 1
+
+#     # Add more components as needed
+reward:
+  # Use internal running-stat normalization for better balancing.
+  normalize: false
+  freeze_stats_after_steps: 2000 # Freeze stats after 10k calls to reward function
+  components:
+    # Directly penalize monetary energy cost ($) using the improved reward function
+    energy_price:
+      weight: 0.9 # Example: Balance cost and carbon equally below SLA
+      args: {}    # No normalize_factor needed when normalize=true
+
+    # Penalize carbon emissions (kgCO2)
+    carbon_emissions:
+      weight: 0.3 # Example: Balance cost and carbon equally below SLA
+      args: {}
+
+    # # --- Use Timeliness Penalty ---
+    # timeliness_penalty:
+    #   weight: 0.5 # Keep high weight for timeliness
+    #   args:
+    #     penalty_factor_per_minute: 0.1  # Penalty increases by 0.1 per minute late
+    #     max_penalty_per_task: 20.0      # Max penalty for one task (e.g., 200 mins late)
+    #     reward_for_early_completion: true # Optional: Set to true to reward earliness

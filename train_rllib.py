@@ -132,7 +132,7 @@ if __name__ == '__main__':
         ),
         run_config=tune.RunConfig(
             name=NAME,
-            stop={"training_iteration": 100},
+            stop={"training_iteration": 100000},
             checkpoint_config=tune.CheckpointConfig(
                 checkpoint_frequency=1,
                 ),

@@ -1,0 +1,22 @@
+hvac_training:
+  algorithm: PPO
+  total_steps: 2_000_000 # PPO often needs more steps
+  learning_rate: 3e-4
+  n_steps: 2048        # Steps per rollout (PPO hyperparameter)
+  batch_size: 64         # Minibatch size for updates
+  num_epochs: 10         # PPO epochs per rollout
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_coef: 0.2         # PPO clipping parameter
+  ent_coef: 0.01        # Entropy coefficient
+  vf_coef: 0.5          # Value function coefficient
+  max_grad_norm: 0.5     # Gradient clipping
+  hidden_dim: 64       # Smaller hidden dim might be okay
+  hvac_obs_dim: 6        # <<<--- SET TO 6 (sinH, cosH, ambT, cpuL, gpuL, prevSP)
+  log_interval: 10000
+  save_interval: 100000
+  policy_save_path: "checkpoints/hvac_policy_ppo.pth" # Save PPO policy
+  location: "US-CAL-CISO"
+  simulation_year: 2023
+  load_profile: "variable"
+  weather_profile: "real"
