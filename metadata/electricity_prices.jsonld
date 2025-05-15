@@ -49,9 +49,9 @@
     "description": "A dataset containing electricity price data for various global regions. The data includes price measurements in local currencies per MWh for different geographical zones.",
     "conformsTo": "http://mlcommons.org/croissant/1.0",
     "license": "https://opensource.org/licenses/MIT",
-    "url": "https://github.com/HewlettPackard/green-dcc/tree/main",
+    "url": "https://github.com/HewlettPackard/sustain-cluster/tree/main",
     "version": "1.0.0",
-    "citeAs": "Hewlett Packard Enterprise (2023). Electricity Prices Dataset. GitHub. https://github.com/HewlettPackard/green-dcc/tree/main",
+    "citeAs": "Hewlett Packard Enterprise (2023). Electricity Prices Dataset. GitHub. https://github.com/HewlettPackard/sustain-cluster/tree/main",
     "creator": {
         "@type": "sc:Organization",
         "name": "Hewlett Packard Enterprise",
@@ -73,7 +73,7 @@
             "@id": "electricity_prices_files",
             "name": "Electricity Prices CSV Files",
             "description": "Collection of CSV files containing electricity price data for different regions and years",
-            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed",
+            "contentUrl": "https://github.com/HewlettPackard/sustain-cluster/tree/main/data/electricity_prices/processed",
             "encodingFormat": "text/csv",
             "includes": "**/*.csv"
         },
@@ -82,7 +82,7 @@
             "@id": "at_files",
             "name": "Austria Region Files",
             "description": "Electricity price data for Austria",
-            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AT",
+            "contentUrl": "https://github.com/HewlettPackard/sustain-cluster/tree/main/data/electricity_prices/processed/AT",
             "encodingFormat": "text/csv",
             "includes": "**/*.csv"
         },
@@ -91,7 +91,7 @@
             "@id": "at_2020_file",
             "name": "Austria 2020 Electricity Prices",
             "description": "Electricity price data for Austria in 2020",
-            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AT/2020/AT_electricity_prices_2020.csv",
+            "contentUrl": "https://github.com/HewlettPackard/sustain-cluster/tree/main/data/electricity_prices/processed/AT/2020/AT_electricity_prices_2020.csv",
             "encodingFormat": "text/csv"
         },
         {
@@ -99,7 +99,7 @@
             "@id": "at_2021_file",
             "name": "Austria 2021 Electricity Prices",
             "description": "Electricity price data for Austria in 2021",
-            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AT/2021/AT_electricity_prices_2021.csv",
+            "contentUrl": "https://github.com/HewlettPackard/sustain-cluster/tree/main/data/electricity_prices/processed/AT/2021/AT_electricity_prices_2021.csv",
             "encodingFormat": "text/csv"
         },
         {
@@ -107,7 +107,7 @@
             "@id": "au_nsw_files",
             "name": "Australia NSW Region Files",
             "description": "Electricity price data for Australia NSW region",
-            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AU-NSW",
+            "contentUrl": "https://github.com/HewlettPackard/sustain-cluster/tree/main/data/electricity_prices/processed/AU-NSW",
             "encodingFormat": "text/csv",
             "includes": "**/*.csv"
         },
@@ -116,7 +116,7 @@
             "@id": "au_nsw_2020_file",
             "name": "Australia NSW 2020 Electricity Prices",
             "description": "Electricity price data for Australia NSW in 2020",
-            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AU-NSW/2020/AU-NSW_electricity_prices_2020.csv",
+            "contentUrl": "https://github.com/HewlettPackard/sustain-cluster/tree/main/data/electricity_prices/processed/AU-NSW/2020/AU-NSW_electricity_prices_2020.csv",
             "encodingFormat": "text/csv"
         }
     ],
