@@ -45,7 +45,6 @@ data/workload/alibaba_2020_dataset/*.csv
 # Auto added
 filtered_file_list.txt
 .pytest_cacheenv/
-env/
 thermal_control_data.csv
 results/
 
