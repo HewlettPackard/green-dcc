@@ -1,4 +1,4 @@
-# Multi-Data Center Sustainable Scheduling Benchmark
+# SustainCluster -- Multi-Data Center Sustainable Scheduling Benchmark
 
 ## 1. Introduction
 
@@ -20,11 +20,11 @@ We introduce **SustainCluster** (“Sustainable Data‑Center Cluster”), an op
 By proposing SustainCluster, we aim to foster among the scientific community and enterprises a common testbed for sustainable scheduling of AI workloads that captures the nuanced, geo‑temporal trade‑offs of modern cloud workloads must overcome.
 
 <p align="center">
-  <img src="assets/figures/global_map.svg" alt="Geo-Distributed Data Centers" width="1000"/>
+  <img src="assets/figures/global_map3.svg" alt="Geo-Distributed Data Centers" width="1000"/>
 </p>
 
 # Table of Contents
-- [Multi-Data Center Sustainable Scheduling Benchmark](#multi-data-center-sustainable-scheduling-benchmark)
+- [SustainCluster -- Multi-Data Center Sustainable Scheduling Benchmark](#sustaincluster----multi-data-center-sustainable-scheduling-benchmark)
   - [1. Introduction](#1-introduction)
 - [Table of Contents](#table-of-contents)
   - [2. Features \& Highlights](#2-features--highlights)
@@ -69,7 +69,9 @@ By proposing SustainCluster, we aim to foster among the scientific community and
   - [12. Planned Features \& Roadmap](#12-planned-features--roadmap)
   - [13. Citation, License \& Contributors](#13-citation-license--contributors)
     - [13.1 Citation / Credits](#131-citation--credits)
-    - [13.2 License](#132-license)
+    - [13.2 Acknowledgements \& Data Licenses](#132-acknowledgements--data-licenses)
+      - [License](#license)
+      - [Citation](#citation)
     - [13.3 Contributors](#133-contributors)
   
 ## 2. Features & Highlights
@@ -746,7 +748,6 @@ SustainCluster provides tools and examples for evaluating the performance of dif
 You can compare the performance of a trained RL agent against various built-in rule-based heuristics using the provided evaluation script.
 
 *   **Available Rule-Based Controllers (RBCs):** These strategies are implemented in `utils/task_assignment_strategies.py` and can be selected by setting the `strategy` parameter in `configs/env/sim_config.yaml` (or by modifying the evaluation script):
-    *   `random`: Assigns tasks randomly to any available DC.
     *   `round_robin`: Cycles through DCs in order for assignment.
     *   `most_available`: Assigns tasks to the DC with the most available resources (e.g., highest percentage of free cores).
     *   `least_pending`: Assigns tasks to the DC with the fewest tasks already in its pending queue.
@@ -823,9 +824,35 @@ This project builds on work from:
 - Open-Meteo API
 - GridStatus.io
 
-### 13.2 License
+### 13.2 Acknowledgements & Data Licenses
+This project builds upon and incorporates several valuable open datasets and tools. We gratefully acknowledge their original creators and providers. Users of SustainCluster are responsible for complying with all applicable licenses and terms of use for these original data sources:
 
-MIT License. Attribution to original dataset sources is required.
+*   **AI Workload Trace:** The core workload is derived from the [Alibaba Cluster Trace 2020](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020) \cite{Weng2022MLaaS}. This dataset is available under a license permitting non-commercial research use and requiring attribution (e.g., Creative Commons Attribution 4.0 International - CC BY 4.0).
+*   **Electricity Prices & Carbon Intensity (Electricity Maps):** Data is sourced from [Electricity Maps](https://www.electricitymaps.com) \cite{ElectricityMaps}. The data obtained via their API or public datasets is generally provided under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
+*   **Electricity Prices (GridStatus.io):** Additional electricity price data is sourced from [GridStatus.io](https://gridstatus.io/) \cite{GridStatus}. Their open-source client and potentially some data may be available under a [BSD-3-Clause license](https://github.com/gridstatus/gridstatus/blob/master/LICENSE) (as seen on their GitHub).
+*   **Weather Data (Open-Meteo):** Sourced from the [Open-Meteo API](https://open-meteo.com) \cite{OpenMeteo}, which provides data under the [Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) license.
+*   **Transmission Costs (Cloud Providers):** Based on publicly available pricing information from AWS, GCP, and Azure. Usage of this information should align with fair use for research and comparison.
+*   **Transmission Delay Parameters (Persico et al.):** Derived from empirical data published by [Persico et al. (IEEE GLOBECOM 2016)](https://www.sciencedirect.com/science/article/abs/pii/S138912861630353X).
+
+---
+#### License
+The SustainCluster codebase, including our data processing scripts, the benchmark framework itself, and any datasets we have directly generated or significantly transformed (distinct from the raw data sources listed above), are licensed under the **MIT License**.
+
+A copy of the MIT License text can be found in the `LICENSE` file in the root of this repository.
+
+---
+#### Citation
+
+If you use SustainCluster in your research, please cite our work:
+
+```bibtex
+@inproceedings{2025GuillenSustainCluster,
+  title={{SustainCluster: Benchmarking Dynamic Multi-Objective Geo-Distributed Workload Management for Sustainable Data Center Cluster}},
+  author={Antonio Guillen and Avisek Naug and Vineet Gundecha and Sahand Ghorbanpour and Ricardo Luna Gutierrez and Ashwin Ramesh Babu and Munther Salim and Shubhanker Banerjee and Eoin H. Oude Essink and Damien Fay and Soumyendu Sarkar},
+  booktitle={Proceedings of the Neural Information Processing Systems Track on Datasets and Benchmarks},
+  year={2025},
+}
+```
 
 ### 13.3 Contributors
 

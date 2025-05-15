@@ -79,17 +79,19 @@ if __name__ == '__main__':
     # Set up training 
     ray.init(local_mode=True)
 
+    # ray.init(local_mode=False, ignore_reinit_error=True)
+
     config = (
-        APPOConfig()
+        PPOConfig()
         .environment(TaskSchedulingEnvRLLIB)
         .framework("torch")
         .training(
             num_epochs=1,
-            train_batch_size=672,
+            train_batch_size=256,
             )
         .env_runners(
-            num_env_runners=0,
-            rollout_fragment_length=1
+            num_env_runners=1,
+            rollout_fragment_length='auto',
         )
         .learners(
             num_gpus_per_learner=0
@@ -125,7 +127,7 @@ if __name__ == '__main__':
     NAME = "test"
 
     tuner = tune.Tuner(
-        "APPO",
+        "PPO",
         tune_config=tune.TuneConfig(
             metric="env_runners/episode_return_mean",
             mode='max'
