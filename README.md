@@ -11,7 +11,7 @@ Existing schedulers and benchmarks tend to focus on either local resource utiliz
 - **Grid carbon intensity** (region‑specific gCO₂eq / kWh)  
 - **Network transfer** (per‑GB cost, serialization + propagation delay)
 
-We introduce **SustainCluster** (“Green Data‑Center Cluster”), an open‑source benchmark and Gym‑compatible simulation environment designed to fill this gap. SustainCluster provides:
+We introduce **SustainCluster** (“Sustainable Data‑Center Cluster”), an open‑source benchmark and Gym‑compatible simulation environment designed to fill this gap. SustainCluster provides:
 1. A **reproducible**, end‑to‑end pipeline from real‑world datasets (Alibaba GPU trace, Open‑Meteo, Electricity Maps, cloud bandwidth pricing) to RL‑ready scenarios.  
 2. A **centralized global scheduler** that observes system‑wide state and issues “defer or assign” global decisions every 15 minutes.  
 3. A **full physics‑informed datacenter model** (CPU/GPU power curves, thermal response, HVAC proxy) coupled with transmission‑aware routing (cost + delay).  
@@ -652,13 +652,13 @@ Ensure you have Conda (or Miniconda/Mamba) installed.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/HewlettPackard/green-dcc/
-    cd green-dcc
+    git clone https://github.com/HewlettPackard/sustain-cluster/
+    cd sustain-cluster
     ```
 2.  **Create Conda Environment:**
     ```bash
-    conda create -n green-dcc python=3.10
-    conda activate green-dcc
+    conda create -n sustain-cluster python=3.10
+    conda activate sustain-cluster
     ```
 3.  **Install Dependencies:**
     ```bash
