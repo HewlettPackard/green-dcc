@@ -11,13 +11,13 @@ Existing schedulers and benchmarks tend to focus on either local resource utiliz
 - **Grid carbon intensity** (region‑specific gCO₂eq / kWh)  
 - **Network transfer** (per‑GB cost, serialization + propagation delay)
 
-We introduce **GreenDCC** (“Green Data‑Center Cluster”), an open‑source benchmark and Gym‑compatible simulation environment designed to fill this gap. GreenDCC provides:
+We introduce **SustainCluster** (“Green Data‑Center Cluster”), an open‑source benchmark and Gym‑compatible simulation environment designed to fill this gap. SustainCluster provides:
 1. A **reproducible**, end‑to‑end pipeline from real‑world datasets (Alibaba GPU trace, Open‑Meteo, Electricity Maps, cloud bandwidth pricing) to RL‑ready scenarios.  
 2. A **centralized global scheduler** that observes system‑wide state and issues “defer or assign” global decisions every 15 minutes.  
 3. A **full physics‑informed datacenter model** (CPU/GPU power curves, thermal response, HVAC proxy) coupled with transmission‑aware routing (cost + delay).  
 4. A **modular reward engine** supporting single or multi‑objective optimization (energy cost, carbon emissions, SLA adherence, transfer overhead).
 
-By proposing GreenDCC, we aim to foster among the scientific community and enterprises a common testbed for sustainable scheduling of AI workloads that captures the nuanced, geo‑temporal trade‑offs of modern cloud workloads must overcome.
+By proposing SustainCluster, we aim to foster among the scientific community and enterprises a common testbed for sustainable scheduling of AI workloads that captures the nuanced, geo‑temporal trade‑offs of modern cloud workloads must overcome.
 
 <p align="center">
   <img src="assets/figures/global_map.svg" alt="Geo-Distributed Data Centers" width="1000"/>
