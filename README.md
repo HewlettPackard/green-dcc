@@ -652,13 +652,13 @@ Ensure you have Conda (or Miniconda/Mamba) installed.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/HewlettPackard/green-dcc/
-    cd green-dcc
+    git clone https://github.com/HewlettPackard/sustain-cluster/
+    cd sustain-cluster
     ```
 2.  **Create Conda Environment:**
     ```bash
-    conda create -n green-dcc python=3.10
-    conda activate green-dcc
+    conda create -n sustain-cluster python=3.10
+    conda activate sustain-cluster
     ```
 3.  **Install Dependencies:**
     ```bash
