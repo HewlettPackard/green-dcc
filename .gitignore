@@ -48,3 +48,6 @@ filtered_file_list.txt
 env/
 thermal_control_data.csv
 results/
+
+# Ignore the zip file of the workload dataset
+!data/workload/alibaba_2020_dataset/result_df_full_year_2020.zip
