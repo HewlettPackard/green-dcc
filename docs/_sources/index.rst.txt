@@ -3,7 +3,7 @@
 
 |F| is a benchmark environment designed to evaluate dynamic workload distribution techniques for sustainable Data Center Clusters (DCC). It aims to reduce the environmental impact of cloud computing by distributing workloads within a DCC that spans multiple geographical locations. The benchmark environment supports the evaluation of various control algorithms, including reinforcement learning-based approaches.
 
-This page contains the documentation for the GitHub `repository <https://github.com/HewlettPackard/green-dcc>`_ for the paper `"Green-DCC: Benchmarking Dynamic Workload Distribution Techniques for Sustainable Data Center Cluster" <https://openreview.net/forum?id=DoDz1IXjDB>`_
+This page contains the documentation for the GitHub `repository <https://github.com/HewlettPackard/sustain-cluster>`_ for the paper `"Green-DCC: Benchmarking Dynamic Workload Distribution Techniques for Sustainable Data Center Cluster" <https://openreview.net/forum?id=DoDz1IXjDB>`_
 
 
 .. image:: images/hier.png
