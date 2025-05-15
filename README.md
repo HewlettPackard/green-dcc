@@ -74,7 +74,7 @@ By proposing GreenDCC, we aim to foster among the scientific community and enter
   
 ## 2. Features & Highlights
 
-GreenDCC provides a comprehensive and realistic benchmark environment for developing and evaluating sustainable task scheduling algorithms across geo-distributed data centers. Key features include:
+SustainCluster provides a comprehensive and realistic benchmark environment for developing and evaluating sustainable task scheduling algorithms across geo-distributed data centers. Key features include:
 
 *   **Rich Real-World Data Integration:** Incorporates time-series data for **over 20 global locations**, including:
     *   **AI Workloads:** Based on the Alibaba Cluster Trace 2020 GPU dataset.
@@ -93,7 +93,7 @@ GreenDCC provides a comprehensive and realistic benchmark environment for develo
 *   **Reproducible Scenarios:** Enables consistent experimental setups through configuration files and seeding, crucial for benchmarking research.
 
 ## 3. Benchmark Design
-GreenDCC simulates a centralized global task scheduler interacting with a cluster of geographically distributed data centers. At each time step, the simulation proceeds as follows:
+SustainCluster simulates a centralized global task scheduler interacting with a cluster of geographically distributed data centers. At each time step, the simulation proceeds as follows:
 
 1.  **Task Generation:** New AI tasks (derived from the real-world trace) may arrive at their designated origin datacenters based on a population and time-zone probabilistic model. Any tasks previously time-deferred are also reconsidered.
 2.  **Observation:** The central agent (scheduler) observes the current global state, including time, environmental factors (price, carbon intensity), the state of each datacenter (resource availability, load), and the details of all pending tasks (requirements, origin, deadline).
