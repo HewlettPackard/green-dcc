@@ -51,6 +51,7 @@ class DC_Config:
         dc = self.config_data['data_center_configuration']
         servers = self.config_data['server_characteristics']
         hvac = self.config_data['hvac_configuration']
+        hru = self.config_data['heat_recovery_configuration']
 
         # === Compute total number of servers needed ===
         self.total_servers_cpu = math.ceil(self.total_cores / self.CORES_PER_SERVER)
@@ -62,8 +63,8 @@ class DC_Config:
         self.CPUS_PER_RACK = math.ceil(self.total_cores / self.NUM_RACKS)
         self.GPUS_PER_RACK = math.ceil(self.total_gpus / self.NUM_RACKS)
 
-        print(f"[INFO] Using {self.NUM_RACKS} racks with max {self.MAX_SERVERS_PER_RACK} servers per rack")
-        print(f"[INFO] CPUs per rack: {self.CPUS_PER_RACK}, GPUs per rack: {self.GPUS_PER_RACK}")
+        # print(f"[INFO] Using {self.NUM_RACKS} racks with max {self.MAX_SERVERS_PER_RACK} servers per rack")
+        # print(f"[INFO] CPUs per rack: {self.CPUS_PER_RACK}, GPUs per rack: {self.GPUS_PER_RACK}")
 
         # === Use average rack-level values ===
         avg_supply_temp = sum(dc['RACK_SUPPLY_APPROACH_TEMP_LIST']) / len(dc['RACK_SUPPLY_APPROACH_TEMP_LIST'])
@@ -102,7 +103,7 @@ class DC_Config:
             for rack_cpu, rack_gpu in zip(self.RACK_CPU_CONFIG, self.RACK_GPU_CONFIG)
         )
         
-        print("\n[INFO] --- Rack Device Summary ---")
+        # print("\n[INFO] --- Rack Device Summary ---")
         for i, (rack_cpu, rack_gpu) in enumerate(zip(self.RACK_CPU_CONFIG, self.RACK_GPU_CONFIG)):
             num_servers = len(rack_cpu)
             num_gpus = len(rack_gpu)
@@ -111,8 +112,8 @@ class DC_Config:
             cpu_power = sum(cpu['full_load_pwr'] for cpu in rack_cpu)
             gpu_power = sum(gpu['full_load_pwr'] for gpu in rack_gpu)
 
-            print(f"Rack {i+1:02d}: {num_servers} CPU servers × {self.CORES_PER_SERVER} cores → {total_cores} cores, "
-                f"{num_gpus} GPUs → Total theory Power ≈ {cpu_power + gpu_power:.1f} W")
+            # print(f"Rack {i+1:02d}: {num_servers} CPU servers × {self.CORES_PER_SERVER} cores → {total_cores} cores, "
+                # f"{num_gpus} GPUs → Total theory Power ≈ {cpu_power + gpu_power:.1f} W")
 
         # A default value of HP_PROLIANT server for standalone testing
         self.HP_PROLIANT = servers['HP_PROLIANT']
@@ -157,6 +158,12 @@ class DC_Config:
         self.CT_PRESSURE_DROP = hvac['CT_PRESSURE_DROP'] #Pa 
         self.CT_WATER_FLOW_RATE = hvac['CT_WATER_FLOW_RATE']#m3/s
         self.CT_PUMP_EFFICIENCY = hvac['CT_PUMP_EFFICIENCY'] #%
+        
+        # Heat Recovery paremeters
+        self.AVE_HLP = hru['AVE_HLP'] # W/(K*m^2) 
+        self.OFFICE_GUIDE_TEMP = hru['OFFICE_GUIDE_TEMP']  #Deg C      
+        self.DC_AREA_PU = hru['DC_AREA_PU']  #m^2 per W    
+        self.OFFICE_BUILDING_AREA =  hru['OFFICE_BUILDING_AREA']  #m
     
     def _avg_pair_list(self, pair_list):
         avg_first = sum(p[0] for p in pair_list) / len(pair_list)

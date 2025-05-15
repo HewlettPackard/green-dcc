@@ -1,0 +1,480 @@
+{
+    "@context": {
+        "@language": "en",
+        "@vocab": "https://schema.org/",
+        "sc": "https://schema.org/",
+        "cr": "http://mlcommons.org/croissant/",
+        "rai": "http://mlcommons.org/croissant/RAI/",
+        "dct": "http://purl.org/dc/terms/",
+        "citeAs": "cr:citeAs",
+        "column": "cr:column",
+        "conformsTo": "dct:conformsTo",
+        "data": {
+            "@id": "cr:data",
+            "@type": "@json"
+        },
+        "dataType": {
+            "@id": "cr:dataType",
+            "@type": "@vocab"
+        },
+        "examples": {
+            "@id": "cr:examples",
+            "@type": "@json"
+        },
+        "extract": "cr:extract",
+        "field": "cr:field",
+        "fileProperty": "cr:fileProperty",
+        "fileObject": "cr:fileObject",
+        "fileSet": "cr:fileSet",
+        "format": "cr:format",
+        "includes": "cr:includes",
+        "isLiveDataset": "cr:isLiveDataset",
+        "jsonPath": "cr:jsonPath",
+        "key": "cr:key",
+        "md5": "cr:md5",
+        "parentField": "cr:parentField",
+        "path": "cr:path",
+        "recordSet": "cr:recordSet",
+        "references": "cr:references",
+        "regex": "cr:regex",
+        "repeated": "cr:repeated",
+        "replace": "cr:replace",
+        "separator": "cr:separator",
+        "source": "cr:source",
+        "subField": "cr:subField",
+        "transform": "cr:transform"
+    },
+    "@type": "sc:Dataset",
+    "name": "Network Cost Dataset",
+    "description": "A dataset containing network transmission cost data between regions for major cloud providers (AWS, Azure, GCP). The data represents the cost per GB (in USD) for data transfer between different regions within each cloud provider's network.",
+    "conformsTo": "http://mlcommons.org/croissant/1.0",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://github.com/HewlettPackard/green-dcc/tree/main",
+    "version": "1.0.0",
+    "citeAs": "Hewlett Packard Enterprise (2023). Network Cost Dataset. GitHub. https://github.com/HewlettPackard/green-dcc/tree/main",
+    "creator": {
+        "@type": "sc:Organization",
+        "name": "Hewlett Packard Enterprise",
+        "url": "https://www.hpe.com"
+    },
+    "datePublished": "2023",
+    "keywords": [
+        "network costs",
+        "cloud computing",
+        "data transfer",
+        "AWS",
+        "Azure",
+        "GCP",
+        "transmission costs",
+        "cloud regions"
+    ],
+    "distribution": [
+        {
+            "@type": "cr:FileObject",
+            "@id": "aws_transmission_cost_matrix",
+            "name": "AWS Transmission Cost Matrix",
+            "description": "CSV file containing the cost per GB for data transfer between AWS regions",
+            "contentUrl": "https://raw.githubusercontent.com/HewlettPackard/green-dcc/main/data/network_cost/aws_transmission_cost_matrix.csv",
+            "encodingFormat": "text/csv",
+            "sha256": "ff3f6e77197b16ca107a01b3303e41e108cbe37cfb158d64011e93131848ae75"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "azure_transmission_cost_matrix",
+            "name": "Azure Transmission Cost Matrix",
+            "description": "CSV file containing the cost per GB for data transfer between Azure regions",
+            "contentUrl": "https://raw.githubusercontent.com/HewlettPackard/green-dcc/main/data/network_cost/azure_transmission_cost_matrix.csv",
+            "encodingFormat": "text/csv",
+            "sha256": "f71c1898a61aae8d217d28669f628445aba00d689eafa39c5070571e269d2419"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "gcp_transmission_cost_matrix",
+            "name": "GCP Transmission Cost Matrix",
+            "description": "CSV file containing the cost per GB for data transfer between GCP regions",
+            "contentUrl": "https://raw.githubusercontent.com/HewlettPackard/green-dcc/main/data/network_cost/gcp_transmission_cost_matrix.csv",
+            "encodingFormat": "text/csv",
+            "sha256": "b0f77155012f7e053dec656b7a35c3a843d567febf048d3582cbc1f51c73d3ac"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "network_delay_script",
+            "name": "Network Delay Python Script",
+            "description": "Python script related to network delay calculations",
+            "contentUrl": "https://raw.githubusercontent.com/HewlettPackard/green-dcc/main/data/network_cost/network_delay.py",
+            "encodingFormat": "text/x-python",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+    ],
+    "recordSet": [
+        {
+            "@type": "cr:RecordSet",
+            "@id": "aws_transmission_costs",
+            "name": "AWS Transmission Costs",
+            "description": "Cost per GB for data transfer between AWS regions",
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "aws_transmission_costs/source_region",
+                    "name": "Source Region",
+                    "description": "AWS source region for data transfer",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileObject": {
+                            "@id": "aws_transmission_cost_matrix"
+                        },
+                        "extract": {
+                            "column": "0"
+                        }
+                    }
+                }
+            ],
+            "subField": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "aws_transmission_costs/cost_matrix",
+                    "name": "Cost Matrix",
+                    "description": "Matrix of data transfer costs between AWS regions in USD per GB",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileObject": {
+                            "@id": "aws_transmission_cost_matrix"
+                        }
+                    }
+                }
+            ],
+            "examples": [
+                {
+                    "aws_transmission_costs/source_region": "us-east-1",
+                    "aws_transmission_costs/cost_matrix": {
+                        "us-east-1": 0.0,
+                        "us-east-2": 0.01,
+                        "us-west-1": 0.02
+                    }
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "azure_transmission_costs",
+            "name": "Azure Transmission Costs",
+            "description": "Cost per GB for data transfer between Azure regions",
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "azure_transmission_costs/source_region",
+                    "name": "Source Region",
+                    "description": "Azure source region for data transfer",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileObject": {
+                            "@id": "azure_transmission_cost_matrix"
+                        },
+                        "extract": {
+                            "column": "0"
+                        }
+                    }
+                }
+            ],
+            "subField": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "azure_transmission_costs/cost_matrix",
+                    "name": "Cost Matrix",
+                    "description": "Matrix of data transfer costs between Azure regions in USD per GB",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileObject": {
+                            "@id": "azure_transmission_cost_matrix"
+                        }
+                    }
+                }
+            ],
+            "examples": [
+                {
+                    "azure_transmission_costs/source_region": "West Europe",
+                    "azure_transmission_costs/cost_matrix": {
+                        "West Europe": 0.0,
+                        "East US": 0.05,
+                        "Japan East": 0.05
+                    }
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "gcp_transmission_costs",
+            "name": "GCP Transmission Costs",
+            "description": "Cost per GB for data transfer between GCP regions",
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "gcp_transmission_costs/source_region",
+                    "name": "Source Region",
+                    "description": "GCP source region for data transfer",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileObject": {
+                            "@id": "gcp_transmission_cost_matrix"
+                        },
+                        "extract": {
+                            "column": "0"
+                        }
+                    }
+                }
+            ],
+            "subField": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "gcp_transmission_costs/cost_matrix",
+                    "name": "Cost Matrix",
+                    "description": "Matrix of data transfer costs between GCP regions in USD per GB",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileObject": {
+                            "@id": "gcp_transmission_cost_matrix"
+                        }
+                    }
+                }
+            ],
+            "examples": [
+                {
+                    "gcp_transmission_costs/source_region": "us-east1",
+                    "gcp_transmission_costs/cost_matrix": {
+                        "us-east1": 0.0,
+                        "us-west1": 0.02,
+                        "us-central1": 0.02
+                    }
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "aws_regions",
+            "name": "AWS Regions",
+            "description": "List of AWS regions in the transmission cost matrix",
+            "key": {
+                "@id": "aws_regions/region_id"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "aws_regions/region_id",
+                    "name": "Region ID",
+                    "description": "AWS region identifier",
+                    "dataType": "sc:Text"
+                }
+            ],
+            "data": [
+                {
+                    "aws_regions/region_id": "us-east-1"
+                },
+                {
+                    "aws_regions/region_id": "us-east-2"
+                },
+                {
+                    "aws_regions/region_id": "us-west-1"
+                },
+                {
+                    "aws_regions/region_id": "us-east-1-dwf-1"
+                },
+                {
+                    "aws_regions/region_id": "ca-central-1"
+                },
+                {
+                    "aws_regions/region_id": "eu-central-1"
+                },
+                {
+                    "aws_regions/region_id": "eu-west-3"
+                },
+                {
+                    "aws_regions/region_id": "eu-south-1"
+                },
+                {
+                    "aws_regions/region_id": "eu-west-1"
+                },
+                {
+                    "aws_regions/region_id": "eu-west-2"
+                },
+                {
+                    "aws_regions/region_id": "eu-central-2"
+                },
+                {
+                    "aws_regions/region_id": "ap-northeast-1"
+                },
+                {
+                    "aws_regions/region_id": "ap-northeast-2"
+                },
+                {
+                    "aws_regions/region_id": "ap-southeast-1"
+                },
+                {
+                    "aws_regions/region_id": "ap-south-1"
+                },
+                {
+                    "aws_regions/region_id": "ap-southeast-2"
+                },
+                {
+                    "aws_regions/region_id": "ap-southeast-3"
+                },
+                {
+                    "aws_regions/region_id": "sa-east-1"
+                },
+                {
+                    "aws_regions/region_id": "us-east-1-chl-1"
+                },
+                {
+                    "aws_regions/region_id": "af-south-1"
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "azure_regions",
+            "name": "Azure Regions",
+            "description": "List of Azure regions in the transmission cost matrix",
+            "key": {
+                "@id": "azure_regions/region_id"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "azure_regions/region_id",
+                    "name": "Region ID",
+                    "description": "Azure region identifier",
+                    "dataType": "sc:Text"
+                }
+            ],
+            "data": [
+                {
+                    "azure_regions/region_id": "West Europe"
+                },
+                {
+                    "azure_regions/region_id": "East US"
+                },
+                {
+                    "azure_regions/region_id": "Japan East"
+                },
+                {
+                    "azure_regions/region_id": "Central India"
+                },
+                {
+                    "azure_regions/region_id": "South Africa North"
+                },
+                {
+                    "azure_regions/region_id": "France Central"
+                },
+                {
+                    "azure_regions/region_id": "Korea Central"
+                },
+                {
+                    "azure_regions/region_id": "Switzerland North"
+                },
+                {
+                    "azure_regions/region_id": "Australia East"
+                },
+                {
+                    "azure_regions/region_id": "Austria East"
+                },
+                {
+                    "azure_regions/region_id": "Germany West Central"
+                },
+                {
+                    "azure_regions/region_id": "North Europe"
+                },
+                {
+                    "azure_regions/region_id": "Brazil South"
+                },
+                {
+                    "azure_regions/region_id": "Canada Central"
+                },
+                {
+                    "azure_regions/region_id": "Spain Central"
+                },
+                {
+                    "azure_regions/region_id": "South Central US"
+                },
+                {
+                    "azure_regions/region_id": "Australia Southeast"
+                },
+                {
+                    "azure_regions/region_id": "West US"
+                },
+                {
+                    "azure_regions/region_id": "East US 2"
+                },
+                {
+                    "azure_regions/region_id": "Southeast Asia"
+                },
+                {
+                    "azure_regions/region_id": "Chile North"
+                },
+                {
+                    "azure_regions/region_id": "Portugal North"
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "gcp_regions",
+            "name": "GCP Regions",
+            "description": "List of GCP regions in the transmission cost matrix",
+            "key": {
+                "@id": "gcp_regions/region_id"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "gcp_regions/region_id",
+                    "name": "Region ID",
+                    "description": "GCP region identifier",
+                    "dataType": "sc:Text"
+                }
+            ],
+            "data": [
+                {
+                    "gcp_regions/region_id": "us-east1"
+                },
+                {
+                    "gcp_regions/region_id": "us-west1"
+                },
+                {
+                    "gcp_regions/region_id": "us-central1"
+                },
+                {
+                    "gcp_regions/region_id": "europe-west1"
+                },
+                {
+                    "gcp_regions/region_id": "europe-west4"
+                },
+                {
+                    "gcp_regions/region_id": "asia-east1"
+                },
+                {
+                    "gcp_regions/region_id": "asia-northeast1"
+                },
+                {
+                    "gcp_regions/region_id": "asia-south1"
+                },
+                {
+                    "gcp_regions/region_id": "australia-southeast1"
+                },
+                {
+                    "gcp_regions/region_id": "southamerica-east1"
+                },
+                {
+                    "gcp_regions/region_id": "africa-south1"
+                },
+                {
+                    "gcp_regions/region_id": "me-west1"
+                },
+                {
+                    "gcp_regions/region_id": "asia-southeast1"
+                }
+            ]
+        }
+    ],
+    "rai:dataCollection": "This dataset consists of network transmission cost data collected from published pricing data for major cloud providers. The values represent the cost in USD per GB for transferring data between different regions within each provider's network.",
+    "rai:dataCollectionTimeframe": "Data collected in 2023. Pricing data may change over time as cloud providers update their pricing models.",
+    "rai:dataUseCases": "This dataset can be used for cost optimization in multi-region cloud deployments, network cost modeling, workload placement optimization, and cost-aware data transfer scheduling across cloud regions."
+}

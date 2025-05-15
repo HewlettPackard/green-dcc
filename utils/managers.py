@@ -89,52 +89,108 @@ def sc_obs(current_hour, current_day):
     
     return [cos_hour, sin_hour, cos_day, sin_day]
 
-
 class Time_Manager():
-    """Class to manage the time dimenssion over an episode
-
-        Args:
-            init_day (int, optional): Day to start from. Defaults to 0.
-            timezone_shift (int, optional): Shift for the timezone. Defaults to 0.
     """
-    def __init__(self, init_day=0, timezone_shift=0):
-        """Initialize the Time_Manager class.
+    Class to manage the time dimension over an episode and handle termination
+    based on simulation duration.
 
-        Args:
-            init_day (int, optional): Day to start from. Defaults to 0.
-            timezone_shift (int, optional): Shift for the timezone. Defaults to 0.
-        """
-        self.init_day = init_day
-        self.timestep_per_hour = 4
+    Args:
+        init_day (int, optional): Initial day of the year (0-364). Defaults to 0.
+        timezone_shift (int, optional): Timezone shift in hours from UTC. Defaults to 0.
+        duration_days (int, optional): Maximum duration of an episode in days.
+                                       If None, the episode runs indefinitely (or until
+                                       another termination condition is met). Defaults to None.
+    """
+    def __init__(self, init_day=0, timezone_shift=0, duration_days=None):
+        """Initialize the Time_Manager class."""
+        self.start_day_config = init_day # Store the configured initial day
         self.timezone_shift = timezone_shift
-        
-        # Calculate the total timesteps for the episode based on init_day
-        self.current_timestep = 0
+        self.duration_days = duration_days
+        self.timestep_per_hour = 4 # 15-minute timesteps
+
+        # Internal state variables initialized in reset()
+        self.day = 0
+        self.hour = 0
+        self.current_timestep_in_year = 0 # Overall timestep within the year
+        self.episode_step_counter = 0
+        self.max_episode_timesteps = None
 
     def reset(self, init_day=None, init_hour=None, seed=None):
-        if seed is not None:
-            np.random.seed(seed)
-        self.day = init_day if init_day is not None else self.init_day
-        self.hour = init_hour if init_hour is not None else self.timezone_shift
+        """
+        Resets the time manager to a specific day and hour, and resets the
+        episode step counter.
 
-        # Recalculate the current timestep based on day/hour
-        self.current_timestep = int(self.day * 24 * self.timestep_per_hour + self.hour * self.timestep_per_hour)
-        return sc_obs(self.hour, self.day)
-
-        
-    def step(self):
-        """Step function for the time maneger
+        Args:
+            init_day (int, optional): Day to start from (0-364). Defaults to the value
+                                      provided during initialization.
+            init_hour (int, optional): Hour to start from (0-23). Defaults to 0, adjusted
+                                       by timezone_shift if not specified otherwise.
+            seed (int, optional): Random seed (not used directly here but kept for consistency).
 
         Returns:
-            List[float]: Current hour and day in sine and cosine form.
-            bool: Signal if the episode has reach the end.
+            list: Sine and cosine features for the initial hour and day.
         """
-        self.current_timestep += 1
-        self.hour += 1 / self.timestep_per_hour
-        if self.hour >= 24:
-            self.hour = 0
+        if seed is not None:
+            # We don't use rng here directly, but good practice if needed later
+            pass
+
+        # Use provided init day/hour or default to configured start day / 0 hour
+        self.day = init_day if init_day is not None else self.start_day_config
+        # Default to 0 hour unless specified, timezone_shift is not applied here anymore
+        # The user should provide the desired starting hour directly.
+        self.hour = init_hour if init_hour is not None else 0
+
+        # Ensure day and hour are within valid ranges
+        self.day = int(self.day) % 365 # Wrap around year if needed
+        self.hour = int(self.hour) % 24
+
+        # Calculate the absolute timestep within the year
+        self.current_timestep_in_year = int(self.day * 24 * self.timestep_per_hour + self.hour * self.timestep_per_hour)
+
+        # Reset episode duration tracking
+        self.episode_step_counter = 0
+        if self.duration_days is not None:
+            self.max_episode_timesteps = self.duration_days * 24 * self.timestep_per_hour
+        else:
+            self.max_episode_timesteps = None # Run indefinitely
+
+        # Return initial time features
+        return sc_obs(self.hour, self.day)
+
+
+    def step(self):
+        """
+        Advances the time by one timestep (15 minutes) and checks for episode termination
+        based on duration.
+
+        Returns:
+            int: Current day of the year (0-364).
+            float: Current hour of the day (0.0 - 23.75).
+            list: Sine and cosine features for the current hour and day.
+            bool: Done flag (True if episode duration reached, False otherwise).
+        """
+        # Increment counters
+        self.current_timestep_in_year += 1
+        self.episode_step_counter += 1
+
+        # Advance time
+        self.hour += 1.0 / self.timestep_per_hour
+        if self.hour >= 24.0:
+            self.hour = 0.0
             self.day += 1
-        return self.day, self.hour, sc_obs(self.hour, self.day)
+            if self.day >= 365: # Wrap day around the year
+                self.day = 0
+                # Also wrap the absolute timestep if needed, although less critical usually
+                self.current_timestep_in_year = 0
+
+        # Check for termination based on duration
+        done = False
+        if self.max_episode_timesteps is not None:
+            if self.episode_step_counter >= self.max_episode_timesteps:
+                done = True
+
+        # Return current day, hour, time features, and done flag
+        return self.day, self.hour, sc_obs(self.hour, self.day), done
 
 
 # Class to manage carbon intensity data
@@ -172,8 +228,16 @@ class CI_Manager():
 
         self.timestep_per_hour = 4
         self.time_steps_day = 24 * self.timestep_per_hour
-
+        
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # Obtain the parent directory of the current script
+        parent_dir = os.path.dirname(script_dir)
+        
         filename = f"data/carbon_intensity/{location}/{simulation_year}/{location}_{simulation_year}_hourly.csv"
+        
+        # Join the parent directory with the filename
+        filename = os.path.join(parent_dir, filename)
+        
         if not os.path.exists(filename):
             raise FileNotFoundError(f"CI file not found: {filename}")
 
@@ -283,9 +347,17 @@ class Weather_Manager():
 
         self.timestep_per_hour = 4
         self.time_steps_day = self.timestep_per_hour * 24
+        
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # Obtain the parent directory of the current script
+        parent_dir = os.path.dirname(script_dir)
+        
+        filename = f"data/weather/{self.location}/{self.simulation_year}.json"
+        
+        # Join the parent directory with the filename
+        filename = os.path.join(parent_dir, filename)
 
         # Load weather data
-        filename = f"data/weather/{self.location}/{self.simulation_year}.json"
         if not os.path.exists(filename):
             raise FileNotFoundError(f"Weather data file not found: {filename}")
         self.weather_df = self._load_weather_data(filename)
@@ -434,9 +506,17 @@ class ElectricityPrice_Manager:
         self._load_data()
 
     def _load_data(self):
-        file_path = f"data/electricity_prices/standardized/{self.location}/{self.simulation_year}/{self.location}_electricity_prices_{self.simulation_year}.csv"
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # Obtain the parent directory of the current script
+        parent_dir = os.path.dirname(script_dir)
+        
+        filename = f"data/electricity_prices/standardized/{self.location}/{self.simulation_year}/{self.location}_electricity_prices_{self.simulation_year}.csv"
+        
+        # Join the parent directory with the filename
+        filename = os.path.join(parent_dir, filename)
+
         # print(f"Loading electricity prices from {file_path}")
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(filename)
 
         # Convert UTC timestamp to datetime and sort to ensure order
         df["Datetime (UTC)"] = pd.to_datetime(df["Datetime (UTC)"])

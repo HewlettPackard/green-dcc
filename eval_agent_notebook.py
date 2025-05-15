@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import seaborn as sns
+sns.set_theme(style="whitegrid")
 
 from rl_components.agent_net import ActorNet
 from envs.task_scheduling_env import TaskSchedulingEnv
@@ -79,7 +80,7 @@ def make_eval_env(eval_mode=True):
 
 
 # Load trained actor model
-checkpoint_path = "checkpoints/train_20250421_200058/best_checkpoint.pth"  # Adjust path
+checkpoint_path = "checkpoints/train_20250509_232500/best_checkpoint.pth"  # Adjust path
 env = make_eval_env()
 obs, _ = env.reset(seed=123)
 obs_dim = env.observation_space.shape[0]
@@ -133,6 +134,7 @@ for step in tqdm(range(steps)):
 info["datacenter_infos"]
 
 #%%
+
 flat_records = []
 
 for t, timestep_info in enumerate(infos_list):
@@ -157,6 +159,8 @@ for t, timestep_info in enumerate(infos_list):
             "sla_violated": dc_info["__common__"]['__sla__'].get("violated", 0),
             "dc_cpu_workload_fraction": dc_info["agent_dc"].get("dc_cpu_workload_fraction", 0.0),
             # "transmission_cost": dc_info["__common__"].get("transmission_cost_total_usd", 0.0),
+            "hvac_setpoint": dc_info["__common__"].get("hvac_setpoint_c", np.nan),
+
         }
         flat_records.append(record)
 
@@ -174,38 +178,31 @@ summary = df.groupby("datacenter").agg({
     "cpu_util": "mean",
     "gpu_util": "mean",
     "mem_util": "mean",
-    "running_tasks": "sum",
+    "running_tasks": "sum", # Maybe 'mean' is better for running tasks over time? Summing might be misleading.
     "pending_tasks": "mean",
     "sla_met": "sum",
     "sla_violated": "sum",
-    "dc_cpu_workload_fraction": "mean",
+    # "dc_cpu_workload_fraction": "mean", # Already captured by cpu_util
+    "hvac_setpoint": "mean", #
 }).reset_index()
 
+# Recalculate SLA Violation Rate
 summary["SLA Violation Rate (%)"] = (
     summary["sla_violated"] / (summary["sla_met"] + summary["sla_violated"]).replace(0, np.nan)
 ) * 100
+summary.fillna(0, inplace=True) # Fill NaN rates with 0 if no tasks completed
 
 summary = summary.round(2)
 
+# Update Column Names
 summary.columns = [
-    "Datacenter",
-    "Total Energy Cost (USD)",
-    "Total Energy (kWh)",
-    "Total CO₂ (kg)",
-    "Avg Price (USD/kWh)",
-    "Avg Carbon Intensity (gCO₂/kWh)",
-    "Avg Weather (°C)",
-    "Avg CPU Util (%)",
-    "Avg GPU Util (%)",
-    "Avg MEM Util (%)",
-    "Total Running Tasks",
-    "Avg Pending Tasks",
-    "SLA Met",
-    "SLA Violated",
-    "SLA Violation Rate (%)",
-    "Avg CPU Workload Fraction",
+    "Datacenter", "Total Energy Cost (USD)", "Total Energy (kWh)", "Total CO₂ (kg)",
+    "Avg Price (USD/kWh)", "Avg Carbon Intensity (gCO₂/kWh)", "Avg Weather (°C)",
+    "Avg CPU Util (%)", "Avg GPU Util (%)", "Avg MEM Util (%)", "Total Tasks Finished", # Changed label
+    "Avg Pending Tasks", "SLA Met", "SLA Violated", "Avg HVAC Setpoint (°C)", "SLA Violation Rate (%)",
 ]
 
+print("\n--- Evaluation Summary ---")
 summary
 
 #%%
@@ -220,7 +217,12 @@ plt.title("Energy Price per kWh over Time")
 plt.xlabel("Timestep")
 plt.ylabel("USD/kWh")
 plt.grid(True)
+
+# Save the figure as pdf
+plt.savefig("assets/figures/energy_price_over_time.pdf", bbox_inches='tight')
+
 plt.show()
+
 
 #%% 
 # Plot of "Total Running Tasks"
@@ -230,6 +232,10 @@ plt.title("Total Running Tasks per Datacenter over Time")
 plt.xlabel("Timestep")
 plt.ylabel("Number of Tasks")
 plt.grid(True)
+
+# Save the figure as pdf
+plt.savefig("assets/figures/running_tasks_over_time.pdf", bbox_inches='tight')
+
 plt.show()
 
 #%% Plot of Tasks Assigned per Datacenter over Time
@@ -239,7 +245,12 @@ plt.title("Tasks Assigned per Datacenter over Time")
 plt.xlabel("Timestep")
 plt.ylabel("Number of Assigned Tasks")
 plt.grid(True)
+
+# Save the figure as pdf
+plt.savefig("assets/figures/tasks_assigned_over_time.pdf", bbox_inches='tight')
+
 plt.show()
+
 
 #%%
 plt.figure(figsize=(12, 6))
@@ -248,6 +259,10 @@ plt.title("Energy Cost per Datacenter over Time")
 plt.xlabel("Timestep")
 plt.ylabel("USD")
 plt.grid(True)
+
+# Save the figure as pdf
+plt.savefig("assets/figures/energy_cost_over_time.pdf", bbox_inches='tight')
+
 plt.show()
 
 
@@ -257,6 +272,8 @@ sns.lineplot(data=df, x="timestep", y="carbon_kg", hue="datacenter")
 plt.title("Carbon Emissions (kg) per Datacenter over Time")
 plt.ylabel("kg CO₂")
 plt.grid(True)
+# Save the figure as pdf
+plt.savefig("assets/figures/carbon_emissions_over_time.pdf", bbox_inches='tight')
 plt.show()
 
 
@@ -267,7 +284,11 @@ plt.title("Carbon Intensity (gCO₂/kWh) over Time")
 plt.xlabel("Timestep")
 plt.ylabel("gCO₂/kWh")
 plt.grid(True)
+# Save the figure as pdf
+plt.savefig("assets/figures/carbon_intensity_over_time.pdf", bbox_inches='tight')
 plt.show()
+
+
 
 #%%
 plt.figure(figsize=(12, 6))
@@ -276,7 +297,11 @@ plt.title("Total Transmission Cost (USD) Over Time")
 plt.xlabel("Timestep")
 plt.ylabel("Transmission Cost (USD)")
 plt.grid(True)
+
+# Save the figure as pdf
+plt.savefig("assets/figures/transmission_cost_over_time.pdf", bbox_inches='tight')
 plt.show()
+
 
 #%%
 plt.figure(figsize=(12, 6))
@@ -286,7 +311,11 @@ plt.xlabel("Timestep")
 plt.ylabel("Number of Delayed Tasks")
 plt.grid(True)
 plt.legend()
+# Save the figure as pdf
+plt.savefig("assets/figures/delayed_tasks_over_time.pdf", bbox_inches='tight')
 plt.show()
+
+
 
 #%% Plot the external temperature
 plt.figure(figsize=(12, 6))
@@ -295,6 +324,9 @@ plt.title("External Temperature (°C) over Time")
 plt.xlabel("Timestep")
 plt.ylabel("Temperature (°C)")
 plt.grid(True)
+# Save the figure as pdf
+plt.savefig("assets/figures/external_temperature_over_time.pdf", bbox_inches='tight')
+
 plt.show()
 
 
@@ -340,15 +372,180 @@ axes[2].set_xlabel("Timestep")
 axes[2].grid(True)
 
 plt.tight_layout()
+# Save the figure as pdf
+plt.savefig("assets/figures/utilization_over_time.pdf", bbox_inches='tight')
+
 plt.show()
 
 
-#%% Now plot the metric dc_cpu_workload_fraction
+#%% Plot the HVAC Cooling Setpoint
 plt.figure(figsize=(12, 6))
-sns.lineplot(data=df, x="timestep", y="dc_cpu_workload_fraction", hue="datacenter")
-plt.title("CPU Workload Fraction over Time")
-plt.xlabel("Timestep")
-plt.ylabel("CPU Workload Fraction")
+# sns.lineplot(data=df, x="timestep", y="hvac_setpoint", hue="datacenter", marker='o', markersize=2, linestyle='') # Points might be better
+sns.lineplot(data=df, x="timestep", y="hvac_setpoint", hue="datacenter")
+
+plt.title("HVAC Cooling Setpoint (°C) per Datacenter over Time")
+plt.xlabel("Timestep (15 min intervals)")
+plt.ylabel("Setpoint (°C)")
+
 plt.grid(True)
+plt.legend(title='Datacenter', bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.tight_layout()
 plt.show()
-# %%
+#%%
+
+#%% Figure 2: Energy Price, Carbon Intensity, and Tasks Assigned over First N Days (Simulation Hours)
+
+# number of days to plot
+days = 5
+steps_per_day = 96
+max_steps = steps_per_day * days
+
+# filter to first N days
+df2 = df[df["timestep"] < max_steps].copy()
+# add a column for simulation hours (each timestep = 0.25 h)
+df2["sim_hour"] = df2["timestep"] * 0.25
+
+# compute dynamic x-ticks at each 24 h interval
+total_hours = days * 24
+xticks = np.arange(0, total_hours + 1, 24)
+xticklabels = [f"{int(h)}h" for h in xticks]
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 3.5), sharex=True)
+
+# Energy Price
+sns.lineplot(data=df2, x="sim_hour", y="price_per_kwh", hue="datacenter", ax=axes[0])
+axes[0].set_title(f"Energy Price over First {days} Days")
+axes[0].set_ylabel("USD/kWh")
+axes[0].set_xlabel("Simulation Hours")
+axes[0].set_xticks(xticks)
+axes[0].set_xticklabels(xticklabels)
+axes[0].grid(True)
+axes[0].set_xlim(0, total_hours)
+
+# Carbon Intensity
+sns.lineplot(data=df2, x="sim_hour", y="ci", hue="datacenter", ax=axes[1])
+axes[1].set_title(f"Carbon Intensity over First {days} Days")
+axes[1].set_ylabel("gCO₂/kWh")
+axes[1].set_xlabel("Simulation Hours")
+axes[1].set_xticks(xticks)
+axes[1].set_xticklabels(xticklabels)
+axes[1].grid(True)
+
+# Tasks Assigned
+sns.lineplot(data=df2, x="sim_hour", y="running_tasks", hue="datacenter", ax=axes[2])
+axes[2].set_title(f"Tasks Assigned over First {days} Days")
+axes[2].set_ylabel("Number of Tasks")
+axes[2].set_xlabel("Simulation Hours")
+axes[2].set_xticks(xticks)
+axes[2].set_xticklabels(xticklabels)
+axes[2].grid(True)
+
+# remove individual legends
+for ax in axes:
+    ax.get_legend().remove()
+
+# mapping from DC IDs to human-readable locations
+dc_label_map = {
+    "DC1": "California, US",
+    "DC2": "Germany",
+    "DC3": "Santiago, CL",
+    "DC4": "Singapore",
+    "DC5": "New South Wales, AU"
+}
+
+# add a single legend on the right, with remapped labels
+handles, labels = axes[0].get_legend_handles_labels()
+labels = [dc_label_map.get(lbl, lbl) for lbl in labels]
+fig.legend(handles, labels, title="Datacenter Location", ncols=5,
+           bbox_to_anchor=(0.15, -0.06), loc="center left")
+
+plt.tight_layout(rect=[0, 0, 0.85, 1])
+plt.show()
+
+# Save as pdf
+# fig.savefig("assets/figures/energy_price_carbon_intensity_tasks_assigned.pdf", bbox_inches='tight')
+
+
+#%%
+#%% Figure: Transmission Cost, Delayed Tasks, CPU & GPU Utilization Over Time
+import numpy as np
+#%% Figure: Transmission Cost, Delayed Tasks, CPU & GPU Utilization over First N Days
+days = 5
+steps_per_day = 96
+max_steps = days * steps_per_day
+
+# prepare data for first N days
+df2 = df[df["timestep"] < max_steps].copy()
+df2["sim_hour"] = df2["timestep"] * 0.25  # 15-min = 0.25h
+sim_hours = np.arange(max_steps) * 0.25
+
+# dynamic x-ticks at each 24h
+total_hours = days * 24
+xticks = np.arange(0, total_hours + 1, 24)
+xticklabels = [f"{int(h)}h" for h in xticks]
+
+fig, axes = plt.subplots(2, 2, figsize=(12, 4), sharex=True)
+
+# (a) Transmission Cost
+axes[0, 0].plot(sim_hours, common_info_list[:max_steps])
+axes[0, 0].set_title("Transmission Cost Over Time")
+axes[0, 0].set_ylabel("USD")
+axes[0, 0].set_xticks(xticks)
+axes[0, 0].set_xticklabels(xticklabels)
+axes[0, 0].grid(True)
+axes[0, 0].set_xlim(0, total_hours)
+
+# (b) Delayed Tasks
+axes[1, 0].plot(sim_hours, delayed_task_counts[:max_steps], color="orange")
+axes[1, 0].set_title("Delayed Tasks Over Time")
+axes[1, 0].set_ylabel("Count")
+axes[1, 0].set_xlabel("Simulation Hours")
+axes[1, 0].set_xticks(xticks)
+axes[1, 0].set_xticklabels(xticklabels)
+axes[1, 0].grid(True)
+
+# (c) CPU Utilization per DC
+sns.lineplot(data=df2, x="sim_hour", y="cpu_util", hue="datacenter", ax=axes[0, 1])
+axes[0, 1].set_title("CPU Utilization Over Time")
+axes[0, 1].set_ylabel("CPU Util (%)")
+axes[0, 1].set_xticks(xticks)
+axes[0, 1].set_xticklabels(xticklabels)
+axes[0, 1].grid(True)
+
+# capture legend handles/labels before removal
+handles, labels = axes[0, 1].get_legend_handles_labels()
+
+# (d) GPU Utilization per DC
+sns.lineplot(data=df2, x="sim_hour", y="gpu_util", hue="datacenter", ax=axes[1, 1])
+axes[1, 1].set_title("GPU Utilization Over Time")
+axes[1, 1].set_ylabel("GPU Util (%)")
+axes[1, 1].set_xlabel("Simulation Hours")
+axes[1, 1].set_xticks(xticks)
+axes[1, 1].set_xticklabels(xticklabels)
+axes[1, 1].grid(True)
+
+# remove individual legends on CPU/GPU axes
+axes[0, 1].get_legend().remove()
+axes[1, 1].get_legend().remove()
+
+# mapping DC IDs to medium-length labels
+dc_label_map = {
+    "DC1": "California (US)",
+    "DC2": "Germany",
+    "DC3": "Santiago (CL)",
+    "DC4": "Singapore",
+    "DC5": "NSW (AU)"
+}
+new_labels = [dc_label_map.get(lbl, lbl) for lbl in labels]
+
+# add single legend on right
+fig.legend(handles, new_labels, title="Datacenter Location", ncols=5,
+           bbox_to_anchor=(0.05, -0.04), loc="center left")
+
+plt.tight_layout(rect=[0, 0, 0.75, 1])
+plt.show()
+
+# Save as pdf
+# fig.savefig("assets/figures/transmission_cost_delayed_tasks_utilization.pdf", bbox_inches='tight')
+
+#%%

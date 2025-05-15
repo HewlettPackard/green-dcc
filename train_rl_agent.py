@@ -9,7 +9,7 @@ import argparse
 import datetime
 
 from envs.task_scheduling_env import TaskSchedulingEnv
-from rl_components.agent_net import ActorNet, CriticNet
+from rl_components.agent_net import ActorNet, CriticNet, AttentionActorNet, AttentionCriticNet
 from rl_components.replay_buffer import FastReplayBuffer
 from rewards.predefined.composite_reward import CompositeReward
 
@@ -47,7 +47,7 @@ def str2bool(v):
         raise argparse.ArgumentTypeError("Boolean value expected.")
     
 def parse_args():
-    parser = argparse.ArgumentParser(description="GreenDCC Training")
+    parser = argparse.ArgumentParser(description="SustainCluster Training")
     parser.add_argument("--sim-config", type=str, default="configs/env/sim_config.yaml")
     parser.add_argument("--reward-config", type=str, default="configs/env/reward_config.yaml")
     parser.add_argument("--dc-config", type=str, default="configs/env/datacenters.yaml")
@@ -85,7 +85,8 @@ def make_env(sim_cfg_path, dc_cfg_path, reward_cfg_path, writer=None, logger=Non
 
     reward_fn = CompositeReward(
         components=reward_cfg["components"],
-        normalize=reward_cfg.get("normalize", False)
+        normalize=reward_cfg.get("normalize", False),
+        freeze_stats_after_steps=reward_cfg.get("freeze_stats_after_steps", None) # Get value
     )
 
     return TaskSchedulingEnv(
@@ -129,10 +130,52 @@ def train():
 
     obs_dim = len(obs[0])
     act_dim = env.num_dcs + 1
+    
+    # obs_dim is per-task observation dimension
+    obs_dim_per_task = env.observation_space.shape[0] # From TaskSchedulingEnv
+    act_dim = env.num_dcs + 1
 
-    actor = ActorNet(obs_dim, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
-    critic = CriticNet(obs_dim, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
-    target_critic = CriticNet(obs_dim, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
+    # --- Network Initialization based on config ---
+    use_attention = algo_cfg.get("use_attention", False)
+    logger.info(f"Using attention mechanism: {use_attention}")
+
+    if use_attention:
+        attn_cfg = algo_cfg.get("attention", {}) # Get attention specific hyperparams
+        actor = AttentionActorNet(
+            obs_dim_per_task=obs_dim_per_task,
+            act_dim=act_dim,
+            embed_dim=attn_cfg.get("embed_dim", 128),
+            num_heads=attn_cfg.get("num_heads", 4),
+            # Corrected: num_attention_layers for your SimpleAttentionBlock based network
+            num_attention_layers=attn_cfg.get("num_attention_layers", 2),
+            # hidden_dim_ff might not be directly passed if SimpleAttentionBlock has it fixed or uses multiplier
+            dropout=attn_cfg.get("dropout", 0.1)
+        ).to(DEVICE)
+        
+        # Use AttentionCriticNetSAC if that's the name of your SAC-compatible attention critic
+        critic = AttentionCriticNet( 
+            obs_dim_per_task=obs_dim_per_task,
+            act_dim=act_dim,
+            embed_dim=attn_cfg.get("embed_dim", 128),
+            num_heads=attn_cfg.get("num_heads", 4),
+            num_attention_layers=attn_cfg.get("num_attention_layers", 2),
+            dropout=attn_cfg.get("dropout", 0.1)
+        ).to(DEVICE)
+        
+        target_critic = AttentionCriticNet( 
+            obs_dim_per_task=obs_dim_per_task,
+            act_dim=act_dim,
+            embed_dim=attn_cfg.get("embed_dim", 128),
+            num_heads=attn_cfg.get("num_heads", 4),
+            num_attention_layers=attn_cfg.get("num_attention_layers", 2),
+            dropout=attn_cfg.get("dropout", 0.1)
+        ).to(DEVICE)
+        
+    else: # Use original MLP networks
+        actor = ActorNet(obs_dim_per_task, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
+        critic = CriticNet(obs_dim_per_task, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
+        target_critic = CriticNet(obs_dim_per_task, act_dim, hidden_dim=algo_cfg["hidden_dim"]).to(DEVICE)
+    
     target_critic.load_state_dict(critic.state_dict())
 
     actor_opt = torch.optim.Adam(actor.parameters(), lr=float(algo_cfg["actor_learning_rate"]))
@@ -202,7 +245,7 @@ def train():
                 pbar.write(f"Avg reward: {avg_reward:.2f}")
                 if avg_reward > best_avg_reward:
                     best_avg_reward = avg_reward
-                    save_checkpoint(global_step, actor, critic, actor_opt, critic_opt, ckpt_dir, best=True)
+                    save_checkpoint(global_step, actor, critic, actor_opt, critic_opt, ckpt_dir, is_best=True)
                     pbar.write(f"[BEST] Saved checkpoint at step {global_step} (avg10 reward={avg_reward:.2f})")
 
         # 7) RL updates

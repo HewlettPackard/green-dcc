@@ -14,10 +14,18 @@ from gymnasium import spaces
 from utils.make_envs import make_bat_fwd_env, make_dc_env, make_ls_env
 from utils.managers import CI_Manager, ElectricityPrice_Manager, Time_Manager, Weather_Manager
 from utils.utils_cf import get_energy_variables, get_init_day, obtain_paths
+from rl_components.agent_net import ActorNet
+from utils.running_stats import RunningStats # Import RunningStats class
 
 from ..env_config import EnvConfig
 
 MAX_WAIT_TIMESTEPS = 4 * 8  # 8 hours, with 15-minute intervals = 32 timesteps
+
+# --- Action Mapping ---
+HVAC_ACTION_MAPPING = {0: -1.0, 1: 0.0, 2: 1.0}
+DEFAULT_HVAC_SETPOINT = 22.0
+MIN_HVAC_SETPOINT = 18.0
+MAX_HVAC_SETPOINT = 27.0
 
 class SustainDC(gym.Env):
     def __init__(self, env_config):
@@ -96,6 +104,53 @@ class SustainDC(gym.Env):
         self.running_tasks = []
         self.pending_tasks = deque()
         self.current_time_task = 0
+        
+        # HVAC agent
+        self.use_rl_hvac = env_config.get('use_rl_hvac', False)
+        self.hvac_controller_type = env_config.get('hvac_controller_type', 'none').lower()
+        self.hvac_policy_path = env_config.get('hvac_policy_path', None)
+        self.hvac_policy = None
+        self.hvac_obs_dim = None
+        self.hvac_act_dim = 3 # Discrete actions
+        self.hvac_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.hvac_obs_stats = None # For normalization
+
+        # --- Load HVAC Policy if Configured ---
+        if self.use_rl_hvac and self.hvac_policy_path and self.hvac_controller_type != 'none':
+            if os.path.exists(self.hvac_policy_path):
+                try:
+                    print(f"[DC {self.dc_id}] Loading HVAC policy ({self.hvac_controller_type}) from: {self.hvac_policy_path}")
+                    checkpoint = torch.load(self.hvac_policy_path, map_location=self.hvac_device)
+
+                    self.hvac_obs_dim = checkpoint.get('hvac_obs_dim')
+                    if self.hvac_obs_dim is None: raise ValueError("Checkpoint must contain 'hvac_obs_dim'")
+
+                    # Assuming ActorNet is used for discrete policy in both SAC/PPO checkpoints
+                    self.hvac_policy = ActorNet(self.hvac_obs_dim, self.hvac_act_dim, 64).to(self.hvac_device)
+                    policy_state_dict_key = 'actor_state_dict' # Standard key expected
+                    if policy_state_dict_key not in checkpoint: raise ValueError(f"Checkpoint missing '{policy_state_dict_key}'")
+                    self.hvac_policy.load_state_dict(checkpoint[policy_state_dict_key])
+                    self.hvac_policy.eval()
+
+                    # Load observation normalization stats if available
+                    if 'obs_stats_state' in checkpoint and checkpoint['obs_stats_state'] is not None:
+                        self.hvac_obs_stats = RunningStats(shape=(self.hvac_obs_dim,))
+                        self.hvac_obs_stats.set_state(checkpoint['obs_stats_state'])
+                        print(f"[DC {self.dc_id}] Loaded observation stats for HVAC policy.")
+                    else:
+                        print(f"[DC {self.dc_id}] WARNING: No observation stats found in HVAC checkpoint. Policy will use raw observations.")
+
+                    print(f"[DC {self.dc_id}] Successfully loaded HVAC policy.")
+
+                except Exception as e:
+                     print(f"[DC {self.dc_id}] ERROR loading HVAC policy from {self.hvac_policy_path}: {e}. Reverting to default HVAC.")
+                     self.use_rl_hvac = False; self.hvac_policy = None; self.hvac_obs_stats = None
+            else:
+                print(f"[DC {self.dc_id}] WARNING: use_rl_hvac is True but policy path not found: {self.hvac_policy_path}. Using default HVAC action.")
+                self.use_rl_hvac = False
+        elif self.use_rl_hvac:
+             print(f"[DC {self.dc_id}] WARNING: use_rl_hvac is True but hvac_policy_path or type not provided/invalid. Using default HVAC action.")
+             self.use_rl_hvac = False
 
     def _create_dc_environment(self, env_config):
         """
@@ -182,12 +237,10 @@ class SustainDC(gym.Env):
         else:
             # **Task couldn't be scheduled - track wait time**
             task.increment_wait_intervals()
-            if task.wait_intervals > MAX_WAIT_TIMESTEPS:
-                log_warn(f"[{current_time}] Task {task.job_name} dropped after waiting too long. IGNORED")
-                # Simulating the drop by not re-adding the task to the pending queue
-            else:
-                self.pending_tasks.append(task)  # Re-add task to queue for next cycle (The task is added to the end of the queue [right side])
-                log_info(f"[{current_time}] Task {task.job_name} moved to pending queue of DC{self.dc_id} due to resource limits.")
+
+            # --- Always re-add the task to the pending queue ---
+            self.pending_tasks.append(task) # Re-add task to queue for next cycle
+            log_info(f"[{current_time}] Task {task.job_name} moved to pending queue of DC{self.dc_id} (wait: {task.wait_intervals}).")
             return False
             
     def set_seed(self, seed=None):
@@ -230,6 +283,9 @@ class SustainDC(gym.Env):
         self.running_tasks.clear()
         self.pending_tasks.clear()
         self.current_time_task = 0
+        
+        # Reset HVAC setpoint state
+        self.current_crac_setpoint = DEFAULT_HVAC_SETPOINT
 
         # **Reinitialize the managers with new paths**
         self.simulation_year = init_year
@@ -252,12 +308,14 @@ class SustainDC(gym.Env):
         ci_i, ci_i_future, ci_i_denorm = self.ci_manager.reset(init_day=local_init_day, init_hour=local_init_hour, seed=seed)
         price_i = self.price_manager.reset(init_day=local_init_day, init_hour=local_init_hour, seed=seed)
 
-        # Set the external ambient temperature to data center environment
-        self.dc_env.set_ambient_temp(temp, wet_bulb)
-        
-        # Reset all the environments
-        self.dc_state, self.dc_info = self.dc_env.reset()
-        bat_s, self.bat_info = self.bat_env.reset()
+        # Reset sub-environments
+        try:
+            self.dc_env.set_ambient_temp(temp, wet_bulb)
+            _, self.dc_info = self.dc_env.reset(seed=seed) # Pass seed
+            bat_s, self.bat_info = self.bat_env.reset(seed=seed) # Pass seed
+        except Exception as e:
+            print(f"ERROR during sub-env reset in DC {self.dc_id}: {e}")
+            self.dc_info = {}; self.bat_info = {} # Default empty on error
                 
         current_cpu_workload = 0.0  #self.workload_m.get_current_workload()
         current_gpu_workload = 0.0 
@@ -295,8 +353,10 @@ class SustainDC(gym.Env):
         
         
         # available_actions = None
+        self._last_cpu_workload = 0.0
+        self._last_gpu_workload = 0.0
         
-        return states
+        return states, self.infos
     
     def step(self, action_dict, logger):
         """
@@ -320,7 +380,7 @@ class SustainDC(gym.Env):
         self._perform_actions(action_dict)
     
         # Step the managers (time, workload, weather, CI) (t+1)
-        day, hour, t_i = self.t_m.step()
+        day, hour, t_i, manager_done = self.t_m.step()
         # workload = self.workload_m.step()
         temp, norm_temp, wet_bulb, norm_wet_bulb = self.weather_manager.step()
         ci_i, ci_i_future, ci_i_denorm = self.ci_manager.step()
@@ -420,40 +480,95 @@ class SustainDC(gym.Env):
 
             # "dc_total_power_kW": self.dc_info.get("dc_total_power_kW", None),
             "energy_consumption_kwh": energy_kwh,
+            "tasks_finished_this_step_objects": finished_tasks, # Add the list of objects
+            "finished_tasks_count": len(finished_tasks),
 
             "energy_cost_USD": energy_cost_USD,
             "carbon_emissions_kg": carbon_emissions_kg,
             "__sla__": sla_stats,
+            "hvac_setpoint_c": self.current_crac_setpoint
+
         })
 
         return obs, rew, terminateds, truncateds, self.infos
 
 
     def _perform_actions(self, action_dict):
-        # Use fixed "do nothing" actions:
-        # DO_NOTHING_LOAD_SHIFTING = 1
-        DO_NOTHING_HVAC = 1
+        """
+        Performs actions for internal agents (DC, Battery).
+        Uses loaded RL policy for HVAC if configured.
+        Note: action_dict is currently ignored as sub-agents use fixed/RL logic here.
+        """
+        # --- Determine Target HVAC Setpoint ---
+        target_hvac_setpoint = self.current_crac_setpoint # Default to maintain
+
+        if self.use_rl_hvac and self.hvac_policy:
+            norm_obs_vector = self._get_hvac_observation()
+            if norm_obs_vector is not None:
+                obs_tensor = torch.FloatTensor(norm_obs_vector).unsqueeze(0).to(self.hvac_device)
+                with torch.no_grad():
+                    logits = self.hvac_policy(obs_tensor)
+                    dist = torch.distributions.Categorical(logits=logits)
+                    discrete_action = dist.sample().item()
+
+                # Translate discrete action to setpoint change using mapping
+                setpoint_delta = HVAC_ACTION_MAPPING.get(discrete_action, 0.0) # Default to 0 change if action invalid
+                target_hvac_setpoint = self.current_crac_setpoint + setpoint_delta
+
+            else: # Handle observation error
+                 print(f"[DC {self.dc_id}] Using default HVAC action due to observation error.")
+                 target_hvac_setpoint = DEFAULT_HVAC_SETPOINT # Revert to default on error? Or just maintain? Let's maintain.
+                 # target_hvac_setpoint = self.current_crac_setpoint
+        else:
+            # Use default fixed setpoint if RL HVAC is not enabled/loaded
+            target_hvac_setpoint = DEFAULT_HVAC_SETPOINT
+
+        # Clip target setpoint to valid range
+        target_hvac_setpoint = np.clip(target_hvac_setpoint, MIN_HVAC_SETPOINT, MAX_HVAC_SETPOINT)
+
+        # Update the state *before* stepping the DC environment
+        self.current_crac_setpoint = target_hvac_setpoint
+
+        # --- Step the internal datacenter environment with the chosen ABSOLUTE setpoint ---
+        # dc_env (dc_gymenv) step expects the absolute setpoint
+        try:
+            _, _, self.dc_terminated, self.dc_truncated, self.dc_info = self.dc_env.step(self.current_crac_setpoint)
+        except Exception as e:
+            print(f"ERROR during dc_env.step in DC {self.dc_id}: {e}")
+            # Handle error state? Maybe set default info?
+            self.dc_info = self.dc_info or {} # Ensure dc_info exists
+
+
+        # --- Battery Action (Fixed) ---
         DO_NOTHING_BATTERY = 2
-
-        # For load shifting environment:
-        # self.ls_state, _, self.ls_terminated, self.ls_truncated, self.ls_info = self.ls_env.step(DO_NOTHING_LOAD_SHIFTING)
-
-        # For HVAC / data center environment:
-        self.dc_state, _, self.dc_terminated, self.dc_truncated, self.dc_info = self.dc_env.step(DO_NOTHING_HVAC)
-
-        # For battery environment:
-        self.bat_env.set_dcload(self.dc_info['dc_total_power_kW'] / 1e3)
-        self.bat_state, _, self.bat_terminated, self.bat_truncated, self.bat_info = self.bat_env.step(DO_NOTHING_BATTERY)
+        try:
+            dc_total_power_kw = self.dc_info.get('dc_total_power_kW', 0) # Use .get for safety
+            self.bat_env.set_dcload(dc_total_power_kw / 1e3)
+            self.bat_state, _, self.bat_terminated, self.bat_truncated, self.bat_info = self.bat_env.step(DO_NOTHING_BATTERY)
+        except Exception as e:
+             print(f"ERROR during bat_env.step in DC {self.dc_id}: {e}")
+             self.bat_info = self.bat_info or {} # Ensure bat_info exists
 
 
 
-    def _update_environments(self, workload, gpu_workload, mem_util, temp, wet_bulb, ci_i_denorm, ci_i_future, current_day, current_hour):
-        """Update the environment states based on the manager's outputs."""
-        # self.ls_env.update_workload(workload)
-        # self.ls_env.update_current_date(current_day, current_hour)
-        self.dc_env.set_ambient_temp(temp, wet_bulb)
-        self.dc_env.update_workloads(workload, mem_util, gpu_workload)
-        self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
+    def _update_environments(self, cpu_workload, gpu_workload, mem_util, temp, wet_bulb, ci_i_denorm, ci_i_future, current_day, current_hour):
+        """ Update the internal environment states based on the manager's outputs. """
+        # Store loads for potential use in next step's HVAC observation
+        self._last_cpu_workload = cpu_workload
+        self._last_gpu_workload = gpu_workload
+        # NOTE: mem_util is not currently used in default HVAC obs, but store if needed
+
+        try:
+            self.dc_env.set_ambient_temp(temp, wet_bulb)
+            # Pass GPU/Mem loads to the internal dc_env update if it uses them
+            self.dc_env.update_workloads(cpu_workload, mem_util, gpu_workload)
+        except Exception as e:
+            print(f"ERROR during dc_env update in DC {self.dc_id}: {e}")
+
+        try:
+            self.bat_env.update_ci(ci_i_denorm, ci_i_future[0])
+        except Exception as e:
+             print(f"ERROR during bat_env update in DC {self.dc_id}: {e}")
 
 
     def _populate_observation_dict(self):
@@ -490,3 +605,65 @@ class SustainDC(gym.Env):
         """
         self.current_time_task = current_time
 
+    def _get_hvac_observation(self):
+        """ Constructs the observation vector for the loaded HVAC policy. """
+        if not self.use_rl_hvac or self.hvac_policy is None or self.hvac_obs_dim is None:
+            print("DEBUG: _get_hvac_observation called but RL HVAC not active/loaded.")
+            return None # Should not be called if not active
+
+        # --- Construct observation based on the expected features ---
+        try:
+            # Features need to be available *before* dc_env.step is called
+            ambient_temp = self.weather_manager._current_temp # Access current temp from manager
+            # Loads are from the *previous* step's update
+            cpu_load = self._last_cpu_workload
+            gpu_load = self._last_gpu_workload
+            # Use the *current* setpoint (before the action modifies it for the *next* step)
+            setpoint_state = self.current_crac_setpoint
+            # Get time features from the time manager
+            current_hour = self.t_m.hour
+            sin_hour = np.sin(2 * np.pi * current_hour / 24.0)
+            cos_hour = np.cos(2 * np.pi * current_hour / 24.0)
+
+            # --- Ensure order matches training and hvac_obs_dim ---
+            # Example assuming obs_dim = 6: [sinH, cosH, ambT, cpuL, gpuL, currentSP]
+            obs_list = [
+                sin_hour, cos_hour, ambient_temp, cpu_load, gpu_load, setpoint_state
+            ]
+
+            # Add more features if hvac_obs_dim > 6, e.g.:
+            # if self.hvac_obs_dim > 6:
+            #     obs_list.append(self.ci_manager.get_current_ci(norm=True)) # Example: Normalized CI
+            # if self.hvac_obs_dim > 7:
+            #     obs_list.append(self.price_manager.get_current_price() / 1000) # Example: Normalized Price
+
+            # --- Verification and Formatting ---
+            if len(obs_list) != self.hvac_obs_dim:
+                raise ValueError(f"Observation construction mismatch! Expected {self.hvac_obs_dim}, got {len(obs_list)} features.")
+
+            raw_obs = np.array(obs_list, dtype=np.float32)
+
+            # --- Apply Normalization if stats were loaded ---
+            if self.hvac_obs_stats:
+                norm_obs = self.hvac_obs_stats.normalize(raw_obs)
+                return norm_obs
+            else:
+                # Return raw observation if no normalization stats available
+                # Note: This might lead to poor performance if policy was trained with normalization
+                return raw_obs
+
+        except AttributeError as e:
+             print(f"ERROR in _get_hvac_observation: Missing attribute, likely manager not ready? {e}")
+             return None # Indicate error
+        except Exception as e:
+            print(f"ERROR creating HVAC observation: {e}")
+            return None # Indicate error
+        
+    def get_current_carbon_intensity(self, norm=False):
+        """Helper method to get CI from the internal manager."""
+        if hasattr(self, 'ci_manager'):
+            return self.ci_manager.get_current_ci(norm=norm)
+        else:
+            # Return a default high value or raise error if manager not initialized
+            print(f"Warning: CI Manager not available for DC {self.dc_id}")
+            return 1000.0 # Example default high value

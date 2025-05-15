@@ -146,8 +146,8 @@ def make_dc_env(month : int = 1,
     ################################################################################
     
     # from DC_Config, scale the variable number of CPUs to have a similar value to "datacenter_capacity_mw"
-    print(f"[INFO] Datacenter at {location} scaled to capacity: {datacenter_capacity_mw:.2f} MW")
-    print(f"[INFO] the datacenter has {total_cores} cores, {total_gpus} GPUs and {dc_memory_GB} GB of memory")
+    # print(f"[INFO] Datacenter at {location} scaled to capacity: {datacenter_capacity_mw:.2f} MW")
+    # print(f"[INFO] the datacenter has {total_cores} cores, {total_gpus} GPUs and {dc_memory_GB} GB of memory")
 
     dc_config = DC_Config(dc_config_file=dc_config_file, total_cores=total_cores, total_gpus=total_gpus, total_mem_GB=dc_memory_GB,
                           datacenter_capacity_mw=datacenter_capacity_mw)  # Specify the relative or absolute path
@@ -210,7 +210,7 @@ def make_dc_env(month : int = 1,
     gpu_pwr = sum(rackwise_gpu_pwr)
     mem_pwr = sum(memory_power)
     
-    print(f"[INFO] ITE real power: {ite_pwr:.2f} W, CPU real power: {cpu_pwr:.2f} W, GPU real power: {gpu_pwr:.2f} W, Memory real power: {mem_pwr:.2f} W")
+    # print(f"[INFO] ITE real power: {ite_pwr:.2f} W, CPU real power: {cpu_pwr:.2f} W, GPU real power: {gpu_pwr:.2f} W, Memory real power: {mem_pwr:.2f} W")
     
     # Calculate the maximum power consumption of the chiller
     # Assume worst-case outside temp

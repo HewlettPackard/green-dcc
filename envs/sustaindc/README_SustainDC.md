@@ -1,6 +1,6 @@
 # SustainDC: Detailed Data Center Simulation Model
 
-This document describes the internal thermal and electrical simulation model used for each data center within the GreenDCC benchmark. It details how IT load translates to power consumption and heat, and how the cooling system responds.
+This document describes the internal thermal and electrical simulation model used for each data center within the SustainCluster benchmark. It details how IT load translates to power consumption and heat, and how the cooling system responds.
 
 This model is integrated as a sub-component within the `TaskSchedulingEnv` and `DatacenterClusterManager`. It provides the physics-based calculations that underpin the energy, carbon, and cost metrics used for evaluating scheduling policies.
 
@@ -20,7 +20,7 @@ The model represents a data center comprising multiple `Racks`, each containing 
 
 ---
 
-## 2. Integration within GreenDCC
+## 2. Integration within SustainCluster
 
 *   The `DatacenterClusterManager` holds multiple `SustainDC` instances.
 *   The `SustainDC` environment wrapper manages task queues and resource allocation (`total_cores`, `total_gpus`, `total_mem` specified in `datacenters.yaml`).
@@ -183,7 +183,7 @@ Key parameters are configurable:
 
 ## 9. Model References
 
-The simulation models used in GreenDCC build upon established research and data sources in data center energy modeling, thermal management, and hardware characterization:
+The simulation models used in SustainCluster build upon established research and data sources in data center energy modeling, thermal management, and hardware characterization:
 
 *   [1] **CPU/Fan Power & Thermal Curves:** Sun, K., et al. (2021). *Prototype energy models for data centers*. Energy and Buildings, 231, 110603. \[[DOI: 10.1016/j.enbuild.2020.110603](https://doi.org/10.1016/j.enbuild.2020.110603)\]
 *   [2] **Integrated DC Modeling:** Breen, T. J., et al. (2010). *From chip to cooling tower data center modeling*. 12th IEEE Intersociety Conference on Thermal and Thermomechanical Phenomena in Electronic Systems (ITHERM). \[[DOI: 10.1109/ITHERM.2010.5501421](https://doi.org/10.1109/ITHERM.2010.5501421)\]
@@ -203,11 +203,11 @@ The simulation models used in GreenDCC build upon established research and data 
 *   **IT Fan Control:** The IT fan speed responds to the *average* percentage utilization across CPU, GPU, and Memory, not necessarily the peak component temperature or load, which might differ from specific hardware implementations.
 *   **Memory Power:** The current model only includes a static background power component based on total capacity and does not model dynamic power variations due to memory access intensity.
 *   **HVAC Control:** CRAC setpoints are typically fixed via configuration; there is no active agent controlling HVAC setpoints in the default setup.
-*   **Battery/Load Shifting:** While code structures exist (`bat_env`, `ls_env`), these components are generally inactive or fixed in the default GreenDCC configuration.
+*   **Battery/Load Shifting:** While code structures exist (`bat_env`, `ls_env`), these components are generally inactive or fixed in the default SustainCluster configuration.
 
 ---
 
-## 11. Planned Extensions (Beyond Current GreenDCC Implementation)
+## 11. Planned Extensions (Beyond Current SustainCluster Implementation)
 
 *   Integration of active RL control for battery energy storage.
 *   Agent control over CRAC temperature setpoints.

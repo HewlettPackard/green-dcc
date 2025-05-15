@@ -3,8 +3,9 @@ import os
 import zipfile
 from collections import defaultdict
 from envs.sustaindc.sustaindc_env import SustainDC
-from utils.task_assignment_strategies import (distribute_most_available, distribute_random, distribute_priority_order,
-                                     distribute_least_pending, distribute_lowest_carbon, distribute_round_robin, distribute_lowest_price)
+from utils.task_assignment_strategies import (DistributeMostAvailable, DistributeRandom, DistributePriorityOrder, DistributeLowestPrice, DistributeLeastPending, 
+                                                DistributeLowestCarbon, DistributeRoundRobin, DistributeLowestUtilization, BaseRBCStrategy, DistributeLocalOnly)
+
 import numpy as np
 import pandas as pd
 from rl_components.task import Task
@@ -78,14 +79,16 @@ class DatacenterClusterManager:
         # Strategies for RBC task assignment
         self.strategy = strategy
         self.strategy_map = {
-            "most_available": distribute_most_available,
-            "random": distribute_random,
-            "priority_order": distribute_priority_order,
-            "least_pending": distribute_least_pending,
-            "lowest_carbon": distribute_lowest_carbon,
-            "round_robin": distribute_round_robin,
-            "lowest_price": distribute_lowest_price,
-        }
+                            "most_available": DistributeMostAvailable(),
+                            "random": DistributeRandom(),
+                            "priority_order": DistributePriorityOrder(),
+                            "least_pending": DistributeLeastPending(),
+                            "lowest_carbon": DistributeLowestCarbon(),
+                            "round_robin": DistributeRoundRobin(),
+                            "lowest_price": DistributeLowestPrice(),
+                            "lowest_utilization": DistributeLowestUtilization(),
+                            "local_only": DistributeLocalOnly(),
+                        }
 
     def reset(self, seed=None):
         """
@@ -119,6 +122,12 @@ class DatacenterClusterManager:
         for dc_name, dc in self.datacenters.items():
             # print(f"Resetting {dc_name} with UTC start: Day {self.random_init_day}, Hour {self.random_init_hour}")
             dc.reset(init_year=self.random_year, init_day=self.random_init_day, init_hour=self.random_init_hour, seed=seed)
+            
+        
+        # Reset stateful strategies
+        for strategy_obj in self.strategy_map.values():
+            if isinstance(strategy_obj, BaseRBCStrategy): # Check if it's one of our classes
+                strategy_obj.reset()
         # print("All datacenters have been reset.")
 
 
@@ -149,7 +158,9 @@ class DatacenterClusterManager:
                 scale=1,
                 datacenter_configs=self.get_config_list(),
                 current_time_utc=current_time,
-                logger=logger  # pass logger for debug
+                logger=logger,  # pass logger for debug
+                task_scale=5,  # Pass the task scale factor
+                group_size=1 # Pass the grouping factor
             )
 
         if logger:
@@ -214,18 +225,21 @@ class DatacenterClusterManager:
 
             # STEP 2.2: Assign tasks to datacenters using rule-based strategy
             dc_id_to_name = {dc.dc_id: name for name, dc in self.datacenters.items()}
-            
+
             for task in tasks:
                 assigned_dc_id = self.distribute_workload(task, current_time, logger)
                 if assigned_dc_id is not None:
                     dc_name = dc_id_to_name.get(assigned_dc_id)
+                    if dc_name is None: # Safety check
+                        if logger: logger.error(f"Could not find dc_name for assigned_dc_id {assigned_dc_id}")
+                        continue # Skip this task if mapping fails
                     self.datacenters[dc_name].pending_tasks.append(task)
-                    task.dest_dc_id = dc_name
+                    task.dest_dc_id = assigned_dc_id
                     task.dest_dc = self.datacenters[dc_name]
                     results["task_distribution"][dc_name].append(task)
 
                     if logger:
-                        logger.info(f"[{current_time}] Task {task.job_name} assigned -> {dc_name} (rule-based)")
+                        logger.info(f"[{current_time}] Task {task.job_name} assigned -> {dc_name} (ID: {assigned_dc_id}) via RBC")
         else:
             # Manual RL mode: tasks have already been enqueued
             if logger:

@@ -11,13 +11,13 @@ Existing schedulers and benchmarks tend to focus on either local resource utiliz
 - **Grid carbon intensity** (region‑specific gCO₂eq / kWh)  
 - **Network transfer** (per‑GB cost, serialization + propagation delay)
 
-We introduce **GreenDCC** (“Green Data‑Center Cluster”), an open‑source benchmark and Gym‑compatible simulation environment designed to fill this gap. GreenDCC provides:
+We introduce **SustainCluster** (“Green Data‑Center Cluster”), an open‑source benchmark and Gym‑compatible simulation environment designed to fill this gap. SustainCluster provides:
 1. A **reproducible**, end‑to‑end pipeline from real‑world datasets (Alibaba GPU trace, Open‑Meteo, Electricity Maps, cloud bandwidth pricing) to RL‑ready scenarios.  
 2. A **centralized global scheduler** that observes system‑wide state and issues “defer or assign” global decisions every 15 minutes.  
 3. A **full physics‑informed datacenter model** (CPU/GPU power curves, thermal response, HVAC proxy) coupled with transmission‑aware routing (cost + delay).  
 4. A **modular reward engine** supporting single or multi‑objective optimization (energy cost, carbon emissions, SLA adherence, transfer overhead).
 
-By proposing GreenDCC, we aim to foster among the scientific community and enterprises a common testbed for sustainable scheduling of AI workloads that captures the nuanced, geo‑temporal trade‑offs of modern cloud workloads must overcome.
+By proposing SustainCluster, we aim to foster among the scientific community and enterprises a common testbed for sustainable scheduling of AI workloads that captures the nuanced, geo‑temporal trade‑offs of modern cloud workloads must overcome.
 
 <p align="center">
   <img src="assets/figures/global_map.svg" alt="Geo-Distributed Data Centers" width="1000"/>
@@ -74,7 +74,7 @@ By proposing GreenDCC, we aim to foster among the scientific community and enter
   
 ## 2. Features & Highlights
 
-GreenDCC provides a comprehensive and realistic benchmark environment for developing and evaluating sustainable task scheduling algorithms across geo-distributed data centers. Key features include:
+SustainCluster provides a comprehensive and realistic benchmark environment for developing and evaluating sustainable task scheduling algorithms across geo-distributed data centers. Key features include:
 
 *   **Rich Real-World Data Integration:** Incorporates time-series data for **over 20 global locations**, including:
     *   **AI Workloads:** Based on the Alibaba Cluster Trace 2020 GPU dataset.
@@ -93,7 +93,7 @@ GreenDCC provides a comprehensive and realistic benchmark environment for develo
 *   **Reproducible Scenarios:** Enables consistent experimental setups through configuration files and seeding, crucial for benchmarking research.
 
 ## 3. Benchmark Design
-GreenDCC simulates a centralized global task scheduler interacting with a cluster of geographically distributed data centers. At each time step, the simulation proceeds as follows:
+SustainCluster simulates a centralized global task scheduler interacting with a cluster of geographically distributed data centers. At each time step, the simulation proceeds as follows:
 
 1.  **Task Generation:** New AI tasks (derived from the real-world trace) may arrive at their designated origin datacenters based on a population and time-zone probabilistic model. Any tasks previously time-deferred are also reconsidered.
 2.  **Observation:** The central agent (scheduler) observes the current global state, including time, environmental factors (price, carbon intensity), the state of each datacenter (resource availability, load), and the details of all pending tasks (requirements, origin, deadline).
@@ -132,7 +132,7 @@ This cycle repeats, allowing RL agents or rule-based controllers to learn or app
 
 
 ### 3.2 Supported Optimization Objectives
-GreenDCC allows users to optimize for various objectives, either individually or combined through the modular reward system. Key optimizable metrics tracked by the simulator include:
+SustainCluster allows users to optimize for various objectives, either individually or combined through the modular reward system. Key optimizable metrics tracked by the simulator include:
 
 *   Total operational energy cost (USD) across all datacenters.
 *   Total energy consumption (kWh).
@@ -155,7 +155,7 @@ When the scheduler assigns a task originating at DC `A` to a remote destination 
 
 ### 3.4 Time Granularity
 
-GreenDCC operates on a **15-minute timestep**. This granularity was chosen carefully to balance realism and simulation efficiency:
+SustainCluster operates on a **15-minute timestep**. This granularity was chosen carefully to balance realism and simulation efficiency:
 
 *   **Data Availability:** Key real-world data sources like Electricity Maps (carbon intensity) and grid APIs (electricity prices) typically provide data at 15-minute or hourly intervals.
 *   **Cloud Billing:** Major cloud providers often bill compute resources in increments of minutes (sometimes 1, 5, or 15), making 15-minute scheduling decisions relevant for cost optimization.
@@ -184,7 +184,7 @@ This timestep design is **backed by multiple studies** in the field:
   → Models energy transitions and sleep states using coarse time intervals to minimize server wake/sleep cycles.
 
 ## 4. Real‑World Datasets & Visualizations
-GreenDCC integrates multiple real-world datasets to create realistic and challenging scheduling scenarios that reflect the dynamic nature of global infrastructure and environmental factors.
+SustainCluster integrates multiple real-world datasets to create realistic and challenging scheduling scenarios that reflect the dynamic nature of global infrastructure and environmental factors.
 
 Summary table of datasets:
 | Dataset | Source | Description |
@@ -348,7 +348,7 @@ These visualizations help understand the input data driving the simulation and t
 
 ## 5. Supported Locations & Custom Regions
 
-GreenDCC includes integrated real-world data (electricity price, carbon intensity, weather) for a growing list of **over 20 global locations**. Use the following `location` codes within your `datacenters.yaml` configuration file to associate a simulated datacenter with these datasets.
+SustainCluster includes integrated real-world data (electricity price, carbon intensity, weather) for a growing list of **over 20 global locations**. Use the following `location` codes within your `datacenters.yaml` configuration file to associate a simulated datacenter with these datasets.
 
 The table below shows the built-in locations, the corresponding cloud provider region used for **transmission cost** lookups (based on `utils/transmission_region_mapper.py`), and the macro-cluster used for **transmission delay** lookups (based on `data/network_cost/network_delay.py`). Data availability (Price=P, Carbon Intensity=CI, Weather=W) is indicated based on files present in the `data/` directory (dynamic API calls may supplement missing files).
 
@@ -388,7 +388,7 @@ We plan to continuously expand this list in future releases.
 
 **How to Add Custom Locations or Regions:**
 
-While GreenDCC provides data for these common locations, the framework is designed to be extensible:
+While SustainCluster provides data for these common locations, the framework is designed to be extensible:
 
 1.  **Define New Location Code:** Add a new entry in `datacenters.yaml` with a unique `location` code (e.g., `"My-Custom-Region"`).
 2.  **Provide Data:** Place corresponding time-series data files (electricity price, carbon intensity, weather) into the respective subdirectories within `data/` (e.g., `data/electricity_prices/standardized/My-Custom-Region/2023/...`). Ensure the format matches the existing files.
@@ -397,11 +397,11 @@ While GreenDCC provides data for these common locations, the framework is design
     *   A macro-cluster (`EU`, `US`, `SA`, `AP`) used for looking up empirical delay parameters (throughput/RTT) from the Persico et al. data integrated into `data/network_cost/network_delay.py`.
 4.  **(Optional) Custom Transmission Data:** If the default cloud provider costs or empirical delay data do not suit your needs, you can modify the loading functions (e.g., `utils/transmission_cost_loader.py`, `data/network_cost/network_delay.py`) to point to your own custom CSV files containing region-to-region costs or delay parameters.
 
-This flexibility allows researchers to adapt GreenDCC to specific geographical footprints or network assumptions beyond the initially provided datasets.
+This flexibility allows researchers to adapt SustainCluster to specific geographical footprints or network assumptions beyond the initially provided datasets.
 
 ## 6. Datacenter Modeling
 
-Each simulated datacenter within GreenDCC incorporates a physics-informed model to estimate energy consumption, carbon emissions, and thermal behavior based on the scheduled workload and environmental conditions.
+Each simulated datacenter within SustainCluster incorporates a physics-informed model to estimate energy consumption, carbon emissions, and thermal behavior based on the scheduled workload and environmental conditions.
 
 ### 6.1 Short Explanation of the DC Models
 
@@ -453,11 +453,11 @@ This document details the CPU power curves, fan laws, heat transfer calculations
 
 The specific implementation of the **chiller power calculation** (`calculate_chiller_power` function, used within `calculate_HVAC_power`) is based on performance curves and part-load ratio logic derived from **EnergyPlus** examples and documentation (refer to code comments for specific source links within the EnergyPlus GitHub repository).
 
-**Note:** While the detailed `README_SustainDC.md` focuses heavily on the CPU and cooling aspects, the implementation within GreenDCC **has been extended** to explicitly incorporate **GPU and Memory power consumption** into the total IT load (`P_IT`) calculations, using parameters defined in the `dc_config_file` (e.g., `DEFAULT_GPU_POWER_CHARACTERISTICS`). This ensures that the energy impact of these critical components for AI workloads is accounted for in the simulation.
+**Note:** While the detailed `README_SustainDC.md` focuses heavily on the CPU and cooling aspects, the implementation within SustainCluster **has been extended** to explicitly incorporate **GPU and Memory power consumption** into the total IT load (`P_IT`) calculations, using parameters defined in the `dc_config_file` (e.g., `DEFAULT_GPU_POWER_CHARACTERISTICS`). This ensures that the energy impact of these critical components for AI workloads is accounted for in the simulation.
 
 ## 7. Environment & API
 
-GreenDCC provides a standard Reinforcement Learning interface through its `TaskSchedulingEnv` class, compatible with the [Gymnasium](https://gymnasium.farama.org/) API. This wrapper manages the interaction between the RL agent and the `DatacenterClusterManager` backend.
+SustainCluster provides a standard Reinforcement Learning interface through its `TaskSchedulingEnv` class, compatible with the [Gymnasium](https://gymnasium.farama.org/) API. This wrapper manages the interaction between the RL agent and the `DatacenterClusterManager` backend.
 
 ### 7.1 Observations
 
@@ -490,7 +490,7 @@ To simulate realistic workload arrival patterns across the globe, tasks extracte
 
 ### 7.4 SLA Modeling
 
-GreenDCC incorporates Service Level Agreement (SLA) constraints to evaluate the timeliness of task completion.
+SustainCluster incorporates Service Level Agreement (SLA) constraints to evaluate the timeliness of task completion.
 
 *   **Deadline Calculation:** Each task is assigned an SLA deadline upon arrival, calculated as:
     `sla_deadline = arrival_time + sla_multiplier * duration`
@@ -500,7 +500,7 @@ GreenDCC incorporates Service Level Agreement (SLA) constraints to evaluate the 
 
 ### 7.5 Transmission Delay Model
 
-To accurately model the impact of network latency when routing tasks between geographically distant datacenters, GreenDCC calculates and applies a transmission delay.
+To accurately model the impact of network latency when routing tasks between geographically distant datacenters, SustainCluster calculates and applies a transmission delay.
 
 *   **Purpose:** Represents the time taken for the task's input data to travel from the origin DC to the destination DC.
 *   **Calculation (`get_transmission_delay` in `data/network_cost/network_delay.py`):** The delay is composed of two parts:
@@ -511,13 +511,13 @@ To accurately model the impact of network latency when routing tasks between geo
 
 ## 8. Modular Reward System
 
-A core feature of GreenDCC is its highly flexible and extensible reward system, designed to facilitate research into multi-objective sustainable scheduling. Instead of a single fixed reward, users can easily define complex reward signals that balance various environmental, economic, and operational goals.
+A core feature of SustainCluster is its highly flexible and extensible reward system, designed to facilitate research into multi-objective sustainable scheduling. Instead of a single fixed reward, users can easily define complex reward signals that balance various environmental, economic, and operational goals.
 
 The system is built around the concept of composable reward functions, located in the `rewards/` directory.
 
 ### 8.1 Built-in Reward Functions
 
-GreenDCC provides several pre-defined reward components, each inheriting from `rewards.base_reward.BaseReward` and targeting a specific optimization objective. These components calculate a reward value based on the simulation results (`cluster_info`) from the latest timestep:
+SustainCluster provides several pre-defined reward components, each inheriting from `rewards.base_reward.BaseReward` and targeting a specific optimization objective. These components calculate a reward value based on the simulation results (`cluster_info`) from the latest timestep:
 
 | Reward Name                  | File (`rewards/predefined/`)           | Description                                                     | Key Input from `cluster_info`                                     |
 | :--------------------------- | :------------------------------------- | :-------------------------------------------------------------- | :---------------------------------------------------------------- |
@@ -572,7 +572,7 @@ A more detailed explanation of the reward system, including the mathematical for
 
 ## 9. Code Organization
 
-The GreenDCC repository is structured to separate concerns, making it easier to understand, configure, and extend the benchmark.
+The SustainCluster repository is structured to separate concerns, making it easier to understand, configure, and extend the benchmark.
 
 ### 9.1 Code Architecture
 
@@ -672,7 +672,7 @@ Ensure you have Conda (or Miniconda/Mamba) installed.
 
 ### 10.2 Training (SAC + Configs)
 
-GreenDCC includes an example training script (`train_rl_agent.py`) using the Soft Actor-Critic (SAC) algorithm. The training process is highly configurable via YAML files located in `configs/env/`.
+SustainCluster includes an example training script (`train_rl_agent.py`) using the Soft Actor-Critic (SAC) algorithm. The training process is highly configurable via YAML files located in `configs/env/`.
 
 *   **Configuration Files:**
     *   `sim_config.yaml`: Controls simulation settings.
@@ -739,7 +739,7 @@ Model checkpoints (actor, critic networks, and optimizer states) are saved durin
 
 ## 11. Evaluation & Demo
 
-GreenDCC provides tools and examples for evaluating the performance of different scheduling strategies, including trained RL agents and rule-based controllers.
+SustainCluster provides tools and examples for evaluating the performance of different scheduling strategies, including trained RL agents and rule-based controllers.
 
 ### 11.1 Rule-based vs RL Evaluation
 
@@ -774,11 +774,11 @@ You can compare the performance of a trained RL agent against various built-in r
 
 For convenience and easy experimentation without local setup, a Google Colab notebook is provided:
 
-👉 **[Run GreenDCC Evaluation in Colab](https://colab.research.google.com/drive/1LLw313sG56l2I29E0Q9zh6KM0q5Z23WX?usp=sharing)**
+👉 **[Run SustainCluster Evaluation in Colab](https://colab.research.google.com/drive/1LLw313sG56l2I29E0Q9zh6KM0q5Z23WX?usp=sharing)**
 
 This notebook typically includes functionality to:
 
-*   Set up the GreenDCC environment within Colab.
+*   Set up the SustainCluster environment within Colab.
 *   Upload a pre-trained agent checkpoint file (`.pth`).
 *   Run a simulation for a specified duration (e.g., 7 days) using either the uploaded agent or a selected rule-based controller.
 *   Generate summary statistics and visualizations similar to the local evaluation script, allowing for quick analysis and demonstration of scheduling performance.
@@ -793,11 +793,11 @@ While a dedicated real-time dashboard is a planned feature, the standard evaluat
 *   **Trade-off Plots:** Scatter plots visualizing the Pareto frontier or trade-offs between conflicting objectives (e.g., plotting Total Energy Cost vs. Total Carbon Emissions for different agents/strategies).
 *   **Time-Series Visualizations:** Line plots showing how key metrics evolve over the simulation period for different strategies (as generated by the evaluation script), highlighting dynamic behavior and adaptation to changing conditions.
 
-These metrics and visualizations provide a quantitative basis for comparing the effectiveness of different sustainable scheduling approaches within the GreenDCC benchmark.
+These metrics and visualizations provide a quantitative basis for comparing the effectiveness of different sustainable scheduling approaches within the SustainCluster benchmark.
 
 ## 12. Planned Features & Roadmap
 
-GreenDCC is under active development. We plan to enhance the benchmark with several features to increase its realism, scope, and usability:
+SustainCluster is under active development. We plan to enhance the benchmark with several features to increase its realism, scope, and usability:
 
 *   **Geographic and Policy-based Transfer Constraints:** Introduce mechanisms to model and enforce restrictions on inter-datacenter task transfers based on data residency requirements (e.g., GDPR), national regulations, or other policy constraints.
 *   **Refined Transmission Emissions Modeling:** Move beyond the current origin-based approximation for transmission carbon emissions towards more sophisticated bottom-up network models that account for path routing, network segment efficiencies (core vs. access), and potentially dynamic energy consumption based on traffic load (e.g., based on [Guennebaud et al., 2024](https://doi.org/10.1111/jiec.13513)).
@@ -812,7 +812,7 @@ GreenDCC is under active development. We plan to enhance the benchmark with seve
 We welcome contributions and suggestions from the community! Feel free to open an issue on GitHub to discuss potential features or enhancements.
 
 ## 13. Citation, License & Contributors
-If you use the GreenDCC benchmark or codebase in your research, please cite our work. 
+If you use the SustainCluster benchmark or codebase in your research, please cite our work. 
 
 ### 13.1 Citation / Credits
 

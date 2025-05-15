@@ -1,0 +1,255 @@
+{
+    "@context": {
+        "@language": "en",
+        "@vocab": "https://schema.org/",
+        "sc": "https://schema.org/",
+        "cr": "http://mlcommons.org/croissant/",
+        "rai": "http://mlcommons.org/croissant/RAI/",
+        "dct": "http://purl.org/dc/terms/",
+        "citeAs": "cr:citeAs",
+        "column": "cr:column",
+        "conformsTo": "dct:conformsTo",
+        "data": {
+            "@id": "cr:data",
+            "@type": "@json"
+        },
+        "dataType": {
+            "@id": "cr:dataType",
+            "@type": "@vocab"
+        },
+        "examples": {
+            "@id": "cr:examples",
+            "@type": "@json"
+        },
+        "extract": "cr:extract",
+        "field": "cr:field",
+        "fileProperty": "cr:fileProperty",
+        "fileObject": "cr:fileObject",
+        "fileSet": "cr:fileSet",
+        "format": "cr:format",
+        "includes": "cr:includes",
+        "isLiveDataset": "cr:isLiveDataset",
+        "jsonPath": "cr:jsonPath",
+        "key": "cr:key",
+        "md5": "cr:md5",
+        "parentField": "cr:parentField",
+        "path": "cr:path",
+        "recordSet": "cr:recordSet",
+        "references": "cr:references",
+        "regex": "cr:regex",
+        "repeated": "cr:repeated",
+        "replace": "cr:replace",
+        "separator": "cr:separator",
+        "source": "cr:source",
+        "subField": "cr:subField",
+        "transform": "cr:transform"
+    },
+    "@type": "sc:Dataset",
+    "name": "Electricity Prices Dataset",
+    "description": "A dataset containing electricity price data for various global regions. The data includes price measurements in local currencies per MWh for different geographical zones.",
+    "conformsTo": "http://mlcommons.org/croissant/1.0",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://github.com/HewlettPackard/green-dcc/tree/main",
+    "version": "1.0.0",
+    "citeAs": "Hewlett Packard Enterprise (2023). Electricity Prices Dataset. GitHub. https://github.com/HewlettPackard/green-dcc/tree/main",
+    "creator": {
+        "@type": "sc:Organization",
+        "name": "Hewlett Packard Enterprise",
+        "url": "https://www.hpe.com"
+    },
+    "isLiveDataset": true,
+    "datePublished": "2023",
+    "keywords": [
+        "electricity prices",
+        "energy markets",
+        "price data",
+        "electricity",
+        "power markets",
+        "sustainability"
+    ],
+    "distribution": [
+        {
+            "@type": "cr:FileSet",
+            "@id": "electricity_prices_files",
+            "name": "Electricity Prices CSV Files",
+            "description": "Collection of CSV files containing electricity price data for different regions and years",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "at_files",
+            "name": "Austria Region Files",
+            "description": "Electricity price data for Austria",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AT",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "at_2020_file",
+            "name": "Austria 2020 Electricity Prices",
+            "description": "Electricity price data for Austria in 2020",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AT/2020/AT_electricity_prices_2020.csv",
+            "encodingFormat": "text/csv"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "at_2021_file",
+            "name": "Austria 2021 Electricity Prices",
+            "description": "Electricity price data for Austria in 2021",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AT/2021/AT_electricity_prices_2021.csv",
+            "encodingFormat": "text/csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "au_nsw_files",
+            "name": "Australia NSW Region Files",
+            "description": "Electricity price data for Australia NSW region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AU-NSW",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "au_nsw_2020_file",
+            "name": "Australia NSW 2020 Electricity Prices",
+            "description": "Electricity price data for Australia NSW in 2020",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/electricity_prices/processed/AU-NSW/2020/AU-NSW_electricity_prices_2020.csv",
+            "encodingFormat": "text/csv"
+        }
+    ],
+    "recordSet": [
+        {
+            "@type": "cr:RecordSet",
+            "@id": "electricity_prices",
+            "name": "Electricity Price Measurements",
+            "description": "Time-series electricity price measurements for various global regions",
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "electricity_prices/datetime",
+                    "name": "Datetime",
+                    "description": "Timestamp for the electricity price measurement",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "electricity_prices_files"
+                        },
+                        "extract": {
+                            "column": "Datetime"
+                        },
+                        "format": "%Y-%m-%dT%H:%M:%SZ"
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "electricity_prices/price",
+                    "name": "Price",
+                    "description": "Electricity price in local currency per MWh. The currency varies by country/region.",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "electricity_prices_files"
+                        },
+                        "extract": {
+                            "column": "Price (.*)"
+                        },
+                        "transform": {
+                            "regex": "Price \\((.*)\\)"
+                        }
+                    }
+                }
+            ],
+            "examples": [
+                {
+                    "electricity_prices/datetime": "2020-01-01T00:00:00Z",
+                    "electricity_prices/price": 45.67
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "regions",
+            "name": "Geographical Regions",
+            "description": "List of geographical regions available in the dataset",
+            "key": {
+                "@id": "regions/region_id"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/region_id",
+                    "name": "Region ID",
+                    "description": "Identifier for the region",
+                    "dataType": "sc:Text"
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/region_name",
+                    "name": "Region Name",
+                    "description": "Full name of the region",
+                    "dataType": "sc:Text"
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/currency",
+                    "name": "Currency",
+                    "description": "Local currency used for electricity prices",
+                    "dataType": "sc:Text"
+                }
+            ],
+            "data": [
+                {
+                    "regions/region_id": "AT",
+                    "regions/region_name": "Austria",
+                    "regions/currency": "EUR"
+                },
+                {
+                    "regions/region_id": "AU-NSW",
+                    "regions/region_name": "Australia - New South Wales",
+                    "regions/currency": "AUD"
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "years",
+            "name": "Available Years",
+            "description": "Years for which electricity price data is available",
+            "key": {
+                "@id": "years/year"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "years/year",
+                    "name": "Year",
+                    "description": "Calendar year",
+                    "dataType": "sc:Integer"
+                }
+            ],
+            "data": [
+                {
+                    "years/year": 2020
+                },
+                {
+                    "years/year": 2021
+                },
+                {
+                    "years/year": 2022
+                },
+                {
+                    "years/year": 2023
+                },
+                {
+                    "years/year": 2024
+                }
+            ]
+        }
+    ],
+    "rai:dataCollection": "The electricity price data is collected from various electricity market operators and aggregated by region and time. The data reflects the price of electricity in local currency per megawatt-hour (MWh).",
+    "rai:dataCollectionTimeframe": "Data collection started in 2020 and is ongoing, with measurements for each region.",
+    "rai:dataUseCases": "This dataset can be used for energy market analysis, electricity cost forecasting, research on energy price volatility, sustainable computing cost optimization, and economic impact assessments of energy policies."
+}

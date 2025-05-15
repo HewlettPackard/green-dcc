@@ -10,7 +10,7 @@ High-level overview of the operational model of a |F| data center is given in th
 
 .. figure:: ../images/hier.png
    :scale: 18 %
-   :alt: GreenDCC Framework for Data Center Cluster Management
+   :alt: SustainCluster Framework for Data Center Cluster Management
    :align: center
 
 
@@ -22,7 +22,7 @@ The high-level components of |F| are:
 
 The figure below shows the |F| framework using two main strategies to optimize data center operations and reduce carbon emissions: geographic and temporal load shifting strategies.
 
-.. image:: ../images/GreenDCCv3.png
+.. image:: ../images/SustainClusterv3.png
    :scale: 15 %
    :alt: Green-DCC Framework demonstrating Geographic and Temporal Load Shifting Strategies
    :align: center

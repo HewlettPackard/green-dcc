@@ -41,7 +41,7 @@ Key features of |F|
 
 The hierarchical structure allows for coordinated, multi-objective optimization that considers both global strategies and local operational constraints.
 
-.. image:: images/GreenDCCv3.png
+.. image:: images/SustainClusterv3.png
    :scale: 15 %
    :alt: Green-DCC Framework demonstrating Geographic and Temporal Load Shifting Strategies
    :align: center

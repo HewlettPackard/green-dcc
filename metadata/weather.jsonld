@@ -1,0 +1,567 @@
+{
+    "@context": {
+        "@language": "en",
+        "@vocab": "https://schema.org/",
+        "sc": "https://schema.org/",
+        "cr": "http://mlcommons.org/croissant/",
+        "rai": "http://mlcommons.org/croissant/RAI/",
+        "dct": "http://purl.org/dc/terms/",
+        "citeAs": "cr:citeAs",
+        "column": "cr:column",
+        "conformsTo": "dct:conformsTo",
+        "data": {
+            "@id": "cr:data",
+            "@type": "@json"
+        },
+        "dataType": {
+            "@id": "cr:dataType",
+            "@type": "@vocab"
+        },
+        "examples": {
+            "@id": "cr:examples",
+            "@type": "@json"
+        },
+        "extract": "cr:extract",
+        "field": "cr:field",
+        "fileProperty": "cr:fileProperty",
+        "fileObject": "cr:fileObject",
+        "fileSet": "cr:fileSet",
+        "format": "cr:format",
+        "includes": "cr:includes",
+        "isLiveDataset": "cr:isLiveDataset",
+        "jsonPath": "cr:jsonPath",
+        "key": "cr:key",
+        "md5": "cr:md5",
+        "parentField": "cr:parentField",
+        "path": "cr:path",
+        "recordSet": "cr:recordSet",
+        "references": "cr:references",
+        "regex": "cr:regex",
+        "repeated": "cr:repeated",
+        "replace": "cr:replace",
+        "separator": "cr:separator",
+        "source": "cr:source",
+        "subField": "cr:subField",
+        "transform": "cr:transform"
+    },
+    "@type": "sc:Dataset",
+    "name": "Weather Dataset",
+    "description": "A dataset containing historical weather data for various global regions. The dataset includes temperature, humidity, cloud cover, wind speed and other meteorological measurements.",
+    "conformsTo": "http://mlcommons.org/croissant/1.0",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://github.com/HewlettPackard/green-dcc/tree/main",
+    "version": "1.0.0",
+    "citeAs": "Hewlett Packard Enterprise (2023). Weather Dataset. GitHub. https://github.com/HewlettPackard/green-dcc/tree/main",
+    "creator": {
+        "@type": "sc:Organization",
+        "name": "Hewlett Packard Enterprise",
+        "url": "https://www.hpe.com"
+    },
+    "isLiveDataset": true,
+    "datePublished": "2023",
+    "keywords": [
+        "weather data",
+        "temperature",
+        "humidity",
+        "cloud cover",
+        "wind speed",
+        "meteorology",
+        "climate data"
+    ],
+    "distribution": [
+        {
+            "@type": "cr:FileSet",
+            "@id": "weather_files",
+            "name": "Weather JSON Files",
+            "description": "Collection of JSON files containing weather data for different regions and years",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather",
+            "encodingFormat": "application/json",
+            "includes": "**/*.json"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "au_nsw_files",
+            "name": "Australia NSW Region Files",
+            "description": "Weather data for Australia NSW region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/AU-NSW",
+            "encodingFormat": "application/json",
+            "includes": "*.json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "au_nsw_2020",
+            "name": "Australia NSW 2020 Weather Data",
+            "description": "Weather data for Australia NSW region in 2020",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/AU-NSW/2020.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "au_nsw_2021",
+            "name": "Australia NSW 2021 Weather Data",
+            "description": "Weather data for Australia NSW region in 2021",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/AU-NSW/2021.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "au_nsw_2022",
+            "name": "Australia NSW 2022 Weather Data",
+            "description": "Weather data for Australia NSW region in 2022",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/AU-NSW/2022.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "au_nsw_2023",
+            "name": "Australia NSW 2023 Weather Data",
+            "description": "Weather data for Australia NSW region in 2023",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/AU-NSW/2023.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "au_nsw_2024",
+            "name": "Australia NSW 2024 Weather Data",
+            "description": "Weather data for Australia NSW region in 2024",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/AU-NSW/2024.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "gb_files",
+            "name": "Great Britain Region Files",
+            "description": "Weather data for Great Britain region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/GB",
+            "encodingFormat": "application/json",
+            "includes": "*.json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "gb_2020",
+            "name": "Great Britain 2020 Weather Data",
+            "description": "Weather data for Great Britain region in 2020",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/GB/2020.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "gb_2021",
+            "name": "Great Britain 2021 Weather Data",
+            "description": "Weather data for Great Britain region in 2021",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/GB/2021.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "gb_2022",
+            "name": "Great Britain 2022 Weather Data",
+            "description": "Weather data for Great Britain region in 2022",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/GB/2022.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "gb_2023",
+            "name": "Great Britain 2023 Weather Data",
+            "description": "Weather data for Great Britain region in 2023",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/GB/2023.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "gb_2024",
+            "name": "Great Britain 2024 Weather Data",
+            "description": "Weather data for Great Britain region in 2024",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/GB/2024.json",
+            "encodingFormat": "application/json"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "au_vic_files",
+            "name": "Australia Victoria Region Files",
+            "description": "Weather data for Australia Victoria region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/AU-VIC",
+            "encodingFormat": "application/json",
+            "includes": "*.json"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "br_sp_files",
+            "name": "Brazil São Paulo Region Files",
+            "description": "Weather data for Brazil São Paulo region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/BR-SP",
+            "encodingFormat": "application/json",
+            "includes": "*.json"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "ca_on_files",
+            "name": "Canada Ontario Region Files",
+            "description": "Weather data for Canada Ontario region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/CA-ON",
+            "encodingFormat": "application/json",
+            "includes": "*.json"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "cl_sic_files",
+            "name": "Chile SIC Region Files",
+            "description": "Weather data for Chile SIC region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/CL-SIC",
+            "encodingFormat": "application/json",
+            "includes": "*.json"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "de_lu_files",
+            "name": "Germany/Luxembourg Region Files",
+            "description": "Weather data for Germany/Luxembourg region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/weather/DE-LU",
+            "encodingFormat": "application/json",
+            "includes": "*.json"
+        }
+    ],
+    "recordSet": [
+        {
+            "@type": "cr:RecordSet",
+            "@id": "weather_data",
+            "name": "Weather Measurements",
+            "description": "Time-series weather measurements for various global regions",
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/time",
+                    "name": "Time",
+                    "description": "Timestamp for the weather measurement",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.time"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/temperature_2m",
+                    "name": "Temperature 2m",
+                    "description": "Air temperature at 2 meters above ground in degrees Celsius",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.hourly.temperature_2m"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/relative_humidity_2m",
+                    "name": "Relative Humidity 2m",
+                    "description": "Relative humidity at 2 meters above ground in percentage",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.hourly.relative_humidity_2m"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/cloudcover",
+                    "name": "Cloud Cover",
+                    "description": "Total cloud cover in percentage",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.hourly.cloudcover"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/windspeed_10m",
+                    "name": "Wind Speed 10m",
+                    "description": "Wind speed at 10 meters above ground in km/h or m/s (depending on the units)",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.hourly.windspeed_10m"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/latitude",
+                    "name": "Latitude",
+                    "description": "Latitude of the location",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.latitude"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/longitude",
+                    "name": "Longitude",
+                    "description": "Longitude of the location",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.longitude"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/elevation",
+                    "name": "Elevation",
+                    "description": "Elevation above sea level in meters",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.elevation"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/timezone",
+                    "name": "Timezone",
+                    "description": "Timezone of the location",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.timezone"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/timezone_abbreviation",
+                    "name": "Timezone Abbreviation",
+                    "description": "Abbreviation of the timezone",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.timezone_abbreviation"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/utc_offset_seconds",
+                    "name": "UTC Offset Seconds",
+                    "description": "Offset from UTC in seconds",
+                    "dataType": "sc:Integer",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.utc_offset_seconds"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/generationtime_ms",
+                    "name": "Generation Time (ms)",
+                    "description": "Generation time of the data in milliseconds",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.generationtime_ms"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "weather_data/hourly_units",
+                    "name": "Hourly Units",
+                    "description": "Units for the hourly measurements",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "weather_files"
+                        },
+                        "extract": {
+                            "jsonPath": "$.hourly_units"
+                        }
+                    }
+                }
+            ],
+            "examples": [
+                {
+                    "weather_data/time": "2020-01-01T00:00",
+                    "weather_data/temperature_2m": 22.3,
+                    "weather_data/relative_humidity_2m": 65.2,
+                    "weather_data/cloudcover": 25.0,
+                    "weather_data/windspeed_10m": 5.8,
+                    "weather_data/latitude": -33.8688,
+                    "weather_data/longitude": 151.2093,
+                    "weather_data/elevation": 58.0,
+                    "weather_data/timezone": "Australia/Sydney",
+                    "weather_data/timezone_abbreviation": "AEST",
+                    "weather_data/utc_offset_seconds": 36000,
+                    "weather_data/generationtime_ms": 2.345
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "regions",
+            "name": "Geographical Regions",
+            "description": "List of geographical regions available in the dataset",
+            "key": {
+                "@id": "regions/region_id"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/region_id",
+                    "name": "Region ID",
+                    "description": "Identifier for the region",
+                    "dataType": "sc:Text"
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/region_name",
+                    "name": "Region Name",
+                    "description": "Full name of the region",
+                    "dataType": "sc:Text"
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/latitude",
+                    "name": "Latitude",
+                    "description": "Approximate latitude of the region center",
+                    "dataType": "sc:Float"
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/longitude",
+                    "name": "Longitude",
+                    "description": "Approximate longitude of the region center",
+                    "dataType": "sc:Float"
+                }
+            ],
+            "data": [
+                {
+                    "regions/region_id": "AU-NSW",
+                    "regions/region_name": "Australia - New South Wales",
+                    "regions/latitude": -33.8688,
+                    "regions/longitude": 151.2093
+                },
+                {
+                    "regions/region_id": "AU-VIC",
+                    "regions/region_name": "Australia - Victoria",
+                    "regions/latitude": -37.8136,
+                    "regions/longitude": 144.9631
+                },
+                {
+                    "regions/region_id": "BR-SP",
+                    "regions/region_name": "Brazil - São Paulo",
+                    "regions/latitude": -23.5505,
+                    "regions/longitude": -46.6333
+                },
+                {
+                    "regions/region_id": "CA-ON",
+                    "regions/region_name": "Canada - Ontario",
+                    "regions/latitude": 43.6532,
+                    "regions/longitude": -79.3832
+                },
+                {
+                    "regions/region_id": "CL-SIC",
+                    "regions/region_name": "Chile - Sistema Interconectado Central",
+                    "regions/latitude": -33.4489,
+                    "regions/longitude": -70.6693
+                },
+                {
+                    "regions/region_id": "DE-LU",
+                    "regions/region_name": "Germany/Luxembourg",
+                    "regions/latitude": 52.5200,
+                    "regions/longitude": 13.4050
+                },
+                {
+                    "regions/region_id": "GB",
+                    "regions/region_name": "Great Britain",
+                    "regions/latitude": 51.5074,
+                    "regions/longitude": -0.1278
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "years",
+            "name": "Available Years",
+            "description": "Years for which weather data is available",
+            "key": {
+                "@id": "years/year"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "years/year",
+                    "name": "Year",
+                    "description": "Calendar year",
+                    "dataType": "sc:Integer"
+                }
+            ],
+            "data": [
+                {
+                    "years/year": 2020
+                },
+                {
+                    "years/year": 2021
+                },
+                {
+                    "years/year": 2022
+                },
+                {
+                    "years/year": 2023
+                },
+                {
+                    "years/year": 2024
+                }
+            ]
+        }
+    ],
+    "rai:dataCollection": "The weather data is collected from meteorological services and historical weather APIs. The data includes hourly measurements of temperature, humidity, cloud cover, and wind speed for various global regions.",
+    "rai:dataCollectionTimeframe": "Data collection started in 2020 and is ongoing, with hourly measurements for each region.",
+    "rai:dataUseCases": "This dataset can be used for climate research, weather pattern analysis, energy consumption modeling, carbon footprint calculations in relation to weather conditions, and environmental impact studies."
+}

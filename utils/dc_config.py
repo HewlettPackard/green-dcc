@@ -111,6 +111,11 @@ CT_PRESSURE_DROP = 300000 #Pa
 CT_WATER_FLOW_RATE = 0.011#m3/s
 CT_PUMP_EFFICIENCY = 0.87 #%
 
+#Heat Recovery parameters
+AVE_HLP = 2 # W/(K*m^2)  [6],[7]       
+OFFICE_GUIDE_TEMP = 22 #Deg C  [8]    
+DC_AREA_PU = (1/850)*0.775 #m^2 per W  [9], [10] 
+OFFICE_BUILDING_AREA =  1765 #m^2 [11]       #typical area modern office buildings
 #References:
 #[1]: Postema, Björn Frits. "Energy-efficient data centres: model-based analysis of power-performance trade-offs." (2018).
 #[2]: Raghunathan, S., & Vk, M. (2014). Power management using dynamic power state transitions and dynamic voltage frequency scaling controls in virtualized server clusters. Turkish Journal of Electrical Engineering and Computer Sciences, 24(4). doi: 10.3906/elk-1403-264

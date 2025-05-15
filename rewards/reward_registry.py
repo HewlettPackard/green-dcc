@@ -7,6 +7,7 @@ from rewards.predefined.energy_price_reward import EnergyPriceReward
 from rewards.predefined.sla_penalty_reward import SLAPenaltyReward
 from rewards.predefined.efficiency_reward import EfficiencyReward
 from rewards.predefined.composite_reward import CompositeReward
+from rewards.predefined.timeliness_reward import TimelinessReward
 from rewards.predefined.carbon_emissions_reward import CarbonEmissionsReward
 from rewards.predefined.energy_consumption_reward import EnergyConsumptionReward
 from rewards.predefined.transmission_cost_reward import TransmissionCostReward

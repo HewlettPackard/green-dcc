@@ -83,7 +83,7 @@ class dc_gymenv(gym.Env):
         self.has_gpus = self.dc.has_gpus
         
         self.CRAC_Fan_load, self.CRAC_cooling_load, self.Compressor_load, self.CW_pump_load, self.CT_pump_load = None, None, None, None, None
-        self.HVAC_load = self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]
+        # self.HVAC_load = self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]
         self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_memory_power, self.rackwise_gpu_pwr, self.rackwise_outlet_temp = [], [], [], [], []
         self.cpu_load_frac = 0.5
         self.gpu_load_frac = 0.5
@@ -124,7 +124,7 @@ class dc_gymenv(gym.Env):
         super().reset(seed=self.seed)
 
         self.CRAC_Fan_load, self.CRAC_cooling_load, self.Compressor_load, self.CW_pump_load, self.CT_pump_load = None, None, None, None, None
-        self.HVAC_load = self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]
+        # self.HVAC_load = self.ranges['Facility Total HVAC Electricity Demand Rate(Whole Building)'][0]
         self.rackwise_cpu_pwr, self.rackwise_itfan_pwr, self.rackwise_gpu_pwr, self.rackwise_outlet_temp, self.rackwise_memory_power = [], [], [], [], []
         self.water_usage = None
         
@@ -156,7 +156,7 @@ class dc_gymenv(gym.Env):
             return self.normalize(self.raw_curr_state), self.info
         return None, self.info
     
-    def step(self, action):
+    def step(self, raw_curr_stpt):
         """
         Makes an environment step in`dc_gymenv.
 
@@ -169,7 +169,7 @@ class dc_gymenv(gym.Env):
             done (bool): A boolean value signaling the if the episode has ended.
             info (dict): A dictionary that containing additional information about the environment state
         """
-        self.raw_curr_stpt = 18  # Set a fixed CRAC setpoint to 18 C
+        self.raw_curr_stpt = raw_curr_stpt  # Set a fixed CRAC setpoint to 18 C
     
         # Prepare load percentages for all racks
         ITE_load_pct_list = [self.cpu_load_frac*100 for i in range(self.DC_Config.NUM_RACKS)]

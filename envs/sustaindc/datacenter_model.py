@@ -417,8 +417,8 @@ class Rack():
         self.v_fan_rack = self.IT_FAN_FULL_LOAD_V*itfan_v_ratio_at_inlet_temp
         
         # Log fan speed ratio and other relevant values
-        self.log_thermal_control_data(inlet_temp, itfan_v_ratio_at_inlet_temp, ITE_load_pct, GPU_load_pct, MEMORY_load_pct, 
-                                np.sum(cpu_power), np.sum(gpu_power), np.sum(itfan_pwr))
+        # self.log_thermal_control_data(inlet_temp, itfan_v_ratio_at_inlet_temp, ITE_load_pct, GPU_load_pct, MEMORY_load_pct, 
+                                # np.sum(cpu_power), np.sum(gpu_power), np.sum(itfan_pwr))
         
         return np.sum(cpu_power), np.sum(itfan_pwr), np.sum(gpu_power)
 
@@ -548,7 +548,7 @@ class DataCenter_ITModel():
 
         outlet_temp = rack_inlet_temp + c * power_term / airflow_term + g
 
-        if outlet_temp > 70:
+        if outlet_temp > 80:
             print(f'[WARNING] High outlet temp: {outlet_temp:.2f}C')
         if outlet_temp - rack_inlet_temp < 2:
             print(f'[ERROR] Delta-T too small: {outlet_temp - rack_inlet_temp:.2f}')
@@ -698,6 +698,10 @@ def calculate_HVAC_power(CRAC_setpoint, avg_CRAC_return_temp, ambient_temp, data
     CRAC_cooling_load = m_sys * DC_Config.C_AIR * max(0.0, avg_CRAC_return_temp - CRAC_setpoint) # coo.Q_thistime
     CRAC_Fan_load = DC_Config.CRAC_FAN_REF_P * (DC_Config.CRAC_SUPPLY_AIR_FLOW_RATE_pu / DC_Config.CRAC_REFRENCE_AIR_FLOW_RATE_pu)**3
     
+    # CRAC_cooling_load_reduction = min(heat_recovery(data_center_full_load, ambient_temp, DC_Config), 0.25* data_center_full_load)
+
+    # CRAC_cooling_load = CRAC_cooling_load - CRAC_cooling_load_reduction 
+
     chiller_power = calculate_chiller_power(DC_Config.CT_FAN_REF_P, CRAC_cooling_load, ambient_temp)
 
     # Chiller power calculation
@@ -711,7 +715,7 @@ def calculate_HVAC_power(CRAC_setpoint, avg_CRAC_return_temp, ambient_temp, data
 
     # Cooling tower fan power calculations
     Cooling_tower_air_delta = max(50 - (ambient_temp - CRAC_setpoint), 1)
-    m_air = CRAC_cooling_load / (DC_Config.C_AIR * Cooling_tower_air_delta)
+    m_air = (CRAC_cooling_load + chiller_power) / (DC_Config.C_AIR * Cooling_tower_air_delta)
     v_air = m_air / DC_Config.RHO_AIR
     
     # Reference cooling tower air flow rate
@@ -812,6 +816,15 @@ def calculate_avg_CRAC_return_temp(rack_return_approach_temp_list, rackwise_outl
     n = len(rack_return_approach_temp_list)
     return sum([i + j for i,j in zip(rack_return_approach_temp_list, rackwise_outlet_temp)])/n  # CRAC return is averaged across racks
 
+def heat_recovery(max_IT_load, ambient_temp, DC_Config):
+    temperature_delta = max((DC_Config.OFFICE_GUIDE_TEMP - ambient_temp), 0) #don't allow negative numbers, heat can't be lost to outside if it is warmer than inside
+    DC_office_heat = DC_Config.AVE_HLP * DC_Config.DC_AREA_PU * max_IT_load *  temperature_delta
+    
+    #Some heat can be sent to an office building immediatly next to the DC, this is not a District heating network model
+    office_heat = DC_Config.AVE_HLP *DC_Config.OFFICE_BUILDING_AREA * temperature_delta
+    cooling_load_reduction = DC_office_heat + office_heat
+
+    return cooling_load_reduction
 """
 References:
 [1]: Postema, Björn Frits. "Energy-efficient data centres: model-based analysis of power-performance trade-offs." (2018).

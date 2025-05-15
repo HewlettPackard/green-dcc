@@ -1,0 +1,573 @@
+{
+    "@context": {
+        "@language": "en",
+        "@vocab": "https://schema.org/",
+        "sc": "https://schema.org/",
+        "cr": "http://mlcommons.org/croissant/",
+        "rai": "http://mlcommons.org/croissant/RAI/",
+        "dct": "http://purl.org/dc/terms/",
+        "citeAs": "cr:citeAs",
+        "column": "cr:column",
+        "conformsTo": "dct:conformsTo",
+        "data": {
+            "@id": "cr:data",
+            "@type": "@json"
+        },
+        "dataType": {
+            "@id": "cr:dataType",
+            "@type": "@vocab"
+        },
+        "examples": {
+            "@id": "cr:examples",
+            "@type": "@json"
+        },
+        "extract": "cr:extract",
+        "field": "cr:field",
+        "fileProperty": "cr:fileProperty",
+        "fileObject": "cr:fileObject",
+        "fileSet": "cr:fileSet",
+        "format": "cr:format",
+        "includes": "cr:includes",
+        "isLiveDataset": "cr:isLiveDataset",
+        "jsonPath": "cr:jsonPath",
+        "key": "cr:key",
+        "md5": "cr:md5",
+        "parentField": "cr:parentField",
+        "path": "cr:path",
+        "recordSet": "cr:recordSet",
+        "references": "cr:references",
+        "regex": "cr:regex",
+        "repeated": "cr:repeated",
+        "replace": "cr:replace",
+        "separator": "cr:separator",
+        "source": "cr:source",
+        "subField": "cr:subField",
+        "transform": "cr:transform"
+    },
+    "@type": "sc:Dataset",
+    "name": "Carbon Intensity Dataset",
+    "description": "A dataset containing carbon intensity measurements for various global regions. The data includes direct and lifecycle carbon intensity measurements in gCO₂eq/kWh, as well as percentages of low carbon and renewable energy sources for different geographical zones.",
+    "conformsTo": "http://mlcommons.org/croissant/1.0",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://github.com/HewlettPackard/green-dcc/tree/main",
+    "version": "1.0.0",
+    "citeAs": "Hewlett Packard Enterprise (2023). Carbon Intensity Dataset. GitHub. https://github.com/HewlettPackard/green-dcc/tree/main",
+    "creator": {
+        "@type": "sc:Organization",
+        "name": "Hewlett Packard Enterprise",
+        "url": "https://www.hpe.com"
+    },
+    "isLiveDataset": true,
+    "datePublished": "2023",
+    "keywords": [
+        "carbon intensity",
+        "renewable energy",
+        "climate data",
+        "electricity",
+        "emissions",
+        "sustainability"
+    ],
+    "distribution": [
+        {
+            "@type": "cr:FileSet",
+            "@id": "carbon_intensity_files",
+            "name": "Carbon Intensity CSV Files",
+            "description": "Collection of CSV files containing carbon intensity data for different regions and years",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "au_nsw_files",
+            "name": "Australia NSW Region Files",
+            "description": "Carbon intensity data for Australia NSW region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/AU-NSW",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "au_vic_files",
+            "name": "Australia VIC Region Files",
+            "description": "Carbon intensity data for Australia VIC region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/AU-VIC",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "br_sp_files",
+            "name": "Brazil SP Region Files",
+            "description": "Carbon intensity data for Brazil SP region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/BR-SP",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "ca_on_files",
+            "name": "Canada ON Region Files",
+            "description": "Carbon intensity data for Canada Ontario region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/CA-ON",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "cl_sic_files",
+            "name": "Chile SIC Region Files",
+            "description": "Carbon intensity data for Chile Sistema Interconectado Central region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/CL-SIC",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "de_lu_files",
+            "name": "Germany/Luxembourg Region Files",
+            "description": "Carbon intensity data for Germany/Luxembourg region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/DE-LU",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "gb_files",
+            "name": "Great Britain Region Files",
+            "description": "Carbon intensity data for Great Britain region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/GB",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "in_we_files",
+            "name": "India Western Region Files",
+            "description": "Carbon intensity data for India Western region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/IN-WE",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "jp_tk_files",
+            "name": "Japan Tokyo Region Files",
+            "description": "Carbon intensity data for Japan Tokyo region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/JP-TK",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "kr_files",
+            "name": "South Korea Region Files",
+            "description": "Carbon intensity data for South Korea region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/KR",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "sg_files",
+            "name": "Singapore Region Files",
+            "description": "Carbon intensity data for Singapore region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/SG",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "us_cal_ciso_files",
+            "name": "US California ISO Region Files",
+            "description": "Carbon intensity data for US California ISO region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/US-CAL-CISO",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "us_mida_pjm_files",
+            "name": "US PJM Interconnection Region Files",
+            "description": "Carbon intensity data for US PJM Interconnection region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/US-MIDA-PJM",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "us_ny_nyis_files",
+            "name": "US New York ISO Region Files",
+            "description": "Carbon intensity data for US New York ISO region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/US-NY-NYIS",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "us_tex_erco_files",
+            "name": "US ERCOT Region Files",
+            "description": "Carbon intensity data for US ERCOT region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/US-TEX-ERCO",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileSet",
+            "@id": "za_files",
+            "name": "South Africa Region Files",
+            "description": "Carbon intensity data for South Africa region",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/ZA",
+            "encodingFormat": "text/csv",
+            "includes": "**/*.csv"
+        },
+        {
+            "@type": "cr:FileObject",
+            "@id": "br_sp_2021_hourly",
+            "name": "Brazil SP 2021 Hourly Data",
+            "description": "Hourly carbon intensity data for Brazil SP region in 2021",
+            "contentUrl": "https://github.com/HewlettPackard/green-dcc/tree/main/data/carbon_intensity/BR-SP/2021/BR-SP_2021_hourly.csv",
+            "encodingFormat": "text/csv"
+        }
+    ],
+    "recordSet": [
+        {
+            "@type": "cr:RecordSet",
+            "@id": "carbon_intensity_data",
+            "name": "Carbon Intensity Measurements",
+            "description": "Hourly carbon intensity measurements for various global regions",
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/datetime_utc",
+                    "name": "Datetime (UTC)",
+                    "description": "UTC timestamp for the carbon intensity measurement",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Datetime (UTC)"
+                        },
+                        "format": "%Y-%m-%dT%H:%M:%SZ"
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/country",
+                    "name": "Country",
+                    "description": "Country where the carbon intensity was measured",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Country"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/zone_name",
+                    "name": "Zone Name",
+                    "description": "Name of the electricity grid zone",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Zone Name"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/zone_id",
+                    "name": "Zone Id",
+                    "description": "Identifier for the electricity grid zone",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Zone Id"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/carbon_intensity_direct",
+                    "name": "Carbon Intensity Direct",
+                    "description": "Direct carbon intensity in gCO₂eq/kWh",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Carbon Intensity gCO₂eq/kWh (direct)"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/carbon_intensity_lca",
+                    "name": "Carbon Intensity LCA",
+                    "description": "Lifecycle assessment carbon intensity in gCO₂eq/kWh",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Carbon Intensity gCO₂eq/kWh (LCA)"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/low_carbon_percentage",
+                    "name": "Low Carbon Percentage",
+                    "description": "Percentage of low-carbon energy sources",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Low Carbon Percentage"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/renewable_percentage",
+                    "name": "Renewable Percentage",
+                    "description": "Percentage of renewable energy sources",
+                    "dataType": "sc:Float",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Renewable Percentage"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/data_source",
+                    "name": "Data Source",
+                    "description": "Source of the carbon intensity data",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Data Source"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/data_estimated",
+                    "name": "Data Estimated",
+                    "description": "Indicator of whether the data is estimated",
+                    "dataType": "sc:Boolean",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Data Estimated"
+                        }
+                    }
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "carbon_intensity_data/data_estimation_method",
+                    "name": "Data Estimation Method",
+                    "description": "Method used for estimation, if data is estimated",
+                    "dataType": "sc:Text",
+                    "source": {
+                        "fileSet": {
+                            "@id": "carbon_intensity_files"
+                        },
+                        "extract": {
+                            "column": "Data Estimation Method"
+                        }
+                    }
+                }
+            ],
+            "examples": [
+                {
+                    "carbon_intensity_data/datetime_utc": "2021-01-01T00:00:00Z",
+                    "carbon_intensity_data/country": "BR",
+                    "carbon_intensity_data/zone_name": "São Paulo",
+                    "carbon_intensity_data/zone_id": "BR-SP",
+                    "carbon_intensity_data/carbon_intensity_direct": 123.45,
+                    "carbon_intensity_data/carbon_intensity_lca": 145.67,
+                    "carbon_intensity_data/low_carbon_percentage": 75.4,
+                    "carbon_intensity_data/renewable_percentage": 62.8,
+                    "carbon_intensity_data/data_source": "ElectricityMaps",
+                    "carbon_intensity_data/data_estimated": false,
+                    "carbon_intensity_data/data_estimation_method": ""
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "regions",
+            "name": "Geographical Regions",
+            "description": "List of geographical regions available in the dataset",
+            "key": {
+                "@id": "regions/zone_id"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/zone_id",
+                    "name": "Zone Id",
+                    "description": "Identifier for the electricity grid zone",
+                    "dataType": "sc:Text"
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/zone_name",
+                    "name": "Zone Name",
+                    "description": "Name of the electricity grid zone",
+                    "dataType": "sc:Text"
+                },
+                {
+                    "@type": "cr:Field",
+                    "@id": "regions/country",
+                    "name": "Country",
+                    "description": "Country where the zone is located",
+                    "dataType": "sc:Text"
+                }
+            ],
+            "data": [
+                {
+                    "regions/zone_id": "AU-NSW",
+                    "regions/zone_name": "New South Wales",
+                    "regions/country": "AU"
+                },
+                {
+                    "regions/zone_id": "AU-VIC",
+                    "regions/zone_name": "Victoria",
+                    "regions/country": "AU"
+                },
+                {
+                    "regions/zone_id": "BR-SP",
+                    "regions/zone_name": "São Paulo",
+                    "regions/country": "BR"
+                },
+                {
+                    "regions/zone_id": "CA-ON",
+                    "regions/zone_name": "Ontario",
+                    "regions/country": "CA"
+                },
+                {
+                    "regions/zone_id": "CL-SIC",
+                    "regions/zone_name": "Sistema Interconectado Central",
+                    "regions/country": "CL"
+                },
+                {
+                    "regions/zone_id": "DE-LU",
+                    "regions/zone_name": "Germany/Luxembourg",
+                    "regions/country": "DE"
+                },
+                {
+                    "regions/zone_id": "GB",
+                    "regions/zone_name": "Great Britain",
+                    "regions/country": "GB"
+                },
+                {
+                    "regions/zone_id": "IN-WE",
+                    "regions/zone_name": "Western Region",
+                    "regions/country": "IN"
+                },
+                {
+                    "regions/zone_id": "JP-TK",
+                    "regions/zone_name": "Tokyo",
+                    "regions/country": "JP"
+                },
+                {
+                    "regions/zone_id": "KR",
+                    "regions/zone_name": "South Korea",
+                    "regions/country": "KR"
+                },
+                {
+                    "regions/zone_id": "SG",
+                    "regions/zone_name": "Singapore",
+                    "regions/country": "SG"
+                },
+                {
+                    "regions/zone_id": "US-CAL-CISO",
+                    "regions/zone_name": "California ISO",
+                    "regions/country": "US"
+                },
+                {
+                    "regions/zone_id": "US-MIDA-PJM",
+                    "regions/zone_name": "PJM Interconnection",
+                    "regions/country": "US"
+                },
+                {
+                    "regions/zone_id": "US-NY-NYIS",
+                    "regions/zone_name": "New York ISO",
+                    "regions/country": "US"
+                },
+                {
+                    "regions/zone_id": "US-TEX-ERCO",
+                    "regions/zone_name": "ERCOT",
+                    "regions/country": "US"
+                },
+                {
+                    "regions/zone_id": "ZA",
+                    "regions/zone_name": "South Africa",
+                    "regions/country": "ZA"
+                }
+            ]
+        },
+        {
+            "@type": "cr:RecordSet",
+            "@id": "years",
+            "name": "Available Years",
+            "description": "Years for which carbon intensity data is available",
+            "key": {
+                "@id": "years/year"
+            },
+            "field": [
+                {
+                    "@type": "cr:Field",
+                    "@id": "years/year",
+                    "name": "Year",
+                    "description": "Calendar year",
+                    "dataType": "sc:Integer"
+                }
+            ],
+            "data": [
+                {
+                    "years/year": 2021
+                },
+                {
+                    "years/year": 2022
+                },
+                {
+                    "years/year": 2023
+                },
+                {
+                    "years/year": 2024
+                }
+            ]
+        }
+    ],
+    "rai:dataCollection": "The carbon intensity data is collected from various electricity grid operators and aggregated by region and time. The data reflects the carbon intensity of electricity generation in grams of CO2 equivalent per kilowatt-hour, considering both direct emissions and lifecycle assessment.",
+    "rai:dataCollectionTimeframe": "Data collection started in 2021 and is ongoing, with hourly measurements for each region.",
+    "rai:dataUseCases": "This dataset can be used for climate research, carbon footprint calculations, electricity grid analysis, sustainable computing, carbon-aware computing applications, and environmental impact assessments."
+}
