@@ -1,6 +1,6 @@
-# Reward System in GreenDCC
+# Reward System in SustainCluster
 
-GreenDCC enables systematic comparison of scheduling policies across **environmental**, **economic**, and **operational** trade-offs.
+SustainCluster enables systematic comparison of scheduling policies across **environmental**, **economic**, and **operational** trade-offs.
 
 This reward system is a key component of the benchmark, enabling:
 - reproducible comparisons
