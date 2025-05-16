@@ -45,8 +45,8 @@
   "name": "SustainCluster Processed AI Workload Trace (Alibaba GPU Cluster 2020)",
   "description": "A processed and temporally extended version of the Alibaba Cluster Trace 2020, providing a year-long stream of AI/GPU task arrivals with resource demands for the SustainCluster benchmark. Tasks are grouped into 15-minute intervals.",
   "conformsTo": "http://mlcommons.org/croissant/1.0",
-  "license": "https://github.com/HewlettPackard/green-dcc/blob/main/LICENSE (MIT for processing scripts) and original Alibaba Trace license (see citation)",
-  "url": "https://github.com/HewlettPackard/green-dcc/tree/main/data/workload/alibaba_2020_dataset/",
+  "license": "https://github.com/HewlettPackard/sustain-cluster/blob/main/LICENSE (MIT for processing scripts) and original Alibaba Trace license (see citation)",
+  "url": "https://github.com/HewlettPackard/sustain-cluster/tree/main/data/workload/alibaba_2020_dataset/",
   "version": "1.0.0",
   "citeAs": [
     {
@@ -54,7 +54,7 @@
         "name": "SustainCluster Benchmark AI Workload",
         "author": "Hewlett Packard Enterprise",
         "datePublished": "2025",
-        "url": "https://github.com/HewlettPackard/green-dcc"
+        "url": "https://github.com/HewlettPackard/sustain-cluster"
     },
     {
         "@type": "sc:ScholarlyArticle", 
@@ -82,7 +82,7 @@
       "@id": "workload_zip_archive",
       "name": "result_df_full_year_2020.zip",
       "description": "ZIP archive containing the processed year-long workload trace as a Pandas DataFrame pickled file.",
-      "contentUrl": "https://github.com/HewlettPackard/green-dcc/raw/main/data/workload/alibaba_2020_dataset/result_df_full_year_2020.zip",
+      "contentUrl": "https://github.com/HewlettPackard/sustain-cluster/raw/main/data/workload/alibaba_2020_dataset/result_df_full_year_2020.zip",
       "encodingFormat": "application/zip",
       "sha256": "907090a42863c46887cdf9c66f99ac77b2a3b351544362d8c6c34b9ace6754a9"
     },
