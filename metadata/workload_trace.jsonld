@@ -57,8 +57,8 @@
         "url": "https://github.com/HewlettPackard/sustain-cluster"
     },
     {
-        "@type": "sc:ScholarlyArticle", 
-        "@id": "https://www.usenix.org/conference/nsdi22/presentation/weng"
+      "@type": "sc:ScholarlyArticle",
+      "@id": "https://www.usenix.org/conference/nsdi22/presentation/weng"
     }
   ],
   "creator": {
@@ -108,7 +108,7 @@
         "fileObject": {
           "@id": "workload_pkl_file"
         },
-        "format": "application/vnd.pickle" 
+        "format": "application/vnd.pickle"
       },
       "field": [
         {
@@ -130,18 +130,84 @@
             "@id": "workload_intervals/tasks_matrix/task",
             "name": "task_details",
             "field": [
-              {"@type": "cr:Field", "name": "job_id", "description": "Unique task identifier (string part of original job ID).", "dataType": "sc:Text"},
-              {"@type": "cr:Field", "name": "original_start_time_unix", "description": "Original start timestamp from trace (Unix).", "dataType": "sc:Integer"},
-              {"@type": "cr:Field", "name": "original_end_time_unix", "description": "Original end timestamp from trace (Unix).", "dataType": "sc:Integer"},
-              {"@type": "cr:Field", "name": "original_start_dt_utc", "description": "Original start datetime from trace (UTC string).", "dataType": "sc:DateTime"},
-              {"@type": "cr:Field", "name": "duration_min", "description": "Task duration in minutes.", "dataType": "sc:Float", "unitText": "minutes"},
-              {"@type": "cr:Field", "name": "cpu_usage_percent", "description": "CPU cores requested (original percentage).", "dataType": "sc:Float", "unitText": "%"},
-              {"@type": "cr:Field", "name": "gpu_util_percent", "description": "GPU units requested (original percentage).", "dataType": "sc:Float", "unitText": "%"},
-              {"@type": "cr:Field", "name": "avg_mem_gb", "description": "Memory used (GB).", "dataType": "sc:Float", "unitText": "GB"},
-              {"@type": "cr:Field", "name": "avg_gpu_mem_gb", "description": "GPU memory used (GB).", "dataType": "sc:Float", "unitText": "GB"},
-              {"@type": "cr:Field", "name": "bandwidth_gb", "description": "Estimated input data size (GB).", "dataType": "sc:Float", "unitText": "GB"},
-              {"@type": "cr:Field", "name": "weekday_name", "description": "Day name of original arrival (e.g., Monday).", "dataType": "sc:Text"},
-              {"@type": "cr:Field", "name": "weekday_num", "description": "Integer day of week (0=Monday to 6=Sunday) of original arrival.", "dataType": "sc:Integer"}
+              {
+                "@type": "cr:Field",
+                "name": "job_id",
+                "description": "Unique task identifier (string part of original job ID).",
+                "dataType": "sc:Text"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "original_start_time_unix",
+                "description": "Original start timestamp from trace (Unix).",
+                "dataType": "sc:Integer"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "original_end_time_unix",
+                "description": "Original end timestamp from trace (Unix).",
+                "dataType": "sc:Integer"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "original_start_dt_utc",
+                "description": "Original start datetime from trace (UTC string).",
+                "dataType": "sc:DateTime"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "duration_min",
+                "description": "Task duration in minutes.",
+                "dataType": "sc:Float",
+                "unitText": "minutes"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "cpu_usage_percent",
+                "description": "CPU cores requested (original percentage).",
+                "dataType": "sc:Float",
+                "unitText": "%"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "gpu_util_percent",
+                "description": "GPU units requested (original percentage).",
+                "dataType": "sc:Float",
+                "unitText": "%"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "avg_mem_gb",
+                "description": "Memory used (GB).",
+                "dataType": "sc:Float",
+                "unitText": "GB"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "avg_gpu_mem_gb",
+                "description": "GPU memory used (GB).",
+                "dataType": "sc:Float",
+                "unitText": "GB"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "bandwidth_gb",
+                "description": "Estimated input data size (GB).",
+                "dataType": "sc:Float",
+                "unitText": "GB"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "weekday_name",
+                "description": "Day name of original arrival (e.g., Monday).",
+                "dataType": "sc:Text"
+              },
+              {
+                "@type": "cr:Field",
+                "name": "weekday_num",
+                "description": "Integer day of week (0=Monday to 6=Sunday) of original arrival.",
+                "dataType": "sc:Integer"
+              }
             ]
           }
         }

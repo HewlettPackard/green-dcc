@@ -123,7 +123,7 @@ if __name__ == '__main__':
     #     pprint(results['env_runners']['episode_return_mean'])
     # exit()
 
-    RESULTS_DIR = "/lustre/guillant/new_green-dcc/results"
+    RESULTS_DIR = "/lustre/guillant/new_sustain-cluster/results"
     NAME = "test"
 
     tuner = tune.Tuner(

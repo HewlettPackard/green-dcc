@@ -1,0 +1,713 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" />
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2024.08.06 -->
+        <title>utils.task_assignment_strategies - green-dcc documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=354aac6f" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=302659d7" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f8f8f8;
+  --color-code-foreground: black;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc">
+<label class="overlay sidebar-overlay" for="__navigation">
+  <div class="visually-hidden">Hide navigation sidebar</div>
+</label>
+<label class="overlay toc-overlay" for="__toc">
+  <div class="visually-hidden">Hide table of contents sidebar</div>
+</label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <div class="visually-hidden">Toggle site navigation sidebar</div>
+        <i class="icon"><svg><use href="#svg-menu"></use></svg></i>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">green-dcc  documentation</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle">
+          <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <div class="visually-hidden">Toggle table of contents sidebar</div>
+        <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  
+  <span class="sidebar-brand-text">green-dcc  documentation</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../gettingstarted.html">Getting Started</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../overview/index.html">Overview</a><input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><div class="visually-hidden">Toggle navigation of Overview</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../overview/environments.html">Sustain-Cluster Environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../overview/externaldata.html">External Input Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../overview/algorithms.html">Benchmarking Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../overview/reward_function.html">Reward Functions</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../usage/index.html">Custom Use</a><input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><div class="visually-hidden">Toggle navigation of Custom Use</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../usage/mainconf.html">Main Configuration File</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../usage/dcconf.html">Data Center Configuration File</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../usage/train.html">Train</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../usage/customworkload.html">Custom Workload Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../usage/customci.html">Custom Carbon Intensity Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../usage/customweather.html">Custom Weather Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../usage/customreward.html">customreward</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../evaluation.html">Evaluation</a></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../code/modules.html">Modules</a><input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><div class="visually-hidden">Toggle navigation of Modules</div><i class="icon"><svg><use href="#svg-arrow-right"></use></svg></i></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../code/envs.html">Environments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../code/utils.html">Utils Package</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../contribution_guidelines.html">Contribution Guidelines</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle">
+              <div class="visually-hidden">Toggle Light / Dark / Auto color theme</div>
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <div class="visually-hidden">Toggle table of contents sidebar</div>
+            <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for utils.task_assignment_strategies</h1><div class="highlight"><pre>
+<span></span><span class="c1"># utils/task_assignment_strategies.py</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span> <span class="c1"># Use standard logging</span>
+
+<span class="c1"># --- Base Class ---</span>
+<div class="viewcode-block" id="BaseRBCStrategy">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.BaseRBCStrategy">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseRBCStrategy</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for all Rule-Based Controller strategies.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Selects a destination datacenter ID for the given task.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            task (Task): The task object to be assigned.</span>
+<span class="sd">            datacenters (dict): A dictionary mapping DC names (e.g., &quot;DC1&quot;)</span>
+<span class="sd">                                to SustainDC environment objects.</span>
+<span class="sd">            logger (logging.Logger, optional): Logger instance. Defaults to None.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            int or None: The numerical dc_id of the selected datacenter,</span>
+<span class="sd">                         or None if no suitable datacenter is found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+<div class="viewcode-block" id="BaseRBCStrategy.reset">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.BaseRBCStrategy.reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resets any internal state of the strategy (optional).&quot;&quot;&quot;</span>
+        <span class="k">pass</span></div>
+</div>
+
+
+<span class="c1"># --- Concrete Strategy Implementations ---</span>
+
+<div class="viewcode-block" id="DistributeMostAvailable">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeMostAvailable">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributeMostAvailable</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assigns the task to the datacenter with the MOST available CPU cores</span>
+<span class="sd">    AMONG THOSE THAT CAN SCHEDULE the task.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;MostAvailable: No datacenters provided.&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># --- Filter DCs that can schedule the task ---</span>
+        <span class="n">schedulable_dcs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dc_name</span><span class="p">,</span> <span class="n">dc</span> <span class="ow">in</span> <span class="n">datacenters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="c1"># Check if the DC object has the can_schedule method and if it returns True</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;can_schedule&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">dc</span><span class="o">.</span><span class="n">can_schedule</span><span class="p">(</span><span class="n">task</span><span class="p">):</span>
+                <span class="n">schedulable_dcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dc</span><span class="p">)</span>
+            <span class="c1"># else:</span>
+            <span class="c1">#     if logger: logger.debug(f&quot;MostAvailable: DC {dc.dc_id} cannot schedule task {task.job_name}. Skipping.&quot;)</span>
+
+        <span class="c1"># --- If no DC can schedule the task ---</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">schedulable_dcs</span><span class="p">:</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MostAvailable: No datacenter can schedule task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">. Cannot assign.&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">None</span> <span class="c1"># Indicate no assignment possible</span>
+
+        <span class="c1"># --- Find the best DC among the schedulable ones ---</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Find the DC with the maximum available cores among the filtered list</span>
+            <span class="n">best_dc</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">schedulable_dcs</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">dc</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;available_cores&#39;</span><span class="p">,</span> <span class="o">-</span><span class="nb">float</span><span class="p">(</span><span class="s1">&#39;inf&#39;</span><span class="p">)))</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MostAvailable choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: DC</span><span class="si">{</span><span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="n">best_dc</span><span class="p">,</span><span class="s1">&#39;available_cores&#39;</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> cores avail)&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MostAvailable error during max selection: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># Fallback: return first schedulable DC&#39;s ID if error occurs</span>
+            <span class="k">return</span> <span class="n">schedulable_dcs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">dc_id</span> <span class="k">if</span> <span class="n">schedulable_dcs</span> <span class="k">else</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="DistributeRandom">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeRandom">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributeRandom</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Randomly assigns the task to one of the available datacenters.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Random: No datacenters provided.&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Select a random DC name, then get the object</span>
+        <span class="n">random_dc_name</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">datacenters</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+        <span class="n">random_dc</span> <span class="o">=</span> <span class="n">datacenters</span><span class="p">[</span><span class="n">random_dc_name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Random choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: DC</span><span class="si">{</span><span class="n">random_dc</span><span class="o">.</span><span class="n">dc_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">random_dc</span><span class="o">.</span><span class="n">dc_id</span></div>
+
+
+
+<div class="viewcode-block" id="DistributePriorityOrder">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributePriorityOrder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributePriorityOrder</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assigns tasks following a fixed priority order of DC names,</span>
+<span class="sd">    selecting the first one that can schedule the task.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">priority_order</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;DC1&quot;</span><span class="p">,</span> <span class="s2">&quot;DC2&quot;</span><span class="p">,</span> <span class="s2">&quot;DC3&quot;</span><span class="p">,</span> <span class="s2">&quot;DC4&quot;</span><span class="p">,</span> <span class="s2">&quot;DC5&quot;</span><span class="p">]):</span>
+         <span class="c1"># Default order, can be customized during instantiation if needed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span> <span class="o">=</span> <span class="n">priority_order</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;PriorityOrder: No datacenters provided.&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">for</span> <span class="n">dc_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">priority_order</span><span class="p">:</span>
+            <span class="n">dc</span> <span class="o">=</span> <span class="n">datacenters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">dc_name</span><span class="p">)</span>
+            <span class="c1"># Check if DC exists and can schedule the task</span>
+            <span class="k">if</span> <span class="n">dc</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;can_schedule&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">dc</span><span class="o">.</span><span class="n">can_schedule</span><span class="p">(</span><span class="n">task</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PriorityOrder choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">dc_name</span><span class="si">}</span><span class="s2"> (DC</span><span class="si">{</span><span class="n">dc</span><span class="o">.</span><span class="n">dc_id</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">dc</span><span class="o">.</span><span class="n">dc_id</span> <span class="c1"># Return numerical ID</span>
+
+        <span class="c1"># No available datacenter found in the priority list that can schedule</span>
+        <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PriorityOrder: Task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2"> could not be assigned! No suitable DC found in priority list.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="c1"># Indicate no suitable DC found</span></div>
+
+
+
+<div class="viewcode-block" id="DistributeLowestPrice">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeLowestPrice">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributeLowestPrice</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assigns the task to the available datacenter with the lowest current</span>
+<span class="sd">    electricity price ($/MWh).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;LowestPrice: No datacenters provided.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">candidates</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dc_name</span><span class="p">,</span> <span class="n">dc</span> <span class="ow">in</span> <span class="n">datacenters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="c1"># Check if DC can schedule and has price info</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;can_schedule&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">dc</span><span class="o">.</span><span class="n">can_schedule</span><span class="p">(</span><span class="n">task</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;price_manager&#39;</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">price</span> <span class="o">=</span> <span class="n">dc</span><span class="o">.</span><span class="n">price_manager</span><span class="o">.</span><span class="n">get_current_price</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">price</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">price</span><span class="p">,</span> <span class="n">dc</span><span class="p">))</span> <span class="c1"># Store price and DC object</span>
+                    <span class="k">else</span><span class="p">:</span>
+                         <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestPrice: Could not get price for </span><span class="si">{</span><span class="n">dc_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                     <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestPrice: Error getting price for </span><span class="si">{</span><span class="n">dc_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># else:</span>
+            <span class="c1">#      if logger: logger.debug(f&quot;LowestPrice: Skipping {dc_name} (cannot schedule or no price manager)&quot;)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">candidates</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestPrice: Task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2"> could not be assigned! No schedulable DC found with price info.&quot;</span><span class="p">)</span>
+            <span class="c1"># Fallback: maybe assign randomly or to first available? Or return None? Let&#39;s return None.</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Find the DC with the minimum price among candidates</span>
+        <span class="n">candidates</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="c1"># Sort by price (first element of tuple)</span>
+        <span class="n">best_price</span><span class="p">,</span> <span class="n">best_dc</span> <span class="o">=</span> <span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestPrice choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: DC</span><span class="si">{</span><span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span><span class="si">}</span><span class="s2"> (Price: </span><span class="si">{</span><span class="n">best_price</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> $/MWh)&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span></div>
+
+
+
+<div class="viewcode-block" id="DistributeLeastPending">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeLeastPending">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributeLeastPending</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Assigns the task to the datacenter with the fewest pending tasks.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;LeastPending: No datacenters provided.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Find the DC object with the minimum pending task queue length</span>
+        <span class="k">try</span><span class="p">:</span>
+             <span class="n">best_dc</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">datacenters</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">dc</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;pending_tasks&#39;</span><span class="p">,</span> <span class="p">[])))</span>
+             <span class="n">pending_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">best_dc</span><span class="p">,</span> <span class="s1">&#39;pending_tasks&#39;</span><span class="p">,</span> <span class="p">[]))</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LeastPending choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: DC</span><span class="si">{</span><span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">pending_count</span><span class="si">}</span><span class="s2"> pending)&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LeastPending error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+             <span class="c1"># Fallback</span>
+             <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">datacenters</span><span class="o">.</span><span class="n">values</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">dc_id</span> <span class="k">if</span> <span class="n">datacenters</span> <span class="k">else</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="DistributeLowestCarbon">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeLowestCarbon">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributeLowestCarbon</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assigns the task to the available datacenter with the lowest current</span>
+<span class="sd">    carbon intensity (gCO2/kWh).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;LowestCarbon: No datacenters provided.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">candidates</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dc_name</span><span class="p">,</span> <span class="n">dc</span> <span class="ow">in</span> <span class="n">datacenters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+             <span class="c1"># Check if DC can schedule and has CI info getter</span>
+             <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;can_schedule&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">dc</span><span class="o">.</span><span class="n">can_schedule</span><span class="p">(</span><span class="n">task</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;get_current_carbon_intensity&#39;</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="c1"># Use the helper method that should now exist</span>
+                    <span class="n">ci</span> <span class="o">=</span> <span class="n">dc</span><span class="o">.</span><span class="n">get_current_carbon_intensity</span><span class="p">(</span><span class="n">norm</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="c1"># Get raw gCO2/kWh</span>
+                    <span class="k">if</span> <span class="n">ci</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">ci</span><span class="p">,</span> <span class="n">dc</span><span class="p">))</span>
+                    <span class="k">else</span><span class="p">:</span>
+                         <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestCarbon: Could not get CI for </span><span class="si">{</span><span class="n">dc_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                     <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestCarbon: Error getting CI for </span><span class="si">{</span><span class="n">dc_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+             <span class="c1"># else:</span>
+             <span class="c1">#      if logger: logger.debug(f&quot;LowestCarbon: Skipping {dc_name} (cannot schedule or no CI getter)&quot;)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">candidates</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestCarbon: Task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2"> could not be assigned! No schedulable DC found with CI info.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span> <span class="c1"># Indicate no suitable DC</span>
+
+        <span class="c1"># Find the DC with the minimum CI among candidates</span>
+        <span class="n">candidates</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="c1"># Sort by CI</span>
+        <span class="n">best_ci</span><span class="p">,</span> <span class="n">best_dc</span> <span class="o">=</span> <span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestCarbon choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: DC</span><span class="si">{</span><span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span><span class="si">}</span><span class="s2"> (CI: </span><span class="si">{</span><span class="n">best_ci</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> gCO2/kWh)&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span></div>
+
+
+
+<div class="viewcode-block" id="DistributeRoundRobin">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeRoundRobin">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributeRoundRobin</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Assigns tasks in a round-robin fashion across datacenters.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_assigned_dc_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="c1"># Consistent order based on sorted numerical IDs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+<div class="viewcode-block" id="DistributeRoundRobin.reset">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeRoundRobin.reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resets the round-robin index.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_assigned_dc_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span> <span class="o">=</span> <span class="p">[]</span> <span class="c1"># Clear the order cache</span>
+        <span class="k">if</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">()</span><span class="o">.</span><span class="n">isEnabledFor</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">):</span> <span class="c1"># Avoid calculation if not debugging</span>
+             <span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;RoundRobin state reset.&quot;</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;RoundRobin: No datacenters provided.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Ensure a consistent order (sort by numerical dc_id)</span>
+        <span class="c1"># Update the order only if the set of keys changes (more robust)</span>
+        <span class="n">current_dc_keys</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">datacenters</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="c1"># Example using names, could sort by dc_id too</span>
+        <span class="n">current_dc_ids</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">([</span><span class="n">dc</span><span class="o">.</span><span class="n">dc_id</span> <span class="k">for</span> <span class="n">dc</span> <span class="ow">in</span> <span class="n">datacenters</span><span class="o">.</span><span class="n">values</span><span class="p">()])</span>
+
+        <span class="c1"># Rebuild ordered list if it&#39;s empty or the IDs have changed</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span> <span class="o">!=</span> <span class="n">current_dc_ids</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span> <span class="o">=</span> <span class="n">current_dc_ids</span>
+            <span class="c1"># Optionally reset index when DC set changes, or just continue cycle</span>
+            <span class="c1"># self.last_assigned_dc_index = -1 # Uncomment to reset index on change</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RoundRobin order updated: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span><span class="p">:</span> <span class="c1"># Should not happen if datacenters is not empty</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;RoundRobin: Failed to establish DC order.&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">datacenters</span><span class="o">.</span><span class="n">values</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">dc_id</span> <span class="c1"># Fallback</span>
+
+        <span class="c1"># Increment index and wrap around</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_assigned_dc_index</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">last_assigned_dc_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span><span class="p">)</span>
+        <span class="n">selected_dc_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dc_order_ids</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">last_assigned_dc_index</span><span class="p">]</span>
+
+        <span class="c1"># # Optional: Check if the selected DC can schedule the task</span>
+        <span class="c1"># selected_dc = next((dc for dc in datacenters.values() if dc.dc_id == selected_dc_id), None)</span>
+        <span class="c1"># if selected_dc and not selected_dc.can_schedule(task):</span>
+        <span class="c1">#     if logger: logger.warning(f&quot;RoundRobin selected DC{selected_dc_id} but it cannot schedule task {task.job_name}. Assigning anyway.&quot;)</span>
+        <span class="c1">#     # Policy: Assign anyway, let the DC queue handle it. Or could try next DC.</span>
+
+        <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RoundRobin choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: DC</span><span class="si">{</span><span class="n">selected_dc_id</span><span class="si">}</span><span class="s2"> (index </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">last_assigned_dc_index</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">selected_dc_id</span> <span class="c1"># Return numerical ID</span></div>
+
+
+
+<div class="viewcode-block" id="DistributeLocalOnly">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeLocalOnly">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributeLocalOnly</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Assigns the task strictly to its origin datacenter.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="s1">&#39;origin_dc_id&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">task</span><span class="o">.</span><span class="n">origin_dc_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LocalOnly: Task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2"> missing valid origin_dc_id.&quot;</span><span class="p">)</span>
+            <span class="c1"># Decide fallback: Maybe assign randomly? Or return None? Let&#39;s return None.</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">origin_id</span> <span class="o">=</span> <span class="n">task</span><span class="o">.</span><span class="n">origin_dc_id</span>
+
+        <span class="c1"># Optional: Check if the origin DC actually exists in the current cluster setup</span>
+        <span class="n">origin_dc_exists</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">dc</span><span class="o">.</span><span class="n">dc_id</span> <span class="o">==</span> <span class="n">origin_id</span> <span class="k">for</span> <span class="n">dc</span> <span class="ow">in</span> <span class="n">datacenters</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">origin_dc_exists</span><span class="p">:</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LocalOnly: Origin DC </span><span class="si">{</span><span class="n">origin_id</span><span class="si">}</span><span class="s2"> for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2"> not found in current cluster configuration.&quot;</span><span class="p">)</span>
+             <span class="c1"># Fallback strategy needed here as well. Assign randomly? Or None?</span>
+             <span class="c1"># Let&#39;s assign randomly among existing DCs as a simple fallback.</span>
+             <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span> <span class="k">return</span> <span class="kc">None</span>
+             <span class="n">fallback_dc</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">datacenters</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LocalOnly: Assigning task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2"> randomly to DC</span><span class="si">{</span><span class="n">fallback_dc</span><span class="o">.</span><span class="n">dc_id</span><span class="si">}</span><span class="s2"> as origin DC</span><span class="si">{</span><span class="n">origin_id</span><span class="si">}</span><span class="s2"> is missing.&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="n">fallback_dc</span><span class="o">.</span><span class="n">dc_id</span>
+
+
+        <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LocalOnly choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: Assigning to origin DC</span><span class="si">{</span><span class="n">origin_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Return the numerical origin ID</span>
+        <span class="k">return</span> <span class="n">origin_id</span></div>
+
+<span class="c1"># --- Add other strategies similarly ---</span>
+
+<div class="viewcode-block" id="DistributeLowestUtilization">
+<a class="viewcode-back" href="../../code/utils.html#utils.task_assignment_strategies.DistributeLowestUtilization">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DistributeLowestUtilization</span><span class="p">(</span><span class="n">BaseRBCStrategy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Assigns the task to the datacenter with the highest overall average resource availability.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">datacenters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datacenters</span><span class="p">:</span>
+             <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;LowestUtilization: No datacenters provided.&quot;</span><span class="p">)</span>
+             <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">calculate_availability_score</span><span class="p">(</span><span class="n">dc</span><span class="p">):</span>
+            <span class="n">cpu_total</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;total_cores&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">gpu_total</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;total_gpus&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">mem_total</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;total_mem_GB&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+            <span class="c1"># Use getattr with defaults for safety</span>
+            <span class="n">cpu_avail</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;available_cores&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">cpu_total</span> <span class="k">if</span> <span class="n">cpu_total</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+            <span class="n">gpu_avail</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;available_gpus&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">gpu_total</span> <span class="k">if</span> <span class="n">gpu_total</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+            <span class="n">mem_avail</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">dc</span><span class="p">,</span> <span class="s1">&#39;available_mem&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">mem_total</span> <span class="k">if</span> <span class="n">mem_total</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+
+            <span class="c1"># Average availability - weights could be added</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">cpu_avail</span> <span class="o">+</span> <span class="n">gpu_avail</span> <span class="o">+</span> <span class="n">mem_avail</span><span class="p">)</span> <span class="o">/</span> <span class="mf">3.0</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Find DC with the maximum availability score</span>
+            <span class="n">best_dc</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">datacenters</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="n">calculate_availability_score</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+                <span class="n">score</span> <span class="o">=</span> <span class="n">calculate_availability_score</span><span class="p">(</span><span class="n">best_dc</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestUtilization (Max Avail) choice for task </span><span class="si">{</span><span class="n">task</span><span class="o">.</span><span class="n">job_name</span><span class="si">}</span><span class="s2">: DC</span><span class="si">{</span><span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span><span class="si">}</span><span class="s2"> (Score: </span><span class="si">{</span><span class="n">score</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">best_dc</span><span class="o">.</span><span class="n">dc_id</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;LowestUtilization error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># Fallback</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">datacenters</span><span class="o">.</span><span class="n">values</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">dc_id</span> <span class="k">if</span> <span class="n">datacenters</span> <span class="k">else</span> <span class="kc">None</span></div>
+
+
+
+<span class="c1"># Example of a Weighted Strategy (Needs helper methods in SustainDC)</span>
+<span class="c1"># class DistributeWeighted(BaseRBCStrategy):</span>
+<span class="c1">#     &quot;&quot;&quot;</span>
+<span class="c1">#     Assigns the task based on a weighted combination of normalized cost,</span>
+<span class="c1">#     carbon intensity, and resource availability. Lower score is better.</span>
+<span class="c1">#     NOTE: Requires normalization and assumes getter methods exist.</span>
+<span class="c1">#     &quot;&quot;&quot;</span>
+<span class="c1">#     def __init__(self, weights={&#39;cost&#39;: 0.3, &#39;carbon&#39;: 0.5, &#39;utilization&#39;: 0.2}):</span>
+<span class="c1">#         self.weights = weights</span>
+<span class="c1">#         super().__init__()</span>
+
+<span class="c1">#     def __call__(self, task, datacenters: dict, logger: logging.Logger = None):</span>
+<span class="c1">#         if not datacenters: return None</span>
+
+<span class="c1">#         dc_scores = []</span>
+<span class="c1">#         # --- Need to get ranges or use running stats for normalization ---</span>
+<span class="c1">#         # Example: Placeholder normalization - replace with real stats</span>
+<span class="c1">#         all_prices = [dc.price_manager.get_current_price() for dc in datacenters.values() if hasattr(dc,&#39;price_manager&#39;)]</span>
+<span class="c1">#         all_cis = [dc.get_current_carbon_intensity(norm=False) for dc in datacenters.values() if hasattr(dc,&#39;get_current_carbon_intensity&#39;)]</span>
+<span class="c1">#         min_price, max_price = min(all_prices) if all_prices else 0, max(all_prices) if all_prices else 1</span>
+<span class="c1">#         min_ci, max_ci = min(all_cis) if all_cis else 0, max(all_cis) if all_cis else 1</span>
+<span class="c1">#         price_range = max(1e-6, max_price - min_price)</span>
+<span class="c1">#         ci_range = max(1e-6, max_ci - min_ci)</span>
+<span class="c1">#         # --- End Placeholder Normalization ---</span>
+
+<span class="c1">#         for dc_name, dc in datacenters.items():</span>
+<span class="c1">#             try:</span>
+<span class="c1">#                 norm_cost = (dc.price_manager.get_current_price() - min_price) / price_range if hasattr(dc,&#39;price_manager&#39;) else 0.5</span>
+<span class="c1">#                 norm_ci = (dc.get_current_carbon_intensity(norm=False) - min_ci) / ci_range if hasattr(dc,&#39;get_current_carbon_intensity&#39;) else 0.5</span>
+
+<span class="c1">#                 cpu_util = 1.0 - (getattr(dc,&#39;available_cores&#39;,0) / getattr(dc,&#39;total_cores&#39;,1))</span>
+<span class="c1">#                 gpu_util = 1.0 - (getattr(dc,&#39;available_gpus&#39;,0) / getattr(dc,&#39;total_gpus&#39;,1))</span>
+<span class="c1">#                 mem_util = 1.0 - (getattr(dc,&#39;available_mem&#39;,0) / getattr(dc,&#39;total_mem_GB&#39;,1))</span>
+<span class="c1">#                 avg_util = (cpu_util + gpu_util + mem_util) / 3.0</span>
+
+<span class="c1">#                 # Lower score is better: lower cost, lower ci, lower utilization (higher availability)</span>
+<span class="c1">#                 score = (norm_cost * self.weights[&#39;cost&#39;] +</span>
+<span class="c1">#                          norm_ci * self.weights[&#39;carbon&#39;] +</span>
+<span class="c1">#                          avg_util * self.weights[&#39;utilization&#39;]) # Lower utilization = lower score = better? Check logic.</span>
+
+<span class="c1">#                 dc_scores.append((score, dc))</span>
+<span class="c1">#             except Exception as e:</span>
+<span class="c1">#                  if logger: logger.error(f&quot;Weighted scoring error for {dc_name}: {e}&quot;)</span>
+
+<span class="c1">#         if not dc_scores:</span>
+<span class="c1">#             if logger: logger.warning(&quot;Weighted: No DCs could be scored.&quot;)</span>
+<span class="c1">#             return list(datacenters.values())[0].dc_id if datacenters else None</span>
+
+<span class="c1">#         dc_scores.sort(key=lambda item: item[0]) # Sort by score (ascending)</span>
+<span class="c1">#         best_score, best_dc = dc_scores[0]</span>
+
+<span class="c1">#         if logger:</span>
+<span class="c1">#             logger.info(f&quot;Weighted choice for task {task.job_name}: DC{best_dc.dc_id} (Score: {best_score:.3f})&quot;)</span>
+<span class="c1">#         return best_dc.dc_id</span>
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2025, Hewlett Packard Enterprise (HPE)
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/scripts/furo.js?v=5fa4622c"></script>
+    </body>
+</html>
