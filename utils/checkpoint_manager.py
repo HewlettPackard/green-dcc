@@ -41,63 +41,27 @@ def save_checkpoint(
         print(f"Error saving checkpoint to {path}: {e}")
 
 
-def load_checkpoint(
+def load_checkpoint_data( # Renamed for clarity, or keep old name and adjust call
     path,
-    actor,
-    critic,
-    actor_opt=None,
-    critic_opt=None,
     device="cpu",
-    # Add args to potentially receive running stats objects
-    reward_stats=None,
-    critic_obs_stats=None
+    # Remove actor, critic, opts from here if they are not used for loading decisions
 ):
-    """Loads model and optimizer states, and optionally running stats states."""
+    """Loads checkpoint data dictionary. Does NOT load into model instances."""
     if not os.path.exists(path):
-        logger.error(f"Checkpoint file not found: {path}")
-        return 0 # Return step 0 or raise error
+        if logger: logger.error(f"Checkpoint file not found: {path}")
+        return None, 0 # Indicate failure
 
     try:
         checkpoint = torch.load(path, map_location=device)
-
-        # Load core components
-        actor.load_state_dict(checkpoint["actor_state_dict"])
-        critic.load_state_dict(checkpoint["critic_state_dict"])
-        logger.info(f"Loaded actor and critic state dicts from {path}")
-
-        # Load optimizers if provided
-        if actor_opt and "actor_optimizer_state_dict" in checkpoint:
-            actor_opt.load_state_dict(checkpoint["actor_optimizer_state_dict"])
-            logger.info("Loaded actor optimizer state dict.")
-        if critic_opt and "critic_optimizer_state_dict" in checkpoint:
-            critic_opt.load_state_dict(checkpoint["critic_optimizer_state_dict"])
-            logger.info("Loaded critic optimizer state dict.")
-
-        # Load running stats if provided and present in checkpoint
-        if reward_stats and "reward_stats" in checkpoint:
-            try:
-                reward_stats.set_state(checkpoint["reward_stats"])
-                logger.info("Loaded reward running stats.")
-            except Exception as e:
-                logger.warning(f"Could not load reward_stats: {e}. Stats might be reset.")
-        elif reward_stats:
-             logger.warning("reward_stats object provided, but no reward_stats found in checkpoint.")
-
-
-        if critic_obs_stats and "critic_obs_stats" in checkpoint:
-            try:
-                critic_obs_stats.set_state(checkpoint["critic_obs_stats"])
-                logger.info("Loaded critic observation running stats.")
-            except Exception as e:
-                 logger.warning(f"Could not load critic_obs_stats: {e}. Stats might be reset.")
-        elif critic_obs_stats:
-             logger.warning("critic_obs_stats object provided, but no critic_obs_stats found in checkpoint.")
-
-
         loaded_step = checkpoint.get("step", 0)
-        logger.info(f"Checkpoint loaded successfully from step {loaded_step}.")
-        return loaded_step
+
+        # We are returning the whole dictionary.
+        # The caller will be responsible for extracting state_dicts and extra_info
+        # and then loading them into appropriately instantiated models.
+
+        if logger: logger.info(f"Checkpoint data loaded successfully from step {loaded_step} at {path}.")
+        return checkpoint, loaded_step
 
     except Exception as e:
-        logger.error(f"Error loading checkpoint from {path}: {e}")
-        return 0 # Return step 0 or raise error
+        if logger: logger.error(f"Error loading checkpoint data from {path}: {e}")
+        return None, 0

@@ -82,15 +82,15 @@ if __name__ == '__main__':
     # ray.init(local_mode=False, ignore_reinit_error=True)
 
     config = (
-        PPOConfig()
+        APPOConfig()
         .environment(TaskSchedulingEnvRLLIB)
         .framework("torch")
         .training(
             num_epochs=1,
-            train_batch_size=256,
+            train_batch_size=512,
             )
         .env_runners(
-            num_env_runners=1,
+            num_env_runners=0,
             rollout_fragment_length='auto',
         )
         .learners(
@@ -134,7 +134,7 @@ if __name__ == '__main__':
         ),
         run_config=tune.RunConfig(
             name=NAME,
-            stop={"training_iteration": 100000},
+            stop={"training_iteration": 10000},
             checkpoint_config=tune.CheckpointConfig(
                 checkpoint_frequency=1,
                 ),
@@ -144,3 +144,4 @@ if __name__ == '__main__':
     )
 
     tuner.fit()
+    
