@@ -29,7 +29,7 @@ def test_train_loop_runs_short():
 
     # Run train using config paths
     os.system(
-        f"python train_rl_agent.py "
+        f"python train_SAC_single_action.py "
         f"--sim-config configs/env/sim_config.yaml "
         f"--dc-config configs/env/datacenters.yaml "
         f"--reward-config configs/env/reward_config.yaml "

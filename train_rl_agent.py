@@ -13,7 +13,7 @@ from rl_components.agent_net import ActorNet, CriticNet, AttentionActorNet, Atte
 from rl_components.replay_buffer import FastReplayBuffer
 from rewards.predefined.composite_reward import CompositeReward
 
-from utils.checkpoint_manager import save_checkpoint, load_checkpoint
+from utils.checkpoint_manager import save_checkpoint
 from utils.config_loader import load_yaml
 from utils.config_logger import setup_logger
 from torch.utils.tensorboard import SummaryWriter

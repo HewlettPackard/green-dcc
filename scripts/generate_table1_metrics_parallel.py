@@ -30,7 +30,8 @@ SIM_CONFIG_PATH = os.path.join(CONFIG_DIR, "sim_config.yaml")
 DC_CONFIG_PATH = os.path.join(CONFIG_DIR, "datacenters.yaml")
 REWARD_CONFIG_PATH = os.path.join(CONFIG_DIR, "reward_config.yaml")
 # Path to the standard trained RL agent (e.g., SAC trained on default multi-objective)
-DEFAULT_RL_CHECKPOINT_PATH = "../checkpoints/train_20250509_232500/best_checkpoint.pth" # ADJUST THIS
+# DEFAULT_RL_CHECKPOINT_PATH = "../checkpoints/train_20250509_232500/best_checkpoint.pth" # ADJUST THIS
+DEFAULT_RL_CHECKPOINT_PATH = "../checkpoints/train_20250516_165831/checkpoint_step_835000.pth" # ADJUST THIS
 
 EVALUATION_DURATION_DAYS = 7 # Use 1 month for evaluation
 NUM_SEEDS = 10 # Number of random seeds to run for each controller

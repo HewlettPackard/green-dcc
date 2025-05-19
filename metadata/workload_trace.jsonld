@@ -50,11 +50,11 @@
   "version": "1.0.0",
   "citeAs": [
     {
-      "@type": "sc:CreativeWork",
-      "name": "SustainCluster Benchmark AI Workload",
-      "author": "Hewlett Packard Enterprise",
-      "datePublished": "2025",
-      "url": "https://github.com/HewlettPackard/sustain-cluster"
+        "@type": "sc:CreativeWork",
+        "name": "SustainCluster Benchmark AI Workload",
+        "author": "Hewlett Packard Enterprise",
+        "datePublished": "2025",
+        "url": "https://github.com/HewlettPackard/sustain-cluster"
     },
     {
       "@type": "sc:ScholarlyArticle",

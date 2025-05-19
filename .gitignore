@@ -4,6 +4,9 @@
 # History plugin or backup files
 .history/
 
+# MAC OS
+.DS_Store
+
 # Model checkpoints
 checkpoints/
 

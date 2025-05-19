@@ -1,17 +1,28 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 class ActorNet(nn.Module):
-    def __init__(self, obs_dim, act_dim, hidden_dim=32):
+    def __init__(self, obs_dim, act_dim, hidden_dim=256, use_layer_norm=False): # Default hidden_dim to 256
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(obs_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, act_dim)  # one output per DC
-        )
+        self.use_layer_norm = use_layer_norm
+
+        layers = []
+        # Input layer
+        layers.append(nn.Linear(obs_dim, hidden_dim))
+        if self.use_layer_norm:
+            layers.append(nn.LayerNorm(hidden_dim))
+        layers.append(nn.ReLU())
+
+        # Hidden layer
+        layers.append(nn.Linear(hidden_dim, hidden_dim))
+        if self.use_layer_norm:
+            layers.append(nn.LayerNorm(hidden_dim))
+        layers.append(nn.ReLU())
+
+        # Output layer (no LayerNorm or ReLU typically right before logits)
+        layers.append(nn.Linear(hidden_dim, act_dim))
+
+        self.net = nn.Sequential(*layers)
 
     def forward(self, obs_batch):
         """
@@ -21,55 +32,77 @@ class ActorNet(nn.Module):
         return self.net(obs_batch)
 
     def sample_actions(self, obs_batch):
-        logits = self.forward(obs_batch)  # [T, obs_dim]
-        probs = F.softmax(logits, dim=-1)  # [T, obs_dim]
-        dist = torch.distributions.Categorical(probs)
-        actions = dist.sample()            # [T]
-        log_probs = dist.log_prob(actions)  # [T]
-        entropy = dist.entropy().mean()     # scalar, average over T
+        """
+        Samples actions, log_probs, and entropy from the policy distribution.
+        This method is useful for on-policy algorithms or for evaluation.
+        For SAC, typically only forward() is called and distribution handled externally.
+        """
+        logits = self.forward(obs_batch)
+        probs = F.softmax(logits, dim=-1) # Softmax to get probabilities
+        dist = torch.distributions.Categorical(probs=probs) # Use probs for Categorical
+        actions = dist.sample()
+        log_probs = dist.log_prob(actions)
+        entropy = dist.entropy().mean() # Average entropy over the batch of tasks
         return actions, log_probs, entropy
 
-
 class CriticNet(nn.Module):
-    def __init__(self, obs_dim, act_dim, hidden_dim=256):
+    def __init__(self, obs_dim, act_dim, hidden_dim=256, use_layer_norm=False):
         super().__init__()
-        self.q1 = nn.Sequential(
-            nn.Linear(obs_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, act_dim)
-        )
-        self.q2 = nn.Sequential(
-            nn.Linear(obs_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, act_dim)
-        )
+        self.use_layer_norm = use_layer_norm
+
+        # Q1 network
+        q1_layers = []
+        q1_layers.append(nn.Linear(obs_dim, hidden_dim))
+        if self.use_layer_norm:
+            q1_layers.append(nn.LayerNorm(hidden_dim))
+        q1_layers.append(nn.ReLU())
+        q1_layers.append(nn.Linear(hidden_dim, hidden_dim))
+        if self.use_layer_norm:
+            q1_layers.append(nn.LayerNorm(hidden_dim))
+        q1_layers.append(nn.ReLU())
+        q1_layers.append(nn.Linear(hidden_dim, act_dim)) # Outputs Q-value for each action
+        self.q1 = nn.Sequential(*q1_layers)
+
+        # Q2 network
+        q2_layers = []
+        q2_layers.append(nn.Linear(obs_dim, hidden_dim))
+        if self.use_layer_norm:
+            q2_layers.append(nn.LayerNorm(hidden_dim))
+        q2_layers.append(nn.ReLU())
+        q2_layers.append(nn.Linear(hidden_dim, hidden_dim))
+        if self.use_layer_norm:
+            q2_layers.append(nn.LayerNorm(hidden_dim))
+        q2_layers.append(nn.ReLU())
+        q2_layers.append(nn.Linear(hidden_dim, act_dim)) # Outputs Q-value for each action
+        self.q2 = nn.Sequential(*q2_layers)
 
     def forward(self, obs_batch, actions):
         """
-        Compute Q-values for the given (obs, action) pairs.
-        Returns the mean Q for q1 and q2 across tasks.
+        Computes Q-values for the given (obs, action) pairs.
+        obs_batch: [T, obs_dim]
+        actions: [T] (long tensor of action indices)
+        Returns: q1_selected [T], q2_selected [T]
         """
-        q1_all = self.q1(obs_batch)  # [T, act_dim]
-        q2_all = self.q2(obs_batch)  # [T, act_dim]
-        
-        assert ((actions >= 0) & (actions < q1_all.shape[1])).all(), "Action index out of bounds"
+        q1_all_actions = self.q1(obs_batch)  # [T, act_dim]
+        q2_all_actions = self.q2(obs_batch)  # [T, act_dim]
 
-        q1 = q1_all.gather(1, actions.unsqueeze(-1)).squeeze(-1)  # [T]
-        q2 = q2_all.gather(1, actions.unsqueeze(-1)).squeeze(-1)  # [T]
+        # Ensure actions are within bounds for gather
+        # This assertion should ideally be done before calling if possible
+        # assert ((actions >= 0) & (actions < q1_all_actions.shape[1])).all(), "Action index out of bounds"
 
-        # q1_mean = q1.mean()
-        # q2_mean = q2.mean()
-        return q1, q2
+        # Gather the Q-values for the specific actions taken
+        q1_selected = q1_all_actions.gather(1, actions.long().unsqueeze(-1)).squeeze(-1)  # [T]
+        q2_selected = q2_all_actions.gather(1, actions.long().unsqueeze(-1)).squeeze(-1)  # [T]
+
+        return q1_selected, q2_selected
 
     def forward_all(self, obs_batch):
         """
-        Returns full Q-values for all actions. Used during target computation.
+        Returns Q-values for all possible actions for the given observations.
+        obs_batch: [T, obs_dim]
+        Returns: q1_all_actions [T, act_dim], q2_all_actions [T, act_dim]
         """
-        return self.q1(obs_batch), self.q2(obs_batch)  # [T, act_dim] each
+        return self.q1(obs_batch), self.q2(obs_batch)
     
 # TaskEncoder can remain the same if you use it
 class TaskEncoder(nn.Module):

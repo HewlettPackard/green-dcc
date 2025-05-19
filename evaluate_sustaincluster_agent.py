@@ -6,8 +6,11 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import seaborn as sns
 sns.set_theme(style="whitegrid")
+import yaml # For loading algo_config if needed
+from utils.config_loader import load_yaml
 
-from rl_components.agent_net import ActorNet
+# Import all network types
+from rl_components.agent_net import ActorNet, AttentionActorNet # Add AttentionActorNet
 from envs.task_scheduling_env import TaskSchedulingEnv
 from simulation.cluster_manager import DatacenterClusterManager
 
@@ -39,14 +42,16 @@ console_handler.setFormatter(logging.Formatter(
 ))
 logger.addHandler(console_handler)
 
-def make_eval_env(eval_mode=True):
-    from utils.config_loader import load_yaml
+def make_eval_env(sim_config_path="configs/env/sim_config.yaml", # Add paths as args
+                  dc_config_path="configs/env/datacenters.yaml",
+                  reward_config_path="configs/env/reward_config.yaml",
+                  eval_mode=True):
     from rewards.predefined.composite_reward import CompositeReward
-    from torch.utils.tensorboard import SummaryWriter
 
-    sim_cfg = load_yaml("configs/env/sim_config.yaml")["simulation"]
-    dc_cfg = load_yaml("configs/env/datacenters.yaml")["datacenters"]
-    reward_cfg = load_yaml("configs/env/reward_config.yaml")["reward"]
+    sim_cfg_full = load_yaml(sim_config_path) # Load full sim_config
+    sim_cfg = sim_cfg_full["simulation"]
+    dc_cfg = load_yaml(dc_config_path)["datacenters"]
+    reward_cfg = load_yaml(reward_config_path)["reward"]
 
     start = pd.Timestamp(datetime.datetime(sim_cfg["year"], sim_cfg["month"], sim_cfg["init_day"],
                                            sim_cfg["init_hour"], 0, tzinfo=datetime.timezone.utc))
@@ -55,80 +60,178 @@ def make_eval_env(eval_mode=True):
     cluster = DatacenterClusterManager(
         config_list=dc_cfg,
         simulation_year=sim_cfg["year"],
-        init_day=int(sim_cfg["month"] * 30.5),
+        init_day=int(sim_cfg["month"] * 30.5 + sim_cfg["init_day"]), # Adjusted
         init_hour=sim_cfg["init_hour"],
-        strategy=sim_cfg["strategy"],
+        strategy=sim_cfg["strategy"], # This will determine if use_actor is True
         tasks_file_path=sim_cfg["workload_path"],
-        shuffle_datacenter_order=not eval_mode,
+        shuffle_datacenter_order=not eval_mode, # No shuffle in eval
         cloud_provider=sim_cfg["cloud_provider"],
         logger=logger
     )
-
     reward_fn = CompositeReward(
         components=reward_cfg["components"],
-        normalize=reward_cfg.get("normalize", False)
+        normalize=False, # Typically False for evaluation rewards
+        freeze_stats_after_steps=reward_cfg.get("freeze_stats_after_steps", None)
     )
-
     env = TaskSchedulingEnv(
         cluster_manager=cluster,
         start_time=start,
         end_time=end,
         reward_fn=reward_fn,
-        writer=None
+        writer=None,
+        sim_config=sim_cfg # Pass the simulation config dictionary
     )
     return env
 
+# --- Configuration for Evaluation ---
+SIM_CONFIG_PATH = "configs/env/sim_config.yaml"       # Path to sim_config used for this eval run
+DC_CONFIG_PATH = "configs/env/datacenters.yaml"        # Path to datacenters config
+REWARD_CONFIG_PATH = "configs/env/reward_config.yaml"  # Path to reward config
+CHECKPOINT_PATH = "checkpoints/train_20250516_165831/checkpoint_step_835000.pth"  # <<<< ADJUST THIS PATH
+# If evaluating RBC, ensure SIM_CONFIG_PATH's strategy is set, e.g., "lowest_carbon"
+# If evaluating RL, ensure SIM_CONFIG_PATH's strategy is "manual_rl"
 
-# Load trained actor model
-checkpoint_path = "checkpoints/train_20250509_232500/best_checkpoint.pth"  # Adjust path
-env = make_eval_env()
-obs, _ = env.reset(seed=123)
-obs_dim = env.observation_space.shape[0]
-# Detect the strategy (manual_rl = agent, else = RBC)
-use_actor = env.cluster_manager.strategy == "manual_rl"
-act_dim = env.num_dcs + 1
+# --- Determine if evaluating RL agent or RBC based on sim_config ---
+# Load sim_config once to decide the mode
+temp_sim_cfg = load_yaml(SIM_CONFIG_PATH)["simulation"]
+EVAL_STRATEGY = temp_sim_cfg.get("strategy", "manual_rl")
+USE_RL_AGENT = (EVAL_STRATEGY == "manual_rl")
 
-if use_actor:
-    logger.info("Using trained actor model for evaluation.")
-    actor = ActorNet(obs_dim, act_dim, hidden_dim=64)
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    actor.load_state_dict(checkpoint["actor_state_dict"])
-    actor.eval()
+# --- Create Environment ---
+# The env will now be created with single_action_mode from its sim_config
+env = make_eval_env(sim_config_path=SIM_CONFIG_PATH,
+                    dc_config_path=DC_CONFIG_PATH,
+                    reward_config_path=REWARD_CONFIG_PATH,
+                    eval_mode=True)
+
+obs, _ = env.reset(seed=123) # Use a fixed seed for reproducible evaluation
+
+# Get action/obs dim from the environment, which now respects single_action_mode
+# and disable_defer_action for its action space.
+# However, the *network's* output dimension depends on how it was trained.
+single_action_mode_env = env.single_action_mode # From env instance
+disable_defer_action_env = env.disable_defer_action # From env instance
+
+actor = None
+if USE_RL_AGENT:
+    logger.info(f"Strategy: {EVAL_STRATEGY}. Using trained actor model for evaluation from: {CHECKPOINT_PATH}")
+    try:
+        checkpoint = torch.load(CHECKPOINT_PATH, map_location="cpu")
+        extra_info = checkpoint.get("extra_info", {})
+
+        # Get config from checkpoint to build the correct network
+        ckpt_single_action_mode = extra_info.get("single_action_mode", False) # Default to multi if not in ckpt
+        ckpt_use_attention = extra_info.get("use_attention", False)
+        ckpt_obs_dim = extra_info.get("obs_dim")
+        ckpt_act_dim_net = extra_info.get("act_dim") # This is the network's output dim
+
+        if ckpt_obs_dim is None or ckpt_act_dim_net is None:
+            raise ValueError("Checkpoint is missing 'obs_dim' or 'act_dim' in 'extra_info'. Please re-save checkpoints with these.")
+
+        logger.info(f"Checkpoint info: single_action_mode={ckpt_single_action_mode}, use_attention={ckpt_use_attention}, obs_dim_net={ckpt_obs_dim}, act_dim_net={ckpt_act_dim_net}")
+
+        # Validate env mode matches checkpoint's training mode for obs/action structure
+        if single_action_mode_env != ckpt_single_action_mode:
+            logger.warning(f"Environment single_action_mode ({single_action_mode_env}) "
+                           f"differs from checkpoint training mode ({ckpt_single_action_mode}). "
+                           f"Ensure evaluation sim_config matches training setup for observation structure.")
+                           # The env will behave as per its sim_config, but the loaded actor was trained differently.
+
+        if ckpt_use_attention and not ckpt_single_action_mode: # Attention only for multi-task
+            # Assuming AttentionActorNet takes same constructor args as in train.py
+            # Need to load algo_cfg that was used for training this specific checkpoint
+            # For simplicity, assuming default attention params if not in checkpoint (BAD for general use)
+            # TODO: Ideally, save relevant attn_cfg in checkpoint's extra_info
+            logger.info("Loading AttentionActorNet.")
+            actor = AttentionActorNet(obs_dim_per_task=ckpt_obs_dim, act_dim=ckpt_act_dim_net,
+                                      embed_dim=extra_info.get("attn_embed_dim", 128),
+                                      num_heads=extra_info.get("attn_num_heads", 4),
+                                      num_attention_layers=extra_info.get("attn_num_layers",2),
+                                      dropout=extra_info.get("attn_dropout",0.1)
+                                      )
+        else: # MLP Actor (either single_action_mode or multi-task without attention)
+            logger.info("Loading ActorNet (MLP).")
+            actor = ActorNet(obs_dim=ckpt_obs_dim, act_dim=ckpt_act_dim_net, hidden_dim=extra_info.get("hidden_dim", 64))
+
+        actor.load_state_dict(checkpoint["actor_state_dict"])
+        actor.eval()
+    except FileNotFoundError:
+        logger.error(f"Checkpoint file not found at {CHECKPOINT_PATH}. Cannot evaluate RL agent.")
+        USE_RL_AGENT = False # Fallback to not using actor
+    except Exception as e:
+        logger.error(f"Error loading checkpoint: {e}. Cannot evaluate RL agent.")
+        USE_RL_AGENT = False
 else:
-    logger.info("Using RBC for evaluation.")
-    
+    logger.info(f"Strategy: {EVAL_STRATEGY}. Using Rule-Based Controller for evaluation.")
 
+# --- Evaluation Loop ---
 infos_list = []
 common_info_list = []
-rewards = []
-steps = 7 * 96  # 7 days of 15-min intervals
-delayed_task_counts = [] 
+rewards_log = [] # Renamed from rewards
+steps_to_eval = 7 * 96  # 7 days for evaluation
+delayed_task_counts_log = []
 
-for step in tqdm(range(steps)):
-    if len(obs) == 0:
-        actions = []
-    elif use_actor:
-        # Use trained agent
-        obs_tensor = torch.FloatTensor(obs)
-        with torch.no_grad():
-            logits = actor(obs_tensor)
-            probs = torch.softmax(logits, dim=-1)
-            dist = torch.distributions.Categorical(probs)
-            actions = dist.sample().numpy().tolist()
-        delayed_count = sum(1 for a in actions if a == 0)
-        delayed_task_counts.append(delayed_count)
-    else:
-        # If RBC is used, actions must be empty -> internal logic assigns them
-        actions = []
-        delayed_task_counts.append(0)  # No delayed logic in RBC
+for step in tqdm(range(steps_to_eval), desc=f"Evaluating {EVAL_STRATEGY}"):
+    actions_to_env = [] # Default for RBC or no tasks
 
-    obs, reward, done, truncated, info = env.step(actions)
+    if USE_RL_AGENT and actor is not None:
+        if single_action_mode_env: # Env expects single action
+            # Obs from env is already aggregated if single_action_mode_env is True
+            # Ensure actor was trained for this aggregated obs_dim
+            if len(obs) == 0 and obs.ndim == 0 : # Handle rare case of scalar 0 if env returns that for no tasks + single mode
+                obs_for_actor = np.zeros(ckpt_obs_dim) # Use ckpt_obs_dim
+            else:
+                obs_for_actor = obs
+            
+            if obs_for_actor.shape[0] != ckpt_obs_dim:
+                 logger.error(f"Obs dim mismatch for actor! Env obs_dim={obs_for_actor.shape[0]}, Ckpt train obs_dim={ckpt_obs_dim}")
+                 # Potentially skip or use random action
+                 actions_to_env = env.action_space.sample() if not disable_defer_action_env else np.random.randint(env.num_dcs)
+            else:
+                obs_tensor = torch.FloatTensor(obs_for_actor).unsqueeze(0) # Batch dim
+                with torch.no_grad():
+                    logits = actor(obs_tensor) # Expects [B, D_obs_agg]
+                    # Actor outputs according to ckpt_act_dim_net
+                    # Env's step() will interpret this based on disable_defer_action_env
+                    actions_to_env = torch.distributions.Categorical(logits=logits).sample().item()
+            
+            # For logging deferral if single_action_mode
+            # The actual deferral decision happens inside env.step based on disable_defer_action_env
+            current_tasks_in_env = env.current_tasks # Tasks before step
+            is_defer_decision = False
+            if not disable_defer_action_env and actions_to_env == 0:
+                is_defer_decision = True
+            delayed_task_counts_log.append(len(current_tasks_in_env) if is_defer_decision and current_tasks_in_env else 0)
+
+        else: # Multi-task mode for env and actor
+            if len(obs) > 0: # obs is a list of per-task obs
+                obs_tensor = torch.FloatTensor(obs)
+                with torch.no_grad():
+                    logits = actor(obs_tensor) # Expects [k_t, D_obs_per_task]
+                    actions_list = torch.distributions.Categorical(logits=logits).sample().numpy().tolist()
+                actions_to_env = actions_list
+                # Log deferral for multi-task mode
+                # The actions in actions_list are direct agent outputs (0 means defer if not disabled by agent training)
+                delayed_count_this_step = 0
+                if not disable_defer_action_env: # Only count '0' if defer was an option for the agent
+                     delayed_count_this_step = sum(1 for a in actions_list if a == 0)
+                delayed_task_counts_log.append(delayed_count_this_step)
+
+            else: # No tasks
+                actions_to_env = []
+                delayed_task_counts_log.append(0)
+    else: # RBC mode
+        actions_to_env = [] # RBCs don't take actions from here
+        delayed_task_counts_log.append(0) # RBCs typically don't defer in this framework
+
+    obs, reward, done, truncated, info = env.step(actions_to_env)
     infos_list.append(info["datacenter_infos"])
     common_info_list.append(info["transmission_cost_total_usd"])
-    rewards.append(reward)
+    rewards_log.append(reward)
 
     if done or truncated:
-        obs, _ = env.reset(seed=123)
+        logger.info(f"Evaluation episode finished at step {step+1}. Resetting.")
+        obs, _ = env.reset(seed=123) # Keep seed fixed for multiple episodes if duration_days is short
 
 #%%
 info["datacenter_infos"]

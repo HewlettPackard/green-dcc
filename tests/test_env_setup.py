@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import pytest
 from train_rl_agent import make_env
 
@@ -12,4 +13,4 @@ def test_environment_runs():
 
     assert isinstance(obs, list)
     if len(obs) > 0:
-        assert isinstance(obs[0], list) or isinstance(obs[0], float)
+        assert isinstance(obs[0], list) or isinstance(obs[0], float) or isinstance(obs[0], np.ndarray)

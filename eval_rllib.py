@@ -12,8 +12,9 @@ from train_rllib import TaskSchedulingEnvRLLIB
 
 NUM_SEEDS = 10
 # checkpoint_dir = "/lustre/guillant/rllib_checkpoints/checkpoint_000070" # PPO
-checkpoint_dir = "/lustre/guillant/rllib_checkpoints/checkpoint_000090" # IMPALA
+# checkpoint_dir = "/lustre/guillant/rllib_checkpoints/checkpoint_000090" # IMPALA
 # checkpoint_dir = "/lustre/guillant/rllib_checkpoints/checkpoint_000099"   # APPO
+checkpoint_dir = "/lustre/guillant/new_green-dcc/results/test/PPO_TaskSchedulingEnvRLLIB_14669_00000_0_2025-05-16_03-30-14/checkpoint_000002" # 
 rl_module  = Algorithm.from_checkpoint(checkpoint_dir).get_module()
 
 env = TaskSchedulingEnvRLLIB({})

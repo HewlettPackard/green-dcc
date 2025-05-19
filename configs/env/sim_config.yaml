@@ -12,3 +12,9 @@ simulation:
   strategy: "manual_rl"
   use_tensorboard: true
   log_dir: "runs/train_run"
+
+  disable_defer_action: true # or true
+  single_action_mode: true # or false
+
+  # (Optional) Define how to aggregate task features if single_action_mode is true
+  aggregation_method: "average" # or "sum", "max", "nn_embedder" (future)

@@ -282,3 +282,92 @@ class PrioritizedReplayBuffer:
 
     def __len__(self):
         return len(self.buffer)
+
+
+class SimpleReplayBuffer:
+    """
+    A simple replay buffer for off-policy RL algorithms when operating in
+    single_action_mode (one aggregated observation, one action per step).
+    Stores transitions as (obs, action, reward, next_obs, done).
+    """
+    def __init__(self, capacity: int, obs_dim: int):
+        """
+        Args:
+            capacity (int): Maximum number of transitions to store.
+            obs_dim (int): Dimension of the (aggregated) observation.
+        """
+        self.capacity = capacity
+        self.obs_dim = obs_dim
+        # self.act_dim is implicitly 1 for discrete actions, not stored explicitly
+
+        # Pre-allocate NumPy arrays for efficiency
+        self.obs_buf = np.zeros((capacity, obs_dim), dtype=np.float32)
+        self.next_obs_buf = np.zeros((capacity, obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(capacity, dtype=np.int64) # For discrete actions
+        self.rew_buf = np.zeros(capacity, dtype=np.float32)
+        self.done_buf = np.zeros(capacity, dtype=np.float32) # Store as float for multiplication
+
+        self.ptr = 0  # Pointer to the current position to write
+        self.size = 0 # Current number of transitions in the buffer
+
+    def add(self, obs: np.ndarray, action: int, reward: float, next_obs: np.ndarray, done: bool):
+        """
+        Adds a transition to the buffer.
+
+        Args:
+            obs (np.ndarray): The observation (aggregated).
+            action (int): The action taken.
+            reward (float): The reward received.
+            next_obs (np.ndarray): The next observation (aggregated).
+            done (bool): Whether the episode terminated.
+        """
+        if obs.shape != (self.obs_dim,):
+            raise ValueError(f"Observation shape mismatch. Expected ({self.obs_dim},), got {obs.shape}")
+        if next_obs.shape != (self.obs_dim,):
+            raise ValueError(f"Next observation shape mismatch. Expected ({self.obs_dim},), got {next_obs.shape}")
+
+        self.obs_buf[self.ptr] = obs
+        self.act_buf[self.ptr] = action
+        self.rew_buf[self.ptr] = reward
+        self.next_obs_buf[self.ptr] = next_obs
+        self.done_buf[self.ptr] = float(done) # Store boolean as float
+
+        self.ptr = (self.ptr + 1) % self.capacity
+        self.size = min(self.size + 1, self.capacity)
+
+    def sample(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Samples a batch of transitions from the buffer.
+
+        Args:
+            batch_size (int): The number of transitions to sample.
+
+        Returns:
+            tuple: A tuple containing tensors for observations, actions, rewards,
+                   next observations, and done flags.
+                   (obs_b, act_b, rew_b, next_obs_b, done_b)
+        """
+        if self.size < batch_size:
+            # Not enough samples yet, could raise error or return None/empty
+            # For simplicity, let's raise an error or an empty tuple if you prefer to handle it upstream
+            # raise ValueError(f"Not enough samples in buffer ({self.size}) to sample batch of size {batch_size}")
+            print(f"Warning: Not enough samples in buffer ({self.size}) to sample batch of size {batch_size}. Sampling with replacement or fewer if necessary.")
+            if self.size == 0:
+                return (torch.empty(0, self.obs_dim), torch.empty(0, dtype=torch.long),
+                        torch.empty(0), torch.empty(0, self.obs_dim), torch.empty(0, dtype=torch.float))
+
+        # Sample indices without replacement if enough samples, otherwise with replacement
+        replace_sample = self.size < batch_size
+        idxs = np.random.choice(self.size, size=batch_size, replace=replace_sample)
+
+        obs_b = torch.from_numpy(self.obs_buf[idxs])
+        act_b = torch.from_numpy(self.act_buf[idxs]) # No need to unsqueeze for discrete actions if shape is [B]
+        rew_b = torch.from_numpy(self.rew_buf[idxs])
+        next_obs_b = torch.from_numpy(self.next_obs_buf[idxs])
+        done_b = torch.from_numpy(self.done_buf[idxs])
+
+        return obs_b, act_b, rew_b, next_obs_b, done_b
+
+    def __len__(self) -> int:
+        """Returns the current number of transitions in the buffer."""
+        return self.size
