@@ -10,7 +10,7 @@ import os, sys
 # So you can import your package:
 sys.path.insert(0, os.path.abspath('../..'))
 
-project = 'green-dcc'
+project = 'sustain-cluster'
 copyright = '2025, Hewlett Packard Enterprise (HPE)'
 author = 'Hewlett Packard Enterprise (HPE)'
 
