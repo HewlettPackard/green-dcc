@@ -1,0 +1,70 @@
+# configs/rllib/dqn_config.yaml
+
+algorithm:
+  framework: "torch"
+  num_gpus: 0
+
+  env_config: # Passed to env_creator
+    sim_config_path: "configs/env/sim_config.yaml"
+    dc_config_path: "configs/env/datacenters.yaml"
+    reward_config_path: "configs/env/reward_config.yaml"
+    # master_seed_for_envs: 12345 # Optional: Add if you want reproducible env seeding
+
+  num_env_runners: 4
+  num_cpus_per_env_runner: 1
+  # rollout_fragment_length: "auto" # Or specific value if DQNConfig needs it
+
+  lr: 0.0005
+  train_batch_size: 256
+  replay_buffer_config:
+    type: MultiAgentReplayBuffer # Or PrioritizedEpisodeReplayBuffer
+    capacity: 50000
+    # If Prioritized:
+    # prioritized_replay_alpha: 0.6
+    # prioritized_replay_beta: 0.4
+    # prioritized_replay_eps: 0.000001
+
+  # Epsilon schedule for DQNConfig().training(epsilon=SCHEDULE)
+  epsilon_schedule: # New key for the programmatic builder
+    - [0, 1.0]             # At env_step 0, epsilon is 1.0
+    - [200000, 0.02]       # Linearly anneal to 0.02 by env_step 200000
+
+  target_network_update_freq: 8000
+  num_steps_sampled_before_learning_starts: 1000
+  tau: 1.0 # For hard updates with target_network_update_freq
+  
+  # DQN specific enhancements
+  dueling: true
+  double_q: true
+  n_step: 1 # Or try 3 for N-step DQN
+  # num_atoms: 1 # Keep as 1 for standard DQN, >1 for Distributional DQN
+
+  # Model config that will be passed to config.training(model=...)
+  model:
+    fcnet_hiddens: [128, 128]
+    fcnet_activation: "relu"
+
+  # Evaluation settings
+  evaluation_interval: 25
+  evaluation_duration: 5
+  evaluation_duration_unit: "episodes"
+  evaluation_num_env_runners: 1
+  evaluation_config:
+    explore: false
+    env_config: # Env config for evaluation workers
+      sim_config_path: "configs/env/sim_config.yaml"
+      dc_config_path: "configs/env/datacenters.yaml"
+      reward_config_path: "configs/env/reward_config.yaml"
+      # master_seed_for_envs: 99999 # Different master seed for eval if desired
+
+# --- Tune/AIR Run Configuration (remains the same as your PPO's run_config) ---
+run_config:
+  name: "GreenDCC_DQN_SingleAction" # Change name
+  stop:
+    timesteps_total: 5000000
+  checkpoint_config:
+    num_to_keep: 3
+    checkpoint_frequency: 100
+    checkpoint_score_attribute: "evaluation/env_runners/episode_return_mean" # Verify
+    checkpoint_score_order: "max"
+    checkpoint_at_end: true

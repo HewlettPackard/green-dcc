@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -26,7 +27,7 @@ class TaskSchedulingEnv(gym.Env):
     """
     def __init__(self, cluster_manager, start_time, end_time, 
                  reward_fn: BaseReward, writer: SummaryWriter = None,
-                 sim_config: dict = None): # Add sim_config
+                 sim_config: dict = None, initial_seed_for_resets=None): # Add sim_config
         
         super().__init__()
         self.cluster_manager = cluster_manager
@@ -48,6 +49,10 @@ class TaskSchedulingEnv(gym.Env):
 
         # Set dynamically based on number of DCs
         self.num_dcs = len(self.cluster_manager.datacenters)
+        self.sim_config = sim_config
+        self.base_seed = initial_seed_for_resets if initial_seed_for_resets is not None else random.randint(0, 1_000_000)
+        self.current_episode_count = 0 # Track episodes within this env instance
+
         
         # --- Read single_action_mode and aggregation_method from sim_config ---
         if sim_config is None:
@@ -217,9 +222,24 @@ class TaskSchedulingEnv(gym.Env):
 
 
     def reset(self, seed=None, options=None):
+        # --- Seeding Logic ---
+        if seed is None:
+            # If RLlib doesn't pass a specific seed for this reset,
+            # derive one from our base seed and episode count.
+            # This ensures different trajectories on subsequent resets within the same worker.
+            current_reset_seed = self.base_seed + self.current_episode_count
+        else:
+            # If RLlib passes a seed (e.g., for evaluation), use that.
+            current_reset_seed = seed
+        
+        self.current_episode_count += 1
+        seed = current_reset_seed
         super().reset(seed=seed) # Gymnasium expects options, but we don't use them yet
+        random.seed(seed) # Set random seed for reproducibility
         self.current_time = self.start_time
         self.cluster_manager.reset(seed=seed) # Pass seed to cluster manager
+        
+        # print(f"Resetting environment with seed {seed} at time {self.current_time}")
 
         self.deferred_tasks.clear()
         self.in_transit_tasks.clear()
@@ -261,7 +281,6 @@ class TaskSchedulingEnv(gym.Env):
                 else:
                     # Agent outputs 0 (defer) or 1 to N (DCs)
                     single_action_taken = single_action_taken
-
 
                 for task_idx, task in enumerate(self.current_tasks):
                     # Apply SLA check

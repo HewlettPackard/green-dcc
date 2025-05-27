@@ -1,5 +1,7 @@
 import numpy as np
 import torch
+import datetime
+
 import pandas as pd
 from tqdm import tqdm
 from ray.rllib.algorithms.algorithm import Algorithm
@@ -8,16 +10,90 @@ from ray.rllib.policy.policy import Policy
 from ray.rllib.core.columns import Columns
 from ray.rllib.utils.numpy import convert_to_numpy, softmax
 
-from train_rllib import TaskSchedulingEnvRLLIB
+# from train_rllib_ppo import TaskSchedulingEnvRLLIB
+from ray.tune.registry import register_env
 
-NUM_SEEDS = 10
+# Import your custom environment
+from envs.task_scheduling_env import TaskSchedulingEnv # Adjust path if necessary
+# Import make_env to be used by the registration lambda
+from utils.config_loader import load_yaml # Assuming this is used by your make_env
+import pandas as pd # make_env might use it
+from simulation.cluster_manager import DatacenterClusterManager # make_env uses it
+from rewards.predefined.composite_reward import CompositeReward # make_env uses it
+
+
+
+# --- Environment Creator Function for RLlib ---
+def env_creator(env_config_rllib):
+    """
+    env_config_rllib will contain parameters passed from RLlib's .environment(env_config=...)
+    These include the paths to your simulation config files.
+    """
+    print(f"RLlib env_config received by creator: {env_config_rllib}")
+    sim_cfg_path = env_config_rllib.get("sim_config_path", "configs/env/sim_config.yaml")
+    dc_cfg_path = env_config_rllib.get("dc_config_path", "configs/env/datacenters.yaml")
+    reward_cfg_path = env_config_rllib.get("reward_config_path", "configs/env/reward_config.yaml")
+
+    # --- Using a simplified make_env or direct instantiation ---
+    # The make_env from your train_sac.py might be too complex if it sets up loggers/writers
+    # specific to that script. For RLlib, it's cleaner if the env is self-contained.
+
+    sim_cfg_full = load_yaml(sim_cfg_path)
+    sim_cfg = sim_cfg_full["simulation"] # Extract the simulation part
+    dc_cfg = load_yaml(dc_cfg_path)["datacenters"]
+    reward_cfg = load_yaml(reward_cfg_path)["reward"]
+
+    # Ensure 'single_action_mode' is true for this training script's purpose
+    if not sim_cfg.get("single_action_mode", False):
+        print("WARNING: 'single_action_mode' is not true in sim_config.yaml. This RLlib script expects it for simplicity.")
+        # sim_cfg["single_action_mode"] = True # Optionally force it
+
+    start = pd.Timestamp(datetime.datetime(sim_cfg["year"], sim_cfg["month"], sim_cfg["init_day"],
+                                           sim_cfg["init_hour"], 0, tzinfo=datetime.timezone.utc))
+    end = start + datetime.timedelta(days=sim_cfg["duration_days"])
+
+    cluster = DatacenterClusterManager(
+        config_list=dc_cfg,
+        simulation_year=sim_cfg["year"],
+        init_day=int(sim_cfg["month"] * 30.5 + sim_cfg["init_day"]),
+        init_hour=sim_cfg["init_hour"],
+        strategy="manual_rl", # Must be manual_rl for agent control
+        tasks_file_path=sim_cfg["workload_path"],
+        shuffle_datacenter_order=sim_cfg.get("shuffle_datacenters", True),
+        cloud_provider=sim_cfg["cloud_provider"],
+        logger=None # RLlib workers usually handle their own logging
+    )
+
+    reward_fn_instance = CompositeReward(
+        components=reward_cfg["components"],
+        normalize=reward_cfg.get("normalize", False),
+        freeze_stats_after_steps=reward_cfg.get("freeze_stats_after_steps", None)
+    )
+
+    # Pass the sim_cfg dictionary to TaskSchedulingEnv for single_action_mode etc.
+    env = TaskSchedulingEnv(
+        cluster_manager=cluster,
+        start_time=start,
+        end_time=end,
+        reward_fn=reward_fn_instance,
+        writer=None, # RLlib handles its own TensorBoard logging
+        sim_config=sim_cfg # Pass the simulation config dict
+    )
+    print(f"GreenDCC Env Created. Obs Space: {env.observation_space}, Act Space: {env.action_space}")
+    return env
+
+env_name = "GreenDCC_RLlib_Env"
+register_env(env_name, env_creator)
+NUM_SEEDS = 5
 # checkpoint_dir = "/lustre/guillant/rllib_checkpoints/checkpoint_000070" # PPO
 # checkpoint_dir = "/lustre/guillant/rllib_checkpoints/checkpoint_000090" # IMPALA
 # checkpoint_dir = "/lustre/guillant/rllib_checkpoints/checkpoint_000099"   # APPO
-checkpoint_dir = "/lustre/guillant/new_green-dcc/results/test/PPO_TaskSchedulingEnvRLLIB_14669_00000_0_2025-05-16_03-30-14/checkpoint_000002" # 
+# checkpoint_dir = "~/ray_results/GreenDCC_PPO_SingleAction/PPO_GreenDCC_RLlib_Env_ae88e_00000_0_2025-05-21_16-00-14/checkpoint_000099" # PPO
+checkpoint_dir = "~/ray_results/GreenDCC_IMPALA_SingleAction/IMPALA_GreenDCC_RLlib_Env_b01ce_00000_0_2025-05-21_18-09-07/checkpoint_000002" # IMPALA
+
 rl_module  = Algorithm.from_checkpoint(checkpoint_dir).get_module()
 
-env = TaskSchedulingEnvRLLIB({})
+env = env_creator({})
 summary_all_seeds = []
 
 print()
@@ -36,16 +112,11 @@ for i in tqdm(range(NUM_SEEDS)):
         rl_module_out = rl_module.forward_inference(input_dict)
 
         logits = convert_to_numpy(rl_module_out[Columns.ACTION_DIST_INPUTS])
-        logits = logits.reshape((750, 6))
         actions = []
-        for i in range(len(env.current_tasks)):
-            action = np.random.choice(6, p=softmax(logits[i]))
-            # action = np.argmax(logits[i])
-            if action == 0:
-                total_deffered_tasks += 1
-            actions.append(action)
+        # action = np.random.choice(5, p=softmax(logits[0]))
+        action = np.argmax(logits)
 
-        obs, reward, done, truncated, info = env.step(actions)
+        obs, reward, done, truncated, info = env.step(action)
         step += 1
         # print(infbo['datacenter_infos']['DC1'])
 

@@ -1,0 +1,70 @@
+# configs/rllib/ppo_config.yaml
+
+algorithm:
+  # General Training Parameters
+  framework: "torch"
+  num_gpus: 0 # Set to 1 or more if you have GPUs and want to use them
+  # num_cpus_for_driver: 1 # CPUs for the main driver (Tune trial actor)
+
+  # Environment Configuration (passed to your env constructor)
+  env: "GreenDCC_RLlib_Env" # Name we will register
+  env_config:
+    sim_config_path: "configs/env/sim_config.yaml"     # Path to your sim_config
+    dc_config_path: "configs/env/datacenters.yaml"      # Path to your dc_config
+    reward_config_path: "configs/env/reward_config.yaml" # Path to your reward_config
+    # Ensure sim_config.yaml has single_action_mode: true for this setup
+
+  # Rollout Worker Configuration
+  num_env_runners: 16 # Number of parallel environments for collecting rollouts
+  num_cpus_per_env_runner: 1 # CPUs allocated to each rollout worker
+  # num_envs_per_worker: 1 # Usually 1 unless using vectorized envs within worker
+  reuse_actors: true # Defaults to False
+
+
+  # PPO Specific Training Hyperparameters
+  lr: 0.0001
+  gamma: 0.99
+  lambda: 0.95           # GAE lambda
+  kl_coeff: 0.2
+  # kl_target: 0.01      # For adaptive KL
+  vf_loss_coeff: 0.5
+  entropy_coeff: 0.01
+  clip_param: 0.2
+  num_sgd_iter: 3
+  train_batch_size: 1024 # Let RLlib determine based on fragment length and workers
+  sgd_minibatch_size: 128 # Larger minibatch if more data per iteration. (train_batch_size = num_env_runners * sgd_minibatch_size)
+  # horizon: null # Let environment decide episode length (or set a max if needed)
+
+  # Model Configuration (for default MLP)
+  model:
+    fcnet_hiddens: [128, 128] # MLP hidden layers
+    fcnet_activation: "relu"
+    # vf_share_layers: false # Whether value function shares layers with policy network
+
+  # Evaluation (Optional, but good practice)
+  evaluation_interval: 25 # Evaluate every N training iterations
+  evaluation_duration: 5  # Number of episodes to run for evaluation
+  evaluation_duration_unit: "episodes"
+  evaluation_num_env_runners: 5 # Can use a separate worker for evaluation
+  evaluation_config:
+    explore: false # Typically disable exploration during evaluation
+    env_config: # Can have slightly different env_config for eval if needed
+      sim_config_path: "configs/env/sim_config.yaml"
+      dc_config_path: "configs/env/datacenters.yaml"
+      reward_config_path: "configs/env/reward_config.yaml"
+      # Ensure eval_env also runs in single_action_mode if that's what's trained
+
+# --- Tune/AIR Run Configuration ---
+run_config:
+  name: "GreenDCC_PPO_SingleAction"
+  stop:
+    training_iteration: 100000 # Stop after N training iterations
+    # Or: timesteps_total: 1000000
+    # Or: episode_reward_mean: # Target reward
+  checkpoint_config:
+    num_to_keep: 5
+    checkpoint_frequency: 25 # Save checkpoint every N training iterations
+    checkpoint_score_attribute: "evaluation/env_runners/episode_return_mean" # Metric to monitor for best checkpoint
+    checkpoint_score_order: "max" # "max" or "min" - save if new score is higher
+    checkpoint_at_end: false
+  # verbose: 1 # 0, 1, 2, 3 (0=silent, 1=results, 2=info, 3=debug)

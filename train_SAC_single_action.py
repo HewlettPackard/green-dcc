@@ -201,7 +201,7 @@ def train():
     episode_reward_buffer = deque(maxlen=10)
     best_avg_reward = float("-inf")
     
-    q_loss_val, policy_loss_val = None, None # Renamed to avoid conflict with torch.nn.functional
+    q_loss, policy_loss = None, None # Renamed to avoid conflict with torch.nn.functional
 
     pbar = trange(algo_cfg["total_steps"])
     for global_step in pbar:
@@ -227,18 +227,26 @@ def train():
             elif global_step < algo_cfg["warmup_steps"]:
                 actions_list = [np.random.randint(act_dim_net) for _ in obs]
             else:
-                obs_tensor_actor = torch.FloatTensor(obs).to(DEVICE) # [k_t, D_obs_per_task]
+                if obs: # Ensure obs is not empty before trying to stack
+                    obs_numpy_array = np.array(obs, dtype=np.float32)
+                    obs_tensor_actor = torch.from_numpy(obs_numpy_array).to(DEVICE) # [k_t, D_obs_per_task]
+                else: # Should not happen if len(obs) == 0 check is above, but defensive
+                    obs_tensor_actor = torch.empty((0, obs_dim_net), device=DEVICE, dtype=torch.float32) # [k_t, D_obs_per_task]
                 with torch.no_grad():
                     logits = actor(obs_tensor_actor) # Expects [k_t, D_obs_per_task] -> [k_t, D_act]
                     probs = F.softmax(logits, dim=-1)
                     dist = torch.distributions.Categorical(probs)
                     actions_list = dist.sample().cpu().numpy().tolist()
+                    
+                    assert all(0 <= a < act_dim_net for a in actions_list), f"Sampled invalid action: {actions_list}"
+
             actions_to_env = actions_list # Pass list of actions to env
             num_actions_taken = len(actions_list)
 
         # --- Step Environment ---
         next_obs_env, reward, done, truncated, info = env.step(actions_to_env)
-        reward_stats.update(reward); normalized_reward = reward_stats.normalize(reward)
+        reward_stats.update(reward)
+        normalized_reward = reward_stats.normalize(reward)
 
         # --- Store in Buffer ---
         if num_actions_taken > 0 or single_action_mode: # Store even if no tasks in single_action_mode
@@ -248,7 +256,8 @@ def train():
                 buffer.add(obs, actions_to_env, normalized_reward, next_obs_env, done or truncated)
 
         obs = next_obs_env
-        episode_reward += reward; episode_steps += 1
+        episode_reward += reward
+        episode_steps += 1
 
         # --- Episode End Logic (similar, but obs reset differs) ---
         if done or truncated:
@@ -259,7 +268,8 @@ def train():
             pbar.write(f"Ep. Reward: {avg_ep_reward:.2f} (steps: {episode_steps})")
 
             obs, _ = env.reset(seed=args.seed + global_step // 1000) # Vary seed less frequently
-            episode_reward = 0; episode_steps = 0
+            episode_reward = 0
+            episode_steps = 0
 
             if len(episode_reward_buffer) == 10:
                 avg10_reward = np.mean(episode_reward_buffer)
@@ -269,6 +279,7 @@ def train():
                     best_avg_reward = avg10_reward
                     current_extra_info = {
                         'single_action_mode': single_action_mode,
+                        'disable_defer_action': disable_defer_action,
                         'use_attention': algo_cfg.get("use_attention", False), # Get from loaded algo_cfg
                         'obs_dim': obs_dim_net, # Use the obs_dim of the network
                         'act_dim': act_dim_net,  # Use the act_dim of the network
@@ -316,10 +327,10 @@ def train():
 
                 q1_loss = F.mse_loss(q1_pred, q_target)
                 q2_loss = F.mse_loss(q2_pred, q_target)
-                q_loss_val = 0.5 * (q1_loss + q2_loss)
+                q_loss = 0.5 * (q1_loss + q2_loss)
 
                 critic_opt.zero_grad()
-                q_loss_val.backward()
+                q_loss.backward()
                 critic_opt.step()
 
                 # Actor loss
@@ -330,11 +341,11 @@ def train():
                     q1_eval, q2_eval = critic.forward_all(obs_b) # [B, act_dim]
                     q_eval = torch.min(q1_eval, q2_eval) # [B, act_dim]
 
-                    policy_loss_val = (probs * (algo_cfg["alpha"] * log_probs - q_eval.detach())).sum(dim=-1).mean() # Scalar
+                    policy_loss = (probs * (algo_cfg["alpha"] * log_probs - q_eval.detach())).sum(dim=-1).mean() # Scalar
                     entropy = torch.distributions.Categorical(logits=logits).entropy().mean()
 
                     actor_opt.zero_grad()
-                    policy_loss_val.backward()
+                    policy_loss.backward()
                     actor_opt.step()
 
                     # Target critic update
@@ -342,103 +353,124 @@ def train():
                         tp.data.copy_(algo_cfg["tau"] * p.data + (1 - algo_cfg["tau"]) * tp.data)
             else:
                 # --- Original SAC Update for Multi-Task Mode (with masking) ---
-                (obs_b_pad, act_b_pad, rew_b, next_obs_b_pad, done_b,
-                 mask_obs_b, mask_next_b) = buffer.sample(algo_cfg["batch_size"])
+                (obs_b, act_b, rew_b, next_obs_b, done_b,
+                mask_obs_b, mask_next_b) = buffer.sample(algo_cfg["batch_size"])
+            
+                obs_b = obs_b.to(DEVICE)         # [B, max_tasks, obs_dim]
+                act_b = act_b.to(DEVICE)         # [B, max_tasks]
+                rew_b = rew_b.to(DEVICE)         # [B]
+                next_obs_b = next_obs_b.to(DEVICE)
+                done_b = done_b.to(DEVICE)       # [B]
+                mask_obs_b = mask_obs_b.to(DEVICE)
+                mask_next_b = mask_next_b.to(DEVICE)
 
-                obs_b_pad = obs_b_pad.to(DEVICE)      # [B, max_tasks, D_obs_task]
-                act_b_pad = act_b_pad.to(DEVICE)      # [B, max_tasks]
-                rew_b = rew_b.to(DEVICE)              # [B]
-                next_obs_b_pad = next_obs_b_pad.to(DEVICE)# [B, max_tasks, D_obs_task]
-                done_b = done_b.to(DEVICE)            # [B]
-                mask_obs_b = mask_obs_b.to(DEVICE)    # [B, max_tasks]
-                mask_next_b = mask_next_b.to(DEVICE)  # [B, max_tasks]
+                B, T, D = obs_b.shape
 
-                B, T_max, D_task = obs_b_pad.shape
+                # Flatten current obs
+                obs_flat = obs_b.view(B*T, D)
+                act_flat = act_b.view(B*T)
+                mask_obs_flat = mask_obs_b.view(B*T)
+                
+                masked_actions = act_flat[mask_obs_flat.bool()]
+                if (masked_actions > act_dim_net).any() or (masked_actions < 0).any():
+                    print("Invalid action index detected:", masked_actions.min().item(), masked_actions.max().item())
 
-                obs_flat = obs_b_pad.reshape(B * T_max, D_task)
-                act_flat = act_b_pad.reshape(B * T_max)
-                mask_obs_flat = mask_obs_b.reshape(B * T_max)
-                next_obs_flat = next_obs_b_pad.reshape(B * T_max, D_task)
-                mask_next_flat = mask_next_b.reshape(B * T_max)
-
+                # Flatten next obs
+                next_flat = next_obs_b.view(B*T, D)
+                mask_next_flat = mask_next_b.view(B*T)
                 with torch.no_grad():
-                    next_logits = actor(next_obs_flat) # [B*T_max, act_dim]
+                    next_logits = actor(next_flat)
                     next_probs = F.softmax(next_logits, dim=-1)
                     next_log_probs = F.log_softmax(next_logits, dim=-1)
-                    q1_next, q2_next = target_critic.forward_all(next_obs_flat)
-                    q_next = torch.min(q1_next, q2_next) # [B*T_max, act_dim]
+                    q1_next, q2_next = target_critic.forward_all(next_flat)
+                    q_next = torch.min(q1_next, q2_next)
+                    # v_next shape: (B*T,)
+                    v_next = (next_probs * (q_next - algo_cfg["alpha"] * next_log_probs)).sum(dim=-1)
+                    v_next = v_next * mask_next_flat
+                    # reshape to (B, T)
+                    v_next = v_next.view(B, T)
 
-                    v_next_per_task = (next_probs * (q_next - algo_cfg["alpha"] * next_log_probs)).sum(dim=-1) # [B*T_max]
-                    v_next_per_task_masked = v_next_per_task * mask_next_flat # Apply mask
-                    v_next_batched = v_next_per_task_masked.view(B, T_max) # [B, T_max]
-
-                    # For q_target, we need to decide how to use v_next_batched.
-                    # Original SAC uses Q(s',a') directly. If V(s') is used, it implies expectation over a'.
-                    # Here, v_next_batched already incorporates the expectation over a'.
-                    # We need one V(s') per transition in the batch.
-                    # A common approach: sum or average V(s', task_i) over valid tasks in s'.
-                    # For simplicity here, let's assume the reward applies to the "average" outcome
-                    # or that the Bellman equation holds for each task if rewards were per task.
-                    # With a global reward, the target Q is the same for all tasks in a transition.
-                    # We use the sum of expected values of next tasks (masked) as V(s')
-                    v_next_state_agg = v_next_batched.sum(dim=1, keepdim=True) / (mask_next_b.sum(dim=1, keepdim=True) + 1e-8) # [B,1]
-
-                    q_target_global = rew_b.unsqueeze(1) + algo_cfg["gamma"] * (1.0 - done_b.unsqueeze(1)) * v_next_state_agg # [B,1]
-                    # Expand this global target to all tasks for loss calculation, will be masked later
-                    q_target_expanded = q_target_global.expand(-1, T_max) # [B, T_max]
-
+                    # q_target shape: (B, T)
+                    q_target = rew_b.unsqueeze(1) + algo_cfg["gamma"] * (1 - done_b.unsqueeze(1)) * v_next
 
                 # Critic loss
-                q1_pred_all, q2_pred_all = critic.forward_all(obs_flat) # [B*T_max, act_dim]
-                # Gather Q-values for actions taken
-                q1_pred_taken = q1_pred_all.gather(1, act_flat.long().unsqueeze(-1)).squeeze(-1) # [B*T_max]
-                q2_pred_taken = q2_pred_all.gather(1, act_flat.long().unsqueeze(-1)).squeeze(-1) # [B*T_max]
+                # compute Q values for actual (obs, action) pairs
+                valid_idx = (act_flat >= 0) & (act_flat < act_dim_net)
+                obs_valid = obs_flat[valid_idx]
+                act_valid = act_flat[valid_idx]
 
-                # Reshape and mask for loss calculation
-                q1_pred_masked = q1_pred_taken.view(B, T_max) * mask_obs_b
-                q2_pred_masked = q2_pred_taken.view(B, T_max) * mask_obs_b
-                q_target_masked = q_target_expanded * mask_obs_b
+                q1_all, q2_all = critic(obs_valid, act_valid)  # shape: [valid_tasks]
+                # q1_all, q2_all = critic(obs_flat, act_flat)  # [B*T], [B*T]
 
-                # Calculate loss only on valid (unmasked) elements
-                q1_loss = F.mse_loss(q1_pred_masked[mask_obs_b.bool()], q_target_masked[mask_obs_b.bool()])
-                q2_loss = F.mse_loss(q2_pred_masked[mask_obs_b.bool()], q_target_masked[mask_obs_b.bool()])
-                q_loss_val = 0.5 * (q1_loss + q2_loss)
+                # mask invalid tasks
+                q1_all_full = torch.zeros_like(act_flat, dtype=torch.float, device=DEVICE)
+                q2_all_full = torch.zeros_like(act_flat, dtype=torch.float, device=DEVICE)
+                q1_all_full[valid_idx] = q1_all
+                q2_all_full[valid_idx] = q2_all
 
-                critic_opt.zero_grad(); q_loss_val.backward(); critic_opt.step()
+                q1_all = q1_all_full * mask_obs_flat
+                q2_all = q2_all_full * mask_obs_flat
 
-                # Actor loss
+                # Reshape to [B, T]
+                q1_chosen = q1_all.view(B, T)
+                q2_chosen = q2_all.view(B, T)
+
+                # compute MSE loss with target
+                q_target = q_target * mask_obs_b
+
+                q1_flat = q1_chosen.view(-1)
+                q2_flat = q2_chosen.view(-1)
+                target_flat = q_target.view(-1)
+                mask_flat = mask_obs_b.view(-1).bool()
+
+                q1_loss = F.mse_loss(q1_flat[mask_flat], target_flat[mask_flat], reduction='mean')
+                q2_loss = F.mse_loss(q2_flat[mask_flat], target_flat[mask_flat], reduction='mean')
+                q_loss = 0.5 * (q1_loss + q2_loss)
+
+                critic_opt.zero_grad()
+                q_loss.backward()
+                critic_opt.step()
+
+                # === Update policy
                 if global_step % algo_cfg["policy_update_frequency"] == 0:
-                    logits = actor(obs_flat) # [B*T_max, act_dim]
+                    logits = actor(obs_flat)
                     probs = F.softmax(logits, dim=-1)
                     log_probs = F.log_softmax(logits, dim=-1)
-                    # Detach critics for actor update
                     q1_eval, q2_eval = critic.forward_all(obs_flat)
-                    q_eval_detached = torch.min(q1_eval, q2_eval).detach() # [B*T_max, act_dim]
+                    q_eval = torch.min(q1_eval, q2_eval)
 
-                    policy_loss_per_task = (probs * (algo_cfg["alpha"] * log_probs - q_eval_detached)).sum(dim=-1) # [B*T_max]
-                    policy_loss_masked = policy_loss_per_task * mask_obs_flat
-                    policy_loss_val = policy_loss_masked.sum() / (mask_obs_flat.sum() + 1e-8) # Average over valid tasks
-
-                    entropy_per_task = torch.distributions.Categorical(logits=logits).entropy() # [B*T_max]
-                    entropy = (entropy_per_task * mask_obs_flat).sum() / (mask_obs_flat.sum() + 1e-8)
-
-                    actor_opt.zero_grad(); policy_loss_val.backward(); actor_opt.step()
+                    # shape of probs, q_eval, log_probs => (B*T, act_dim)
+                    # compute the policy loss with mask
+                    policy_loss = (probs * (algo_cfg["alpha"] * log_probs - q_eval)).sum(dim=-1)
+                    policy_loss = policy_loss * mask_obs_flat
+                    policy_loss = policy_loss.sum() / mask_obs_flat.sum()
+                    
+                    entropy = torch.distributions.Categorical(probs).entropy()
+                    entropy = (entropy * mask_obs_flat).sum() / mask_obs_flat.sum()
                     writer.add_scalar("Actor/Entropy", entropy.item(), global_step)
 
-                    # Target critic update (common for both modes)
+                    actor_opt.zero_grad()
+                    policy_loss.backward()
+                    actor_opt.step()
+
+                    # soft update
                     for p, tp in zip(critic.parameters(), target_critic.parameters()):
-                        tp.data.copy_(algo_cfg["tau"] * p.data + (1.0 - algo_cfg["tau"]) * tp.data)
+                        tp.data.copy_(algo_cfg["tau"] * p.data + (1 - algo_cfg["tau"]) * tp.data)
 
         # --- Logging (common part) ---
-        if global_step % algo_cfg["log_interval"] == 0 and q_loss_val is not None and policy_loss_val is not None:
-            writer.add_scalar("Loss/Q_Loss", q_loss_val.item(), global_step)
-            writer.add_scalar("Loss/Policy_Loss", policy_loss_val.item(), global_step)
-            if logger: logger.info(f"[Step {global_step}] Q Loss: {q_loss_val.item():.4f} | Policy Loss: {policy_loss_val.item():.4f}")
-            pbar.set_description(f"Q Loss: {q_loss_val.item():.3f} P Loss: {policy_loss_val.item():.3f}")
+        if global_step % algo_cfg["log_interval"] == 0 and q_loss and policy_loss:
+            if q_loss is not None and policy_loss is not None:
+                writer.add_scalar("Loss/Q_Loss", q_loss.item(), global_step)
+                writer.add_scalar("Loss/Policy_Loss", policy_loss.item(), global_step)
+                if logger: logger.info(f"[Step {global_step}] Q Loss: {q_loss.item():.4f} | Policy Loss: {policy_loss.item():.4f}")
+                pbar.set_description(f"Q Loss: {q_loss.item():.3f} P Loss: {policy_loss.item():.3f}")
+            else:
+                if logger: logger.info(f"[Step {global_step}] Skipping logging — losses not available yet.")
 
         if global_step > 0 and global_step % algo_cfg["save_interval"] == 0:
             current_extra_info = {
                         'single_action_mode': single_action_mode,
+                        'disable_defer_action': disable_defer_action,
                         'use_attention': algo_cfg.get("use_attention", False), # Get from loaded algo_cfg
                         'obs_dim': obs_dim_net, # Use the obs_dim of the network
                         'act_dim': act_dim_net,  # Use the act_dim of the network
@@ -509,8 +541,15 @@ def train():
                             if len(eval_obs) == 0:
                                 eval_actions_list = []
                             else:
-                                eval_obs_tensor = torch.FloatTensor(eval_obs).to(DEVICE)
-                                eval_logits = actor(eval_obs_tensor)
+                                # eval_obs_tensor = torch.FloatTensor(eval_obs).to(DEVICE)
+
+                                if eval_obs: # Ensure obs is not empty before trying to stack
+                                    eval_obs_numpy_array = np.array(eval_obs, dtype=np.float32)
+                                    eval_obs_tensor_actor = torch.from_numpy(eval_obs_numpy_array).to(DEVICE) # [k_t, D_obs_per_task]
+                                else: # Should not happen if len(obs) == 0 check is above, but defensive
+                                    eval_obs_tensor_actor = torch.empty((0, obs_dim_net), device=DEVICE, dtype=torch.float32)
+                    
+                                eval_logits = actor(eval_obs_tensor_actor)
                                 eval_probs = F.softmax(eval_logits, dim=-1)
                                 eval_actions_list = torch.distributions.Categorical(eval_probs).sample().cpu().numpy().tolist()
                             eval_actions_to_env = eval_actions_list
@@ -550,14 +589,14 @@ def train():
                 best_eval_reward = avg_eval_reward
                 if logger: logger.info(f"[BEST EVAL] New best evaluation reward: {best_eval_reward:.2f}. Saving model...")
                 current_extra_info = {
-                    'single_action_mode': single_action_mode,
-                    'use_attention': use_attention, # use_attention from training scope
-                    'obs_dim': obs_dim_net,
-                    'act_dim': act_dim_net,
-                    'hidden_dim': algo_cfg.get("hidden_dim", 64),
-                    'use_layer_norm': algo_cfg.get("use_layer_norm", False)
-                    # Add attention params if use_attention is True
-                }
+                        'single_action_mode': single_action_mode,
+                        'disable_defer_action': disable_defer_action,
+                        'use_attention': algo_cfg.get("use_attention", False), # Get from loaded algo_cfg
+                        'obs_dim': obs_dim_net, # Use the obs_dim of the network
+                        'act_dim': act_dim_net,  # Use the act_dim of the network
+                        'hidden_dim': algo_cfg.get("hidden_dim", 64), # For MLPs
+                        'use_layer_norm': algo_cfg.get("use_layer_norm", False), # For MLPs
+                    }
                 if use_attention:
                     attn_cfg = algo_cfg.get("attention", {})
                     current_extra_info.update({

@@ -42,11 +42,11 @@ BASE_REWARD_CONFIG_PATH = os.path.join(CONFIG_DIR, "reward_config.yaml")
 # This is needed if the agent's behavior (like not outputting action 0) is tied to its training config
 BASE_ALGO_CONFIG_PATH = os.path.join(CONFIG_DIR, "algorithm_config.yaml") # Example path
 
-DEFAULT_RL_CHECKPOINT_PATH = "checkpoints/train_layer_norm_20250519_165727/best_eval_checkpoint.pth" # <<<< ADJUST THIS
+DEFAULT_RL_CHECKPOINT_PATH = "checkpoints/train_256_20250519_210426/best_eval_checkpoint.pth" # <<<< ADJUST THIS
 
-EVALUATION_DURATION_DAYS = 7 # Example: 7 days for Table 1
-NUM_SEEDS = 5
-SEEDS = [i * 10 for i in range(NUM_SEEDS)] # Example: [0, 10, 20, 30, 40]
+EVALUATION_DURATION_DAYS = 30 # Example: 30 days for Table 1
+NUM_SEEDS = 10
+SEEDS = [i * 10 for i in range(NUM_SEEDS)] # Example: [0, 10, 20, 30, 40, ]
 
 # Define controllers for Table 1
 CONTROLLERS_TO_EVALUATE = [

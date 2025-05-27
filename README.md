@@ -849,7 +849,7 @@ If you use SustainCluster in your research, please cite our work:
 @inproceedings{2025GuillenSustainCluster,
   title={{SustainCluster: Benchmarking Dynamic Multi-Objective Geo-Distributed Workload Management for Sustainable Data Center Cluster}},
   author={Antonio Guillen and Avisek Naug and Vineet Gundecha and Sahand Ghorbanpour and Ricardo Luna Gutierrez and Ashwin Ramesh Babu and Munther Salim and Shubhanker Banerjee and Eoin H. Oude Essink and Damien Fay and Soumyendu Sarkar},
-  booktitle={Proceedings of the Neural Information Processing Systems Track on Datasets and Benchmarks},
+  booktitle={Under Review},
   year={2025},
 }
 ```
