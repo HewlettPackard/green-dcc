@@ -284,6 +284,7 @@ class SustainDC(gym.Env):
         self.pending_tasks.clear()
         self.current_time_task = 0
         
+        
         # Reset HVAC setpoint state
         self.current_crac_setpoint = DEFAULT_HVAC_SETPOINT
 
