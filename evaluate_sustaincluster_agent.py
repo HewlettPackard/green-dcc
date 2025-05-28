@@ -277,7 +277,8 @@ for step in tqdm(range(num_steps), desc=f"Simulating {controller_config['name']}
             obs_for_actor_tensor = torch.FloatTensor(obs).unsqueeze(0)
             with torch.no_grad():
                 logits = actor(obs_for_actor_tensor) # [1, ckpt_act_dim_net]
-                action_from_actor = torch.distributions.Categorical(logits=logits).sample().item()
+                # action_from_actor = torch.distributions.Categorical(logits=logits).sample().item()
+                action_from_actor = torch.argmax(logits, dim=-1).item()
 
             # Apply eval-time modifications (disable_defer, local_only) to agent's chosen action
             action_modified = action_from_actor
@@ -301,7 +302,8 @@ for step in tqdm(range(num_steps), desc=f"Simulating {controller_config['name']}
                 obs_tensor = torch.FloatTensor(obs)
                 with torch.no_grad():
                     logits = actor(obs_tensor) # [k_t, ckpt_act_dim_net]
-                    sampled_actions_from_actor = torch.distributions.Categorical(logits=logits).sample().numpy().tolist()
+                    # sampled_actions_from_actor = torch.distributions.Categorical(logits=logits).sample().numpy().tolist()
+                    sampled_actions_from_actor = torch.argmax(logits, dim=-1).cpu().numpy().tolist()
 
                 # Apply eval-time modifications to each action in the list
                 modified_actions_list = []

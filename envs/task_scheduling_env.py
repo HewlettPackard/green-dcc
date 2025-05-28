@@ -71,6 +71,8 @@ class TaskSchedulingEnv(gym.Env):
         if self.logger:
             self.logger.info(f"TaskSchedulingEnv initialized with single_action_mode: {self.single_action_mode}, aggregation: {self.aggregation_method}, disable_defer_action: {self.disable_defer_action}")
         
+        print(f"TaskSchedulingEnv initialized with single_action_mode: {self.single_action_mode}, aggregation: {self.aggregation_method}, disable_defer_action: {self.disable_defer_action}")
+
         # --- Define Observation and Action Spaces ---
         # Per-task observation dimension (4 time + 5 task_base + 5*N_dcs)
         # Task features: origin_dc_id, cores_req, gpu_req, duration, time_to_deadline
