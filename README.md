@@ -24,7 +24,7 @@ By proposing SustainCluster, we aim to foster among the scientific community and
     <img src="assets/figures/global_map3.svg" alt="Geo-Distributed Data Centers" width="1000"/>
   </p>
   <p align="center" style="font-size: 0.9em; color: black;">
-    <em>Geo-distributed data centers with varying carbon intensity, electricity prices, and network characteristics</em>
+    <em>Geo-distributed data centers with varying carbon intensity, electricity prices, and network characteristics.</em>
   </p>
 </div>
 
