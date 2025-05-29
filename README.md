@@ -19,9 +19,14 @@ We introduce **SustainCluster** (“Sustainable Data‑Center Cluster”), an op
 
 By proposing SustainCluster, we aim to foster among the scientific community and enterprises a common testbed for sustainable scheduling of AI workloads that captures the nuanced, geo‑temporal trade‑offs of modern cloud workloads must overcome.
 
-<p align="center">
-  <img src="assets/figures/global_map3.svg" alt="Geo-Distributed Data Centers" width="1000"/>
-</p>
+<div style="background-color:white; display:inline-block; padding:10px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
+  <p align="center">
+    <img src="assets/figures/global_map3.svg" alt="Geo-Distributed Data Centers" width="1000"/>
+  </p>
+  <p align="center" style="font-size: 0.9em; color: black;">
+    <em>Geo-distributed data centers with varying carbon intensity, electricity prices, and network characteristics</em>
+  </p>
+</div>
 
 # Table of Contents
 - [SustainCluster -- Multi-Data Center Sustainable Scheduling Benchmark](#sustaincluster----multi-data-center-sustainable-scheduling-benchmark)
@@ -43,14 +48,17 @@ By proposing SustainCluster, we aim to foster among the scientific community and
   - [5. Supported Locations \& Custom Regions](#5-supported-locations--custom-regions)
   - [6. Datacenter Modeling](#6-datacenter-modeling)
     - [6.1 Short Explanation of the DC Models](#61-short-explanation-of-the-dc-models)
-    - [6.2 Customizing Datacenter](#62-customizing-datacenter)
-    - [6.3 Modeling Details](#63-modeling-details)
+    - [6.2 Datacenter Configuration and Model Details](#62-datacenter-configuration-and-model-details)
   - [7. Environment \& API](#7-environment--api)
     - [7.1 Observations](#71-observations)
-    - [7.2 Actions \& Deferral](#72-actions--deferral)
+    - [7.2 Actions \& Deferral: Single-Action vs. Multi-Action](#72-actions--deferral-single-action-vs-multi-action)
     - [7.3 Task Origin Logic](#73-task-origin-logic)
     - [7.4 SLA Modeling](#74-sla-modeling)
     - [7.5 Transmission Delay Model](#75-transmission-delay-model)
+    - [7.6 Agent Interaction Modes: `single_action_mode` and `disable_defer_action`](#76-agent-interaction-modes-single_action_mode-and-disable_defer_action)
+      - [7.6.1 `single_action_mode` Flag](#761-single_action_mode-flag)
+      - [7.6.2 `disable_defer_action` Flag](#762-disable_defer_action-flag)
+      - [7.6.3 Interaction and Usage](#763-interaction-and-usage)
   - [8. Modular Reward System](#8-modular-reward-system)
     - [8.1 Built-in Reward Functions](#81-built-in-reward-functions)
     - [8.2 Composite \& Custom Rewards](#82-composite--custom-rewards)
@@ -59,20 +67,23 @@ By proposing SustainCluster, we aim to foster among the scientific community and
     - [9.2 Directory Structure](#92-directory-structure)
   - [10. Quickstart \& Examples](#10-quickstart--examples)
     - [10.1 Installation](#101-installation)
-    - [10.2 Training (SAC + Configs)](#102-training-sac--configs)
+    - [10.2.1 Training with the Custom SAC Implementation](#1021-training-with-the-custom-sac-implementation)
+      - [10.2.2 Training with RLlib (Single-Action Agents)](#1022-training-with-rllib-single-action-agents)
     - [10.3 Monitoring (TensorBoard)](#103-monitoring-tensorboard)
     - [10.4 Checkpointing](#104-checkpointing)
   - [11. Evaluation \& Demo](#11-evaluation--demo)
     - [11.1 Rule-based vs RL Evaluation](#111-rule-based-vs-rl-evaluation)
     - [11.2 Google Colab Notebook](#112-google-colab-notebook)
     - [11.3 Key Benchmark Metrics / Dashboard](#113-key-benchmark-metrics--dashboard)
-  - [12. Planned Features \& Roadmap](#12-planned-features--roadmap)
+  - [12. Future Work and Research Directions](#12-future-work-and-research-directions)
+    - [12.1 Core Benchmark Enhancements](#121-core-benchmark-enhancements)
+    - [12.2 Advanced Agent Architectures and Learning Paradigms](#122-advanced-agent-architectures-and-learning-paradigms)
   - [13. Citation, License \& Contributors](#13-citation-license--contributors)
-    - [13.1 Citation / Credits](#131-citation--credits)
-    - [13.2 Acknowledgements \& Data Licenses](#132-acknowledgements--data-licenses)
-      - [License](#license)
-      - [Citation](#citation)
-    - [13.3 Contributors](#133-contributors)
+    - [13.1 How to Cite SustainCluster](#131-how-to-cite-sustaincluster)
+    - [13.2 Acknowledgements, Data Sources, and Licenses](#132-acknowledgements-data-sources-and-licenses)
+      - [13.2.1 SustainCluster License](#1321-sustaincluster-license)
+    - [13.3 Contributions](#133-contributions)
+    - [13.4 Contributors](#134-contributors)
   
 ## 2. Features & Highlights
 
@@ -120,9 +131,10 @@ This cycle repeats, allowing RL agents or rule-based controllers to learn or app
         *   **Task-Specific Features:** Origin DC ID, CPU core requirement, GPU requirement, estimated duration, and time remaining until SLA deadline (5 features).
         *   **Per-Datacenter Features:** For each of the `N` datacenters: available CPU %, available GPU %, available Memory %, current carbon intensity (kgCO₂/kWh), and current electricity price ($/kWh) (5 * `N` features).
     *   **Variable State Shape:** The full observation `s_t` returned by `env.step()` or `env.reset()` is this list of `k_t` vectors. Since the number of pending tasks `k_t` changes from one timestep to the next (i.e., `k_t` may differ from `k_{t+1}`), the overall **shape of the state observation varies across timesteps**. For example, `s_t` might be a list of 10 vectors (10 tasks), while `s_{t+1}` might be a list of 5 vectors (5 tasks). In general, `s_t` has a shape of `(k_t, 4 + 5 + 5 * N)`, where `N` is the number of datacenters.
-    *   **Handling Variability:** Standard RL algorithms often assume fixed-size observations.
-        *   The provided *off-policy* SAC example handles this using a replay buffer (`FastReplayBuffer`) that pads the list of observations up to a `max_tasks` length and uses masking during batch processing.
-        *   *On-policy* algorithms like A2C can handle this without padding by processing the list of tasks sequentially during rollouts and using appropriate aggregation for the value function.
+    *   **Handling Variability:** Standard RL algorithms often assume fixed-size observations. The variable number of pending tasks (`k_t`) at each step in SustainCluster presents a challenge.
+        *   The provided *off-policy* **custom SAC implementation** (`train_SAC_agent.py`) handles this in its multi-action mode by using a replay buffer (`FastReplayBuffer`) that pads the list of task observation vectors and action vectors up to a configurable `max_tasks` length. Boolean masks are used during batch processing to ensure only valid task data contributes to training updates (see Section 10.2.1 for more details).
+        *   For agents trained with **RLlib** (e.g., PPO, APPO, IMPALA), the environment is typically run in `single_action_mode`. In this mode, the environment itself provides a fixed-size aggregated observation vector to the agent, and the agent outputs a single global action, simplifying compatibility (see Sections 7.6.1 and 10.2.2).
+        *   Alternative approaches for multi-action mode could involve using recurrent neural networks (RNNs) to process the sequence of tasks or employing attention mechanisms (like the experimental `AttentionActorNet` provided) to handle sets of tasks.
     *   **Customization:** Users can easily modify `_get_obs` to include other available information from `self.cluster_manager.datacenters` (e.g., pending queue lengths, detailed thermal state, forecasted carbon intensity) or `self.current_tasks` (the current pending tasks) to extract task-specific features to create custom state representations tailored to their specific agent architecture, scheduling strategy or reward function.
 
 *   **Action Space:** At each timestep `t`, the agent is presented with a list of `k_t` pending tasks. For **each task** in this list, the agent must output a single discrete action `a_i` from the set `{0, 1, ..., N}`:
@@ -426,37 +438,37 @@ The datacenter model operates in layers, capturing the relationship between IT w
 *   **Water Usage:** Water evaporation in the cooling tower is estimated based on load and ambient wet-bulb temperature (derived from weather data).
 *   **Total Power:** The sum of all IT power components and all HVAC power components (`CRAC_Fan_load`, `chiller_power`, `CT_Fan_pwr`, pump powers) constitutes the total instantaneous power draw of the datacenter. This is used alongside electricity price and carbon intensity data to calculate cost and emissions.
 
-### 6.2 Customizing Datacenter
+### 6.2 Datacenter Configuration and Model Details
 
-Users configure the cluster of datacenters via the `datacenters.yaml` file. Each entry defines a single datacenter and its high-level properties:
+Users configure the cluster of datacenters primarily via two types of files: `datacenters.yaml` for high-level cluster composition and individual JSON files (e.g., `configs/dcs/dc_config.json`) for detailed physical parameters of each datacenter model.
 
-*   `dc_id`: A unique integer identifier for the datacenter.
-*   `location`: A location code (e.g., `"US-NY-NYIS"`, `"DE-LU"`) used to link the DC to corresponding real-world datasets (price, carbon, weather) and network region mappings (see Section 5).
-*   `timezone_shift`: The timezone offset from UTC in hours (e.g., `-5` for US East, `+1` for Central Europe). Used for local time calculations (e.g., task origin logic).
-*   `population_weight`: A relative weight used in the probabilistic task origin generation logic (see Section 7.3).
-*   `total_cores`: The total number of schedulable CPU cores in the datacenter.
-*   `total_gpus`: The total number of schedulable GPUs in the datacenter.
-*   `total_mem`: The total memory capacity in GB.
-*   `dc_config_file`: Path to a JSON file containing detailed low-level parameters for the physical model, such as:
-    *   Datacenter layout (rows, racks per row, CPUs/GPUs per rack).
-    *   HVAC system parameters (reference fan power, flow rates, chiller coefficients, pump efficiencies). **Note:** The chiller model uses coefficients derived from EnergyPlus test files, as implemented in `calculate_chiller_power`.
-    *   Server power characteristics (idle/max power for CPU/GPU types, fan curves).
-    *   Thermal properties (approach temperatures).
+*   **`configs/env/datacenters.yaml`**: This file defines the overall cluster. Each entry represents a single datacenter and specifies its high-level properties:
+    *   `dc_id`: A unique integer identifier.
+    *   `location`: A location code (e.g., `"US-NY-NYIS"`) linking the DC to real-world datasets (price, carbon, weather) and network region mappings (see Section 5).
+    *   `timezone_shift`: Offset from UTC in hours, for local time calculations.
+    *   `population_weight`: Relative weight for probabilistic task origin generation (see Section 7.3).
+    *   `total_cores`, `total_gpus`, `total_mem`: Schedulable resource capacities.
+    *   `dc_config_file`: **Path to a specific JSON file** (e.g., `"configs/dcs/dc_config.json"`) that contains the detailed low-level physical parameters for this datacenter's simulation model.
+    *   Optional flags for enabling RL-controlled HVAC or Heat Recovery Units (HRU) for that specific DC.
 
-An example `dc_config.json` is provided in `configs/dcs/`, allowing users to simulate different hardware efficiencies or cooling system designs by modifying these parameters.
+*   **Detailed Physical Parameters (`dc_config_file` e.g., `configs/dcs/dc_config.json`):**
+    The JSON file pointed to by `dc_config_file` is crucial for defining the specific physical characteristics and operational parameters of the underlying data center model (`SustainDC`). Modifying this file allows researchers to simulate different hardware efficiencies, cooling system designs, or thermal management strategies. It typically includes:
+    *   **Data Center Layout:** Number of racks, and distribution of CPUs/GPUs per rack.
+    *   **Server Characteristics:** Idle and full load power for different CPU and GPU types (e.g., "HP_PROLIANT", "NVIDIA_V100" defaults), parameters for CPU power scaling curves based on utilization and temperature, and IT fan airflow ratios.
+    *   **HVAC System Parameters:** Reference power and flow rates for CRAC fans and cooling tower fans, chiller performance coefficients (the model uses coefficients derived from EnergyPlus test files, as implemented in the `calculate_chiller_power` function within `envs/sustaindc/datacenter_model.py`), pump efficiencies, and pressure drops for water circuits. Many default parameters for IT components (e.g., CPU/GPU power curves, fan characteristics) and HVAC systems are based on typical industry hardware specifications and data from published research, such as [Sun et al. (2021)](https://www.sciencedirect.com/science/article/abs/pii/S0378778820333892) and [Breen et al. (2010)](https://pure.ul.ie/en/publications/from-chip-to-cooling-tower-data-center-modeling-part-i-influence-), aiming for realistic baseline configurations.
+    *   **Thermal Properties:** Rack-specific supply and return air approach temperatures, which model air mixing and distribution inefficiencies.
+    *   **Heat Recovery Unit (Optional):** Parameters for the heat recovery system if enabled.
 
-### 6.3 Modeling Details
+    An example `dc_config.json` is provided in `configs/dcs/`, and users can create multiple such files to represent heterogeneous datacenter types within their cluster.
 
-For a comprehensive description of the underlying mathematical models, equations, and assumptions used in the datacenter simulation (particularly the thermal and HVAC components inherited from the core SustainDC environment), please refer to:
+*   **Underlying Model Equations and Further Details:**
+    For a comprehensive description of the underlying mathematical models, equations, and assumptions used in the data center simulation (particularly the IT power, thermal, and HVAC components inherited from the core SustainDC environment), please refer to:
 
-📄 [`envs/sustaindc/README_SustainDC.md`](envs/sustaindc/README_SustainDC.md)
+    📄 **[`envs/sustaindc/README.md`](envs/sustaindc/README.md)**
 
-This document details the CPU power curves, fan laws, heat transfer calculations, and general cooling system component models, citing key references such as [Sun et al. (2021)](https://www.sciencedirect.com/science/article/abs/pii/S0378778820333892) and [Breen et al. (2010)](https://pure.ul.ie/en/publications/from-chip-to-cooling-tower-data-center-modeling-part-i-influence-).
+    This document details the CPU/GPU/Memory power curves, fan laws, heat transfer calculations, the EnergyPlus-based chiller model, and general cooling system component models, citing key references such as [Sun et al. (2021)](https://www.sciencedirect.com/science/article/abs/pii/S0378778820333892) and [Breen et al. (2010)](https://pure.ul.ie/en/publications/from-chip-to-cooling-tower-data-center-modeling-part-i-influence-).
 
-The specific implementation of the **chiller power calculation** (`calculate_chiller_power` function, used within `calculate_HVAC_power`) is based on performance curves and part-load ratio logic derived from **EnergyPlus** examples and documentation (refer to code comments for specific source links within the EnergyPlus GitHub repository).
-
-**Note:** While the detailed `README_SustainDC.md` focuses heavily on the CPU and cooling aspects, the implementation within SustainCluster **has been extended** to explicitly incorporate **GPU and Memory power consumption** into the total IT load (`P_IT`) calculations, using parameters defined in the `dc_config_file` (e.g., `DEFAULT_GPU_POWER_CHARACTERISTICS`). This ensures that the energy impact of these critical components for AI workloads is accounted for in the simulation.
-
+    **Note:** While the detailed `envs/sustaindc/README.md` focuses heavily on CPU and cooling aspects, the SustainCluster implementation explicitly incorporates **GPU and Memory power consumption** into the total IT load (`P_IT`) calculations, using parameters defined in the `dc_config_file`. This ensures that the energy impact of these critical components for AI workloads is accurately accounted for in the simulation.
 ## 7. Environment & API
 
 SustainCluster provides a standard Reinforcement Learning interface through its `TaskSchedulingEnv` class, compatible with the [Gymnasium](https://gymnasium.farama.org/) API. This wrapper manages the interaction between the RL agent and the `DatacenterClusterManager` backend.
@@ -473,22 +485,71 @@ As described in Section 3.1, the environment state observation varies in shape d
     *   `self.current_time`: The current simulation timestamp.
     This allows adding features like forecasted data, queue lengths, detailed thermal states, task bandwidth/memory needs, or pre-calculated transmission metrics.
 
-### 7.2 Actions & Deferral
+### 7.2 Actions & Deferral: Single-Action vs. Multi-Action
 
-Consistent with the design outlined in Section 3.1, the agent must provide an action for each pending task.
+The agent's primary role is to decide how to handle pending tasks. This is influenced by the `single_action_mode` flag (detailed in Section 7.6.1), which dictates whether the agent makes a single global decision or multiple per-task decisions.
 
-*   **API Interaction:** The `env.step()` method expects an `actions` argument which should be a **list** or array of integers with length `k_t` (matching the number of tasks in the observation list returned by the previous step).
-*   **Action Values:** Each integer `a_i` in the `actions` list must be in the range `{0, 1, ..., N}`, where `N` is the number of datacenters. `a_i = 0` signifies deferral of the i-th task, while `a_i = j` (for `1 <= j <= N`) assigns the task to datacenter `j`.
-*   **Handling `k_t = 0`:** If no tasks are pending (`k_t = 0`), the agent should pass an empty list `[]` to `env.step()`.
+*   **API Interaction:** The `env.step()` method expects an `actions` argument.
+    *   **In Multi-Action Mode (`single_action_mode: false`):**
+        *   The `actions` argument should be a **list or array of integers** with length `k_t` (matching the number of tasks in the observation list returned by the previous step).
+        *   Each integer $a_i$ in the `actions` list corresponds to the $i$-th task in the observation list.
+    *   **In Single-Action Mode (`single_action_mode: true`):**
+        *   The `actions` argument should be a **single integer**. This single action will be applied by the environment to all $k_t$ currently pending tasks.
+
+*   **Action Values and Interpretation:**
+    The interpretation of the integer action values depends on the `disable_defer_action` flag (detailed in Section 7.6.2):
+
+    *   **If Deferral is Enabled (`disable_defer_action: false`):**
+        *   The action values are in the range $\{0, 1, ..., N\}$, where $N$ is the number of datacenters.
+        *   `action = 0`: **Defer** the task (or all tasks in single-action mode). The task(s) are held and reconsidered in the next 15-minute timestep.
+        *   `action = j` (where $1 \le j \le N$): **Assign** the task (or all tasks) to datacenter $j$. The task(s) are sent towards that DC's queue (potentially incurring transmission cost and delay if $j$ is different from the task's origin).
+
+    *   **If Deferral is Disabled (`disable_defer_action: true`):**
+        *   The action values are in the range $\{0, 1, ..., N-1\}$.
+        *   `action = j'` (where $0 \le j' \le N-1$): **Assign** the task (or all tasks) to datacenter $j'+1$ (i.e., action `0` maps to DC 1, action `1` to DC 2, and so on). Deferral is not an option.
+
+*   **Handling `k_t = 0` (No Pending Tasks):**
+    *   **In Multi-Action Mode:** If no tasks are pending ($k_t = 0$), the agent should pass an empty list `[]` as `actions` to `env.step()`.
+    *   **In Single-Action Mode:** If no tasks are pending, the agent still outputs a single integer action. The environment will simply note that there were no tasks to apply this global action to.
+
+The chosen mode (`single_action_mode`) and the `disable_defer_action` flag determine the precise nature of the action space the agent must learn to navigate and the way its decisions are implemented by the environment.
 
 ### 7.3 Task Origin Logic
 
 To simulate realistic workload arrival patterns across the globe, tasks extracted from the trace are assigned an origin datacenter using a hybrid probabilistic model implemented in `utils/workload_utils.py::assign_task_origins()`. This logic aims to reflect that different regions generate varying amounts of work at different times of day.
 
-*   **Population Weight:** Each datacenter defined in `datacenters.yaml` is assigned a `population_weight`. This parameter represents the relative size or baseline activity level of the region the datacenter serves. Datacenters with higher weights have a proportionally higher base probability of being selected as a task's origin.
-*   **Local Time Activity Boost:** Task generation probability for a specific datacenter is temporarily increased if the current simulation time (UTC) corresponds to its local business hours (defined as 8:00 AM to 8:00 PM local time within the code). This simulates temporal peaks in user activity or workload submission during typical working hours in that datacenter's timezone (calculated using its `timezone_shift`). An `activity_factor` (e.g., `1.0` during peak hours, `0.3` otherwise) multiplies the population weight.
-*   **Probabilistic Sampling:** For each task extracted from the trace, the final probability of originating from a specific datacenter is calculated by normalizing the combined score (`population_weight * activity_factor`) across all datacenters. The origin DC ID is then randomly sampled according to this calculated probability distribution (`np.random.choice`).
-*   **Implementation:** This assignment happens within the `extract_tasks_from_row()` function immediately after tasks for the current timestep are created from the raw trace data and before they are passed to the environment or scheduler.
+The assignment process for each incoming task (or batch of tasks at a timestep) involves:
+
+1.  **Calculating Activity-Weighted Scores:** For each of the $N$ datacenters defined in `datacenters.yaml`, a score is computed:
+    *   `score_d = population_weight_d * activity_factor_d(current_local_time_d)`
+    *   **`population_weight_d`**: A static parameter from `datacenters.yaml` representing the relative baseline activity level of the region DC `d` serves. Higher weights mean a higher base probability.
+    *   **`activity_factor_d`**: A dynamic factor that boosts the score. It's typically `1.0` if the `current_local_time_d` (calculated using the DC's `timezone_shift` from UTC) falls within local business hours (e.g., 8:00 AM to 8:00 PM), and a lower value (e.g., `0.3`) otherwise. This simulates temporal peaks in workload submission.
+
+2.  **Normalizing Scores to Probabilities:** The scores for all datacenters are normalized to form a probability distribution:
+    *   `P(origin=d) = score_d / sum(all_scores_j for j in datacenters)`
+
+3.  **Probabilistic Sampling:** Each task is then assigned an origin DC ID by randomly sampling from the set of all DC IDs according to this calculated probability distribution (using `np.random.choice`).
+
+*   **Implementation:** This assignment happens within the `extract_tasks_from_row()` function (called by `DatacenterClusterManager`) immediately after tasks for the current timestep are created from the raw trace data and before they are passed to the environment or scheduler.
+
+**Numerical Example:**
+
+Consider a setup with three datacenters and the current UTC time is 14:00:
+
+| DC ID | Location      | `timezone_shift` | `population_weight` | Local Time | Business Hours? | `activity_factor` | Score (`pop_weight` * `activity_factor`) |
+|-------|---------------|------------------|---------------------|------------|-----------------|-------------------|------------------------------------------|
+| 1     | US-East (UTC-5) | -5               | 0.4                 | 09:00am      | Yes (8am-8pm)   | 1.0               | 0.4 * 1.0 = 0.4                          |
+| 2     | Europe (UTC+1)  | +1               | 0.5                 | 03:00pm      | Yes (8am-8pm)   | 1.0               | 0.5 * 1.0 = 0.5                          |
+| 3     | Asia (UTC+8)    | +8               | 0.3                 | 10:00pm      | No (8am-8pm)    | 0.3               | 0.3 * 0.3 = 0.09                         |
+
+*   **Total Score** = 0.4 + 0.5 + 0.09 = 0.99
+*   **Probabilities:**
+    *   P(origin=DC1) = 0.4 / 0.99 $\approx$ 0.404
+    *   P(origin=DC2) = 0.5 / 0.99 $\approx$ 0.505
+    *   P(origin=DC3) = 0.09 / 0.99 $\approx$ 0.091
+*   A newly arriving task would then be assigned origin DC1 with ~40.4% probability, DC2 with ~50.5%, and DC3 with ~9.1%.
+
+This mechanism ensures a dynamic and plausible distribution of workload origins across the simulated global cluster.
 
 ### 7.4 SLA Modeling
 
@@ -511,6 +572,90 @@ To accurately model the impact of network latency when routing tasks between geo
 *   **Empirical Data Source:** The `throughput_Mbps` and `RTT_ms` values are derived from empirical measurements between major cloud regions (macro-clusters: EU, US, SA, AP) published by [Persico et al. (IEEE GLOBECOM 2016)](https://www.sciencedirect.com/science/article/abs/pii/S138912861630353X). The code maps the specific origin/destination locations to these macro-clusters to look up the relevant parameters.
 *   **Simulation Impact:** When a task is assigned remotely, it is held "in transit" for the calculated `delay` (in seconds) before being added to the destination DC's pending queue. This delay can significantly impact when a task starts execution and whether it meets its SLA.
 
+### 7.6 Agent Interaction Modes: `single_action_mode` and `disable_defer_action`
+
+SustainCluster offers two key boolean flags, typically configured in `configs/env/sim_config.yaml` and passed to the `TaskSchedulingEnv`, that fundamentally alter the agent's interaction with the environment and the nature of the scheduling problem. Understanding these flags is crucial for designing experiments and interpreting results.
+
+#### 7.6.1 `single_action_mode` Flag
+
+This flag determines whether the agent makes decisions on a per-task basis or a global per-timestep basis.
+
+*   **`single_action_mode: false` (Default)**
+    *   **Behavior:** This is the **multi-action mode**.
+        *   The environment provides the agent with a **list of observation vectors**, where each vector corresponds to one of the `k_t` currently pending tasks (as described in Section 7.1).
+        *   The agent must output a **list of `k_t` actions**, one for each pending task. Each action decides whether to defer that specific task or assign it to one of the `N` datacenters.
+    *   **Advantages:**
+        *   Allows for fine-grained, per-task decision-making, potentially leading to higher overall system optimization.
+        *   Enables the agent to consider the unique characteristics and requirements of each task individually.
+    *   **Disadvantages:**
+        *   Presents a more complex RL problem due to variable-length observation and action lists per timestep.
+        *   Requires RL agents and network architectures capable of handling this variability (e.g., using padding and masking as in the provided SAC example, or attention mechanisms).
+
+*   **`single_action_mode: true`**
+    *   **Behavior:** This is the **single-action mode**.
+        *   The environment computes and provides the agent with a **single, fixed-size aggregated observation vector** at each timestep. This vector summarizes the global state. The aggregation logic (e.g., taking averages or sums of individual task features) can be influenced by the `aggregation_method` parameter in `sim_config.yaml`, with the default implementation in `TaskSchedulingEnv._aggregate_task_observations()`. This includes aggregated statistics of all `k_t` pending tasks (e.g., number of tasks, average resource demand, minimum time-to-SLA) and the state of all datacenters.
+        *   The agent outputs a **single discrete action**. This global action is then uniformly applied by the environment to *all* `k_t` pending tasks for that timestep (e.g., all pending tasks are deferred, or all pending tasks are assigned to a specific datacenter).
+    *   **Advantages:**
+        *   Significantly simplifies the RL problem by providing fixed-size observation and action spaces.
+        *   Makes the environment directly compatible with standard MLP-based agent architectures commonly found in RL libraries like RLlib, without requiring custom models for sequence processing.
+        *   Can lead to faster training iterations due to simpler agent architecture.
+    *   **Disadvantages:**
+        *   Results in coarse-grained control, as all pending tasks receive the same scheduling decision regardless of their individual characteristics.
+        *   The aggregated state might obscure critical details needed for optimal per-task decisions.
+        *   Likely leads to suboptimal performance compared to a well-trained multi-action agent that can make nuanced per-task choices.
+
+#### 7.6.2 `disable_defer_action` Flag
+
+This flag controls whether the "defer" action is available to the agent.
+
+*   **`disable_defer_action: false` (Default)**
+    *   **Behavior:** Deferral is **enabled**.
+        *   The agent can choose action `0` (defer) for a task (in multi-action mode) or for all tasks (in single-action mode).
+        *   The action space dimension for assignments is typically `num_dcs + 1` (0 for defer, 1 to `num_dcs` for assignment).
+    *   **Advantages:**
+        *   Provides the agent with temporal flexibility to delay tasks, potentially waiting for more favorable conditions (e.g., lower electricity prices, lower carbon intensity, or increased resource availability).
+        *   Can lead to better long-term optimization of cost and carbon emissions.
+        *   More realistic for many scheduling scenarios where not all tasks must be executed immediately.
+    *   **Disadvantages:**
+        *   Increases the complexity of the agent's decision-making.
+        *   Carries the risk of increased Service Level Agreement (SLA) violations if tasks are deferred excessively. **However, the environment implements a safeguard:** if a task's SLA deadline has already passed by the time it is considered for an action, it is automatically assigned to its origin datacenter to minimize further SLA violation, bypassing the agent's decision for that specific task. The `sla_penalty` reward component then penalizes this violation.
+        *   **Impact on Pending Task Queue (`k_t`):** Even with the SLA safeguard, frequent deferrals can lead to a large number of tasks pending decision at each subsequent timestep (`k_t`). This `k_t` includes newly arrived tasks, tasks that have completed their transmission delay from remote assignments, *and* all previously deferred tasks (not yet past their SLA deadline for forced assignment).
+        *   **Impact on `max_tasks` Hyperparameter:** In multi-action mode (`single_action_mode: false`), the growth in `k_t` due to deferrals directly affects the `max_tasks` hyperparameter required for the replay buffer (e.g., `FastReplayBuffer` in the SAC example).
+            *   `max_tasks` defines the padding limit for the list of task observation vectors stored in the buffer.
+            *   If `max_tasks` is set too low, an unexpectedly large number of deferred tasks could exceed this limit, leading to errors or data truncation.
+            *   If `max_tasks` is set very high to accommodate worst-case deferral scenarios, the replay buffer can become very memory-intensive.
+            *   This creates a practical trade-off in configuring the RL agent and highlights a challenge in managing unbounded deferral.
+        *   **Managing Deferral Queue Growth:** While the SLA safeguard handles tasks that have *already* violated their deadline, managing the growth of the deferred task queue *before* SLAs are breached is important. Uncontrolled deferral could still lead to a large number of pending tasks. Exploring more proactive mechanisms to limit deferrals (e.g., maximum deferral count per task, or a cap on the total number of actively deferred tasks) remains a relevant area for future research (see Section 12).
+
+
+*   **`disable_defer_action: true`**
+    *   **Behavior:** Deferral is **disabled**.
+        *   The agent cannot choose action `0`. Tasks must be assigned to one of the `N` datacenters.
+        *   The action space dimension for assignments becomes `num_dcs`.
+    *   **Advantages:**
+        *   Simplifies the action space for the agent.
+        *   Ensures tasks are acted upon immediately, preventing deferral-induced SLA violations.
+        *   Keeps the number of pending tasks more directly tied to new arrivals and tasks finishing their transmission delay.
+    *   **Disadvantages:**
+        *   The agent loses temporal flexibility, potentially forcing suboptimal placements if current conditions are poor across all datacenters.
+        *   May lead to higher operational costs or carbon emissions if tasks cannot be shifted to more opportune times.
+
+#### 7.6.3 Interaction and Usage
+
+*   These two flags are independent but their combination defines the specific scheduling problem variant:
+    *   `single_action_mode=false`, `disable_defer_action=false`: Default SAC (multi-action, deferral enabled).
+    *   `single_action_mode=false`, `disable_defer_action=true`: Multi-action, no deferral (forces placement).
+    *   `single_action_mode=true`, `disable_defer_action=false`: RLlib examples (single global action, deferral enabled for all).
+    *   `single_action_mode=true`, `disable_defer_action=true`: RLlib examples (single global action, no deferral, forces placement for all).
+*   The `TaskSchedulingEnv` class adjusts its `observation_space` and `action_space` attributes based on these flags, particularly `single_action_mode`. The interpretation of agent outputs by the environment also changes accordingly.
+*   These flags are powerful tools for ablation studies (e.g., quantifying the benefit of deferral or per-task decisions) and for adapting the benchmark to different agent capabilities or research questions.
+*   **Example Usage in Config:**
+    ```yaml
+    env:
+      single_action_mode: false  # Use multi-action mode
+      disable_defer_action: false # Allow deferral actions
+    ```
+    
 ## 8. Modular Reward System
 
 A core feature of SustainCluster is its highly flexible and extensible reward system, designed to facilitate research into multi-objective sustainable scheduling. Instead of a single fixed reward, users can easily define complex reward signals that balance various environmental, economic, and operational goals.
@@ -611,37 +756,46 @@ The core simulation and RL interaction follows a hierarchical structure:
 
 The codebase is organized into the following main directories:
 
-*   `configs/`: Contains YAML configuration files for simulation parameters (`sim_config.yaml`), datacenter definitions (`datacenters.yaml`), reward functions (`reward_config.yaml`), RL algorithm hyperparameters (`algorithm_config.yaml`), and detailed DC physical parameters (`configs/dcs/dc_config.json`).
-*   `data/`: Stores all input datasets and related processing scripts.
-    *   `carbon_intensity/`: Real-world grid carbon intensity data (gCO₂/kWh), organized by location code and year.
-    *   `electricity_prices/`: Real-world electricity price data (USD/MWh), organized by location code and year, including raw data, processing scripts, and standardized outputs.
-    *   `network_cost/`: Data and logic for inter-datacenter transmission costs (per-GB matrices for AWS/GCP/Azure) and transmission delay calculations (`network_delay.py`).
-    *   `weather/`: Historical weather data (temperature), organized by location code and year.
-    *   `workload/`: Processed Alibaba GPU cluster trace (`.pkl` file), raw trace files (if downloaded), analysis/processing scripts, and documentation.
+*   `configs/`: Contains YAML and JSON configuration files.
+    *   `configs/env/`: Simulation parameters (`sim_config.yaml`), datacenter cluster definitions (`datacenters.yaml`), reward functions (`reward_config.yaml`), and custom SAC hyperparameters (`algorithm_config.yaml`).
+    *   `configs/dcs/`: Detailed physical parameters for individual datacenter models (e.g., `dc_config.json`).
+    *   `configs/rllib/`: Hyperparameter configurations for RLlib agents (e.g., `ppo_config.yaml`).
+*   `data/`: Stores all input datasets, their processing scripts, and documentation (see `data/.../README.md` files for details on each).
+    *   `carbon_intensity/`: Real-world grid carbon intensity data (gCO₂/kWh).
+    *   `electricity_prices/`: Real-world electricity price data (USD/MWh).
+    *   `network_cost/`: Inter-datacenter transmission cost matrices and delay calculation logic.
+    *   `weather/`: Historical weather data (temperature, humidity).
+    *   `workload/`: Processed Alibaba GPU cluster trace (`.pkl` file) and raw trace files.
 *   `envs/`: Contains the Gymnasium environment implementations.
     *   `task_scheduling_env.py`: The main top-level environment (`TaskSchedulingEnv`) for RL agents.
-    *   `sustaindc/`: Sub-package implementing the individual datacenter simulation (`SustainDC`) and its underlying physical models (`DatacenterModel`, `battery_model.py`, etc.).
-*   `rewards/`: Defines the modular reward system.
+    *   `sustaindc/`: Sub-package implementing the individual datacenter simulation (`SustainDC`) and its underlying physical models (`DatacenterModel`, `battery_model.py`, etc.). Includes `envs/sustaindc/README.md` with detailed model equations.
+*   `rewards/`: Defines the modular reward system. Includes `rewards/README.md` explaining its usage.
     *   `base_reward.py`: Abstract base class for all reward functions.
     *   `predefined/`: Implementations of built-in reward components (e.g., `energy_price_reward.py`, `carbon_emissions_reward.py`, `composite_reward.py`).
     *   `reward_registry.py`, `registry_utils.py`: System for registering and dynamically loading reward functions.
 *   `rl_components/`: Contains building blocks for RL agents.
-    *   `agent_net.py`: Neural network definitions (e.g., `ActorNet`, `CriticNet` used by SAC).
-    *   `replay_buffer.py`: Replay buffer implementation (`FastReplayBuffer`) handling variable task lists via padding/masking.
+    *   `agent_net.py`: Neural network definitions (e.g., `ActorNet`, `CriticNet`, `AttentionActorNet` used by the custom SAC agent).
+    *   `replay_buffer.py`: Replay buffer implementations (e.g., `FastReplayBuffer` for handling variable task lists via padding/masking, `SimpleReplayBuffer` for single-action mode).
     *   `task.py`: Defines the `Task` class holding job information.
 *   `simulation/`: Core simulation logic outside the Gym environment structure.
     *   `cluster_manager.py`: Implements the `DatacenterClusterManager` responsible for orchestrating multiple DCs.
 *   `utils/`: Helper functions and utilities for various tasks.
     *   Configuration loading (`config_loader.py`), logging (`config_logger.py`), checkpointing (`checkpoint_manager.py`).
-    *   Data loading and management (`managers.py`, `transmission_cost_loader.py`, `dc_config_reader.py`).
+    *   Data loading and management (`managers.py` for environmental data, `transmission_cost_loader.py`, `dc_config_reader.py`).
     *   Task processing (`workload_utils.py`), rule-based assignment strategies (`task_assignment_strategies.py`), region mapping (`transmission_region_mapper.py`).
-*   `assets/`: Static files like figures and potentially CSS/JS for future dashboards.
+*   `assets/`: Static files like figures used in documentation and potentially CSS/JS for future dashboards.
 *   `checkpoints/`: Default directory for saving RL agent checkpoints during training.
-*   `logs/`: Default directory for saving log files during training or evaluation.
+*   `logs/`: Default directory for saving detailed log files during training or evaluation (distinct from TensorBoard `runs/`).
+*   `runs/`: Default directory for saving TensorBoard event files.
 *   `tests/`: Unit tests for various components of the codebase.
-*   `train_rl_agent.py`: Example script for training the default SAC agent.
-*   `eval_agent_notebook.py`: Script/notebook for evaluating trained agents or rule-based controllers.
+*   `train_SAC_agent.py`: Example script for training the custom SAC agent.
+*   `train_rllib_ppo.py`, `train_rllib_appo.py`, `train_rllib_impala.py`: Example scripts for training agents with RLlib (typically in single-action mode).
+*   `train_hvac_ppo_agent.py`: Example script for training a local PPO agent to control HVAC setpoints.
+*   `evaluate_sustaincluster_agent.ipynb`: Jupyter notebook for evaluating trained agents or rule-based controllers.
+*   `eval_rllib.py`: Example script for evaluating RLlib-trained agents.
 *   `requirements.txt`: Python package dependencies.
+*   `LICENSE`: Project license file (MIT License).
+*   `README.md`: The main project README file (this document).
 
 
 ## 10. Quickstart & Examples
@@ -672,46 +826,116 @@ Ensure you have Conda (or Miniconda/Mamba) installed.
     *   **No manual unzipping is required.** The first time you run a simulation or training script that needs the workload data (`DatacenterClusterManager`), the code will automatically detect if the `.pkl` file is missing and attempt to extract it from the corresponding `.zip` file in the same location.
     *   Ensure the `.zip` archive containing the workload data is present in the correct directory (`data/workload/alibaba_2020_dataset/` by default) after cloning or downloading the repository.
 
-### 10.2 Training (SAC + Configs)
+### 10.2.1 Training with the Custom SAC Implementation
 
-SustainCluster includes an example training script (`train_rl_agent.py`) using the Soft Actor-Critic (SAC) algorithm. The training process is highly configurable via YAML files located in `configs/env/`.
+SustainCluster includes a versatile example training script, `train_SAC_agent.py`, which implements a Soft Actor-Critic (SAC) agent. This script can operate in two distinct modes, controlled by the `single_action_mode` flag in `configs/env/sim_config.yaml`:
+
+1.  **Multi-Action Mode (`single_action_mode: false`):**
+    *   The agent makes an independent assignment or deferral decision for each of the `k_t` pending tasks at every timestep.
+    *   This mode leverages the `FastReplayBuffer` and masking techniques to handle the variable number of tasks, as detailed below. This allows for fine-grained control.
+
+2.  **Single-Action Mode (`single_action_mode: true`):**
+    *   The agent receives a single, fixed-size aggregated observation vector and outputs one global action that is applied to all pending tasks.
+    *   This mode uses a `SimpleReplayBuffer` and simplifies the agent's input/output, making it conceptually similar to how standard RLlib agents might interact with an aggregated environment state.
+
+This section primarily details the configuration and mechanisms for the **multi-action mode**, which is often preferred for achieving nuanced control, while noting that the same script supports the simpler single-action mode if configured.
 
 *   **Configuration Files:**
-    *   `sim_config.yaml`: Controls simulation settings.
+    The training process is highly configurable via YAML files located primarily in `configs/env/`:
+    *   **`sim_config.yaml`**: Controls global simulation settings:
         *   `year`, `month`, `init_day`, `init_hour`: Start date/time of the simulation period.
-        *   `duration_days`: Length of the simulation period.
-        *   `timestep_minutes`: Simulation step duration (fixed at 15).
-        *   `workload_path`: Path to the processed workload trace file (`.pkl`).
+        *   `duration_days`: Length of the simulation period (e.g., for one training episode).
+        *   `timestep_minutes`: Simulation step duration (fixed at 15 minutes).
+        *   `workload_path`: Path to the processed AI workload trace file (e.g., `data/workload/alibaba_2020_dataset/result_df_full_year_2020.pkl`).
         *   `cloud_provider`: Specifies which provider's transmission cost matrix to use (`aws`, `gcp`, `azure`, or `custom`).
-        *   `shuffle_datacenters`: Whether to randomize DC order internally (can affect some rule-based strategies).
-        *   `strategy`: Set to `"manual_rl"` for RL training, allowing the agent to control assignments. Other values invoke rule-based controllers.
+        *   `shuffle_datacenters`: Whether to randomize the internal order of datacenters at the start of each episode.
+        *   `strategy`: Must be set to `"manual_rl"` for RL training, allowing the agent to control assignments.
         *   `use_tensorboard`: Enable/disable TensorBoard logging.
-    *   `datacenters.yaml`: Defines the cluster composition: list of DCs with their `dc_id`, `location`, resource capacities (`total_cores`, `total_gpus`, `total_mem`), `timezone_shift`, `population_weight`, and path to the detailed `dc_config_file`.
-    *   `reward_config.yaml`: Specifies the reward function, typically a `CompositeReward` combining multiple objectives with weights and normalization arguments (see Section 8).
-    *   `algorithm_config.yaml`: Configures the RL algorithm's hyperparameters (specific to SAC in the default example).
-        *   `gamma`: Discount factor.
-        *   `alpha`: SAC entropy temperature coefficient.
-        *   `actor_learning_rate`, `critic_learning_rate`: Learning rates for optimizers.
-        *   `batch_size`: Number of transitions sampled from the replay buffer per update.
-        *   `tau`: Soft update coefficient for target networks.
+        *   `single_action_mode`: (Boolean) Set to `false` (default for this script's primary design) for multi-action SAC. Set to `true` to run SAC in single-action mode (using aggregated observations and `SimpleReplayBuffer`). See Section 7.6.1.
+        *   `disable_defer_action`: (Boolean) Set to `false` to allow the agent to use the "defer" action. Set to `true` to restrict the agent to only assign tasks. See Section 7.6.2.
+        *    `aggregation_method`: (String, e.g., "average", "sum") Relevant if `single_action_mode: true`. Defines how per-task features are aggregated into a fixed-size observation vector.
+    *   **`datacenters.yaml`**: Defines the cluster composition. Each entry specifies a datacenter's `dc_id`, `location` (linking to environmental data), resource capacities (`total_cores`, `total_gpus`, `total_mem`), `timezone_shift`, `population_weight` (for task origin generation), and the path to its detailed physical configuration file (`dc_config_file`).
+    *   **`reward_config.yaml`**: Specifies the reward function, typically a `CompositeReward` combining multiple objectives (e.g., energy cost, carbon emissions, SLA violations) with configurable weights and normalization arguments (see Section 8 for details).
+    *   **`algorithm_config.yaml`**: Configures the SAC algorithm's hyperparameters:
+        *   `gamma`: Discount factor for future rewards.
+        *   `alpha`: SAC entropy temperature coefficient (controls exploration-exploitation balance).
+        *   `actor_learning_rate`, `critic_learning_rate`: Learning rates for the actor and critic network optimizers.
+        *   `batch_size`: Number of transitions sampled from the replay buffer per training update.
+        *   `tau`: Soft update coefficient for synchronizing target critic networks.
         *   `replay_buffer_size`: Capacity of the experience replay buffer.
-        *   `warmup_steps`: Number of initial steps using random actions before training starts.
-        *   `total_steps`: Total number of environment steps for the training run.
-        *   `update_frequency`: Perform RL updates every N environment steps.
-        *   `policy_update_frequency`: Delay actor updates relative to critic updates (SAC specific).
-        *   `save_interval`, `log_interval`: Frequency for saving checkpoints and logging metrics.
-        *   `hidden_dim`: Size of hidden layers in actor/critic networks.
-        *   `max_tasks`: Maximum number of tasks per timestep the replay buffer pads to. Crucial for memory usage; should be large enough to accommodate peak task arrivals but not excessively large.
-        *   `device`: `cpu`, `cuda`, or `auto`.
+        *   `warmup_steps`: Number of initial steps taken with random actions before training begins, to populate the replay buffer.
+        *   `total_steps`: Total number of environment steps for the entire training run.
+        *   `update_frequency`: Perform an RL update every `N` environment steps.
+        *   `policy_update_frequency`: How often the actor (policy) is updated relative to the critic (typically 2 for SAC, meaning critic updates twice as often).
+        *   `save_interval`, `log_interval`: Frequency (in environment steps) for saving model checkpoints and logging metrics to TensorBoard.
+        *   `hidden_dim`: Size of hidden layers in the actor and critic MLP networks.
+        *   `max_tasks`: **Crucial hyperparameter.** This is the maximum number of tasks per timestep that the `FastReplayBuffer` will pad observations and actions to. It must be large enough to accommodate the peak number of pending tasks (newly arrived + in-transit + deferred) in a timestep, but not excessively large to avoid high memory usage.
+        *   `device`: Computation device (`cpu`, `cuda`, or `auto` to use GPU if available).
+        *   `use_attention`: (Boolean, Optional) Set to `true` to use the experimental `AttentionActorNet` and `AttentionCriticNet` instead of MLPs. Defaults to `false`.
+        *   `attention`: (Dict, Optional) Hyperparameters for the attention mechanism if `use_attention: true` (e.g., `embed_dim`, `num_heads`).
 
+A summary of the default hyperparameters for the SAC agent, as defined in `configs/env/algorithm_config.yaml`, is provided below:
+
+| Hyperparameter              | Default Value          | Description                                                           |
+|-----------------------------|------------------------|-----------------------------------------------------------------------|
+| `gamma`                     | 0.99                   | Discount factor for future rewards.                                   |
+| `alpha`                     | 0.01                   | SAC entropy temperature coefficient.                                  |
+| `actor_learning_rate`       | 3e-4                   | Learning rate for the actor network optimizer.                        |
+| `critic_learning_rate`      | 3e-4                   | Learning rate for the critic network optimizer.                       |
+| `batch_size`                | 512                    | Transitions sampled from replay buffer per update.                  |
+| `tau`                       | 0.005                  | Soft update coefficient for target critic networks.                   |
+| `replay_buffer_size`        | 1,000,000              | Capacity of the experience replay buffer.                             |
+| `warmup_steps`              | 20,000                 | Initial steps with random actions before training.                    |
+| `total_steps`               | 20,000,000             | Total environment steps for training.                                 |
+| `update_frequency`          | 1                      | Perform RL update every N environment steps.                          |
+| `policy_update_frequency`   | 2                      | Actor updates relative to critic updates (critic updates more often). |
+| `save_interval`             | 10,000                 | Frequency for saving model checkpoints.                               |
+| `log_interval`              | 100                    | Frequency for logging metrics to TensorBoard.                         |
+| `hidden_dim`                | 256                    | Size of hidden layers in MLP actor/critic networks.                   |
+| `use_layer_norm`            | true                   | Whether to use Layer Normalization in MLPs.                           |
+| `max_tasks`                 | 750                    | Max tasks per timestep for replay buffer padding.                     |
+| `device`                    | `auto`                 | Computation device (`cpu`, `cuda`, or `auto`).                        |
+| `eval_frequency`            | 10,000                 | Evaluate agent every N training steps.                                |
+| `eval_episodes`             | 5                      | Number of episodes for each evaluation run.                           |
+| `use_attention`             | `false`                | Use MLP by default. Set to `true` for attention networks.             |
+| `attention.embed_dim`       | 64                     | Embedding dimension for attention mechanism.                          |
+| `attention.num_heads`       | 1                      | Number of attention heads.                                            |
+| `attention.num_attention_layers`| 1                  | Number of stacked attention blocks.                                   |
+| `attention.hidden_dim_ff`   | 64                     | Dimension of feed-forward layer in attention block.                   |
+| `attention.dropout`         | 0.1                    | Dropout rate in attention mechanism.                                  |
+
+These parameters provide a starting point for training the custom SAC agent. Users are encouraged to experiment with these values based on their specific scenarios and computational resources.
+
+*   **Handling Variable Task Numbers in Multi-Action SAC (`single_action_mode: false`):**
+    The core challenge in applying standard RL algorithms like SAC to SustainCluster in multi-action mode is that the number of pending tasks (`k_t`) varies at each timestep. The custom SAC implementation in `train_SAC_agent.py` addresses this as follows:
+    1.  **Observation:** The environment returns a list of `k_t` observation vectors, each vector representing one task in its global context.
+    2.  **Action:** The actor network processes each of these `k_t` task observation vectors (typically in a batch if using attention, or sequentially if iterating) and outputs `k_t` discrete actions (defer or assign to a DC).
+    3.  **Replay Buffer (`FastReplayBuffer`):**
+        *   When a transition $(s_t, a_t, r_t, s_{t+1}, d_t)$ is stored:
+            *   The list of $k_t$ observation vectors for $s_t$ (and $k_{t+1}$ for $s_{t+1}$) is padded with dummy zero vectors up to `max_tasks` length.
+            *   The list of $k_t$ actions $a_t$ is similarly padded (e.g., with -1).
+            *   Boolean masks (`mask_obs_b` for $s_t$, `mask_next_obs_b` for $s_{t+1}$), also of length `max_tasks`, are stored to indicate which entries in the padded tensors correspond to actual tasks versus padding.
+    4.  **Training Update:**
+        *   A batch sampled from the replay buffer consists of fixed-size padded tensors (e.g., observations of shape `[BatchSize, max_tasks, ObsDimPerTask]`).
+        *   These tensors are typically flattened or reshaped (e.g., to `[BatchSize * max_tasks, ObsDimPerTask]`) before being fed into the MLP-based actor and critic networks. The same network weights process each valid task's feature vector.
+        *   **Masked Computation:** The crucial step is applying the masks. All subsequent computations (Q-value estimation, policy log-probabilities, loss calculations, target value calculations) are performed element-wise for all `max_tasks` slots. However, before any aggregation (like summing or averaging losses), the computed values corresponding to padded/invalid entries are effectively nullified or excluded by multiplying with the flattened mask or by selecting only the outputs corresponding to valid (unmasked) tasks.
+        *   This ensures that only real task transitions contribute to the learning signal and gradients, allowing standard MLP architectures to be used despite the variable number of active tasks per original timestep.
+
+*   **Operation in Single-Action SAC (`single_action_mode: true`):**
+    If `single_action_mode` is set to `true` in `sim_config.yaml`, the `train_SAC_agent.py` script adapts:
+    *   It uses the `SimpleReplayBuffer`, which stores fixed-size *aggregated observations*.
+    *   The actor and critic networks process these fixed-size *aggregated observations*.
+    *   The `max_tasks` hyperparameter is not used by `SimpleReplayBuffer`.
+    *   The agent outputs a single global action, and the update logic within SAC is adjusted accordingly to handle single discrete actions rather than lists of actions.
+* 
 *   **Start Training:**
     *   **Default Configuration:**
         ```bash
-        python train_rl_agent.py
+        python train_SAC_agent.py
         ```
-    *   **Custom Configuration:** Specify paths to your modified config files:
+    *   **Custom Configuration:** To use your own configuration files, specify their paths:
         ```bash
-        python train_rl_agent.py \
+        python train_SAC_agent.py \
             --sim-config path/to/your/sim_config.yaml \
             --dc-config path/to/your/datacenters.yaml \
             --reward-config path/to/your/reward_config.yaml \
@@ -719,6 +943,50 @@ SustainCluster includes an example training script (`train_rl_agent.py`) using t
             --enable-logger True \
             --tag my_custom_experiment_run # Optional tag for organizing runs
         ```
+
+This approach allows the SAC agent to learn a general policy applicable to any number of pending tasks, making effective use of parameter sharing while correctly handling the dynamic nature of the scheduling problem.
+
+#### 10.2.2 Training with RLlib (Single-Action Agents)
+
+SustainCluster also supports training agents using the Ray RLlib library, providing example scripts for popular algorithms like PPO, APPO, and IMPALA (e.g., `train_rllib_ppo.py`, `train_rllib_appo.py`, `train_rllib_impala.py`).
+
+These RLlib examples are typically configured to operate in **`single_action_mode`** (see Section 7.6.1), where the environment provides a fixed-size aggregated observation, and the agent outputs a single global action. This mode is well-suited for straightforward integration with RLlib's standard MLP-based models. *(Note: The custom SAC script `train_SAC_agent.py` can also be run in `single_action_mode` by setting the flag in `sim_config.yaml`, demonstrating the flexibility of that script).*
+
+*   **Single-Action Mode Explained:**
+    *   When `single_action_mode: true` (configured in `configs/env/sim_config.yaml` and used by the RLlib training scripts), the `TaskSchedulingEnv` behaves as follows:
+        1.  **Observation:** The environment computes and provides the agent with a **single, fixed-size aggregated observation vector** at each timestep (*aggregated observation*).
+            *   This aggregation is performed by the `_aggregate_task_observations()` method within `TaskSchedulingEnv` (or a similar customizable function, potentially moved to `utils/state_aggregation.py` in future versions for easier user modification).
+            *   The default aggregation strategy (when `aggregation_method: "average"` in `sim_config.yaml`) typically includes:
+                *   Global time features (e.g., sine/cosine of hour and day).
+                *   Aggregated statistics of all `k_t` pending tasks, such as the total number of tasks, average CPU/GPU requirements, average estimated duration, and the minimum time-to-SLA across all pending tasks.
+                *   The current state of all datacenters (resource availability, price, carbon intensity).
+            *   The `sim_config.yaml` allows specifying an `aggregation_method` (e.g., "average", "sum", "max"). Users can extend this by modifying the aggregation logic to include different features or use different aggregation techniques (e.g., a small neural network embedder) if desired, to tailor the fixed-size state representation for the single-action agent.
+        2.  **Action:** The RLlib agent outputs a **single discrete action**. This global action is then uniformly applied by the environment to *all* `k_t` pending tasks for that timestep. For example, if the agent chooses action `j` (assign to datacenter $j$), all pending tasks are routed to datacenter $j$. If it chooses action `0` (and deferral is enabled), all pending tasks are deferred.
+    *   This approach avoids the need for complex handling of variable-length inputs/outputs directly within the RLlib agent's model, allowing standard MLP architectures to be used. Further details on `single_action_mode` can be found in Section 7.6.1. Consequently, the `max_tasks` hyperparameter, which is crucial for managing the replay buffer in the multi-action SAC implementation (see Section 10.2.1), is not directly applicable when training agents in `single_action_mode` with RLlib, as the replay buffer stores fixed-size aggregated observations.
+
+*   **Configuration for RLlib Training:**
+    *   **`sim_config.yaml`**:
+        *   Ensure `single_action_mode: true`.
+        *   The `disable_defer_action` flag can also be set (`true` or `false`) to control whether the global "defer all tasks" action is available to the RLlib agent.
+    *   **RLlib Algorithm Configurations**: Hyperparameters specific to PPO, APPO, IMPALA, etc., are defined in separate YAML files within the `configs/rllib/` directory (e.g., `ppo_config.yaml`, `appo_config.yaml`). These files specify learning rates, batch sizes, network architectures (typically `fcnet_hiddens` for MLPs), and rollout worker configurations.
+
+*   **Starting Training (Example for PPO):**
+    The training scripts are launched similarly, pointing to the respective RLlib algorithm configuration:
+    ```bash
+    python train_rllib_ppo.py --rllib-config configs/rllib/ppo_config.yaml \
+                              --num-cpus <num_cpus_for_ray> \
+                              --num-gpus <num_gpus_for_ray>
+    ```
+    Replace `<num_cpus_for_ray>` and `<num_gpus_for_ray>` with the resources you want Ray to use for parallel rollouts and training.
+
+*   **Evaluation:** Agents trained with RLlib in `single_action_mode` can be evaluated using the `eval_rllib.py` script. It's important to ensure that during evaluation, the environment is also configured with `single_action_mode: true` and the correct `disable_defer_action` setting that the agent was trained with.
+
+**Comparison with Custom SAC (Multi-Action):**
+*   The `single_action_mode` (usable by both the custom SAC script and RLlib examples) offers ease of integration and can be faster for initial experimentation.
+*   The `multi-action mode` (primary design for the custom SAC script `train_SAC_agent.py`) allows the SAC agent to make more nuanced, per-task decisions, potentially leading to higher performance but requiring more sophisticated handling of the variable task environment (like the `FastReplayBuffer` and masking).
+
+This provides users with flexible options: simpler single-action setups for rapid prototyping or use with libraries like RLlib, and a more complex multi-action setup for fine-grained control with the custom SAC implementation.
+
 
 ### 10.3 Monitoring (TensorBoard)
 
@@ -730,6 +998,13 @@ Training progress, including rewards, losses, entropy, and potentially custom me
     tensorboard --logdir runs/
     ```
 *   **Access Dashboard:** Open your web browser and navigate to `http://localhost:6006` (or the URL provided by TensorBoard). You can compare multiple training runs side-by-side.
+
+<p align="center">
+  <img src="assets/figures/Tensorboard_screenshot.png" alt="TensorBoard Screenshot" width="900"/>
+</p>
+<p align="center">
+  <em>Example TensorBoard dashboard showing training rewards, evaluation rewards, and individual component rewards, losses (Q-Loss, Policy Loss), and actor entropy over training steps.</em>
+</p>
 
 ### 10.4 Checkpointing
 
@@ -796,9 +1071,11 @@ While a dedicated real-time dashboard is a planned feature, the standard evaluat
 
 These metrics and visualizations provide a quantitative basis for comparing the effectiveness of different sustainable scheduling approaches within the SustainCluster benchmark.
 
-## 12. Planned Features & Roadmap
+## 12. Future Work and Research Directions
 
-SustainCluster is under active development. We plan to enhance the benchmark with several features to increase its realism, scope, and usability:
+SustainCluster is an evolving benchmark, and we envision several avenues for future enhancements and advanced research:
+
+### 12.1 Core Benchmark Enhancements
 
 *   **Geographic and Policy-based Transfer Constraints:** Introduce mechanisms to model and enforce restrictions on inter-datacenter task transfers based on data residency requirements (e.g., GDPR), national regulations, or other policy constraints.
 *   **Refined Transmission Emissions Modeling:** Move beyond the current origin-based approximation for transmission carbon emissions towards more sophisticated bottom-up network models that account for path routing, network segment efficiencies (core vs. access), and potentially dynamic energy consumption based on traffic load (e.g., based on [Guennebaud et al., 2024](https://doi.org/10.1111/jiec.13513)).
@@ -808,52 +1085,95 @@ SustainCluster is under active development. We plan to enhance the benchmark wit
 *   **Co-location and Multi-Tenancy Modeling:** Introduce features to simulate scenarios where multiple tenants or services with different objectives share the same physical infrastructure.
 *   **Visualization Dashboard:** Develop a web-based dashboard for real-time visualization of key metrics (energy, carbon, cost, utilization, queue lengths) during simulation runs or for interactive exploration of results.
 *   **Advanced Cooling Models:** Option to integrate more detailed HVAC models or allow agent control over cooling setpoints (e.g., CRAC temperature).
-*   **Battery Storage Integration:** Activate and enhance the battery simulation module, potentially allowing RL agents to control charging/discharging cycles for cost/carbon arbitrage or peak shaving.
+*   **On-Site Renewable Generation Modeling:** Explicitly model on-site renewable energy sources (e.g., solar panels, wind turbines) at each datacenter, including their generation profiles and potential curtailment. This would allow agents to directly optimize for maximizing self-consumption of renewables.
+*   **Battery Storage Integration (Active Control):** Fully activate and enhance the battery simulation module (`envs/sustaindc/battery_model.py`), allowing RL agents to control charging/discharging cycles for cost/carbon arbitrage or peak shaving at each datacenter.
+*   **Fine-grained Local Task Queue Management:** Develop the existing local task queue/time-shifting stubs (`envs/sustaindc/timeloadshifting_env.py`) into a fully controllable module within each `SustainDC`, allowing for finer-grained local reordering or minor time-shifts of tasks assigned by the global scheduler.
+*   **Advanced Deferred Task Management:** Introduce optional mechanisms to manage the deferral queue more explicitly and control its growth. This could include:
+    *   Setting a cap on the total number of tasks that can be in a "deferred" state globally or per datacenter.
+    *   Implementing a maximum number of times a single task can be deferred before it must be assigned (e.g., to its origin DC or a default low-cost/low-carbon option).
+    *   Adding aging mechanisms to deferred tasks that increase their priority or influence the reward function as they wait longer.
+    *   These features would help mitigate issues with exploding pending task lists (`k_t`) and the associated `max_tasks` replay buffer configuration (see Section 7.6.2), while still allowing for beneficial temporal shifting.
+*   **Customizable State Aggregation for Single-Action Mode:** Refactor the state aggregation logic currently within `TaskSchedulingEnv._aggregate_task_observations()` (used when `single_action_mode: true`) into a more modular system, potentially in `utils/state_aggregation.py`. This would allow users to easily define and select different aggregation methods (e.g., beyond simple averages/sums to include min/max, standard deviations, or even small neural network embedders) via the `aggregation_method` parameter in `sim_config.yaml`, enabling more sophisticated fixed-size state representations for single-action agents.
+  
+### 12.2 Advanced Agent Architectures and Learning Paradigms
 
-We welcome contributions and suggestions from the community! Feel free to open an issue on GitHub to discuss potential features or enhancements.
+*   **Hierarchical / Multi-Agent Reinforcement Learning (MARL):**
+    *   **Concept:** Extend the benchmark to support hierarchical or multi-agent control. A high-level global scheduler (as currently implemented) could make coarse-grained task distribution decisions, while local RL agents within each `SustainDC` instance could optimize local operations.
+    *   **Local Agent Tasks:** These local agents could manage:
+        *   **HVAC Control:** Dynamically adjust cooling setpoints (as demonstrated with the PPO HVAC agent example in this benchmark).
+        *   **Battery Storage:** Optimize charging/discharging of local energy storage systems.
+        *   **Local Queue Management:** Fine-tune the execution order or apply micro-deferrals to tasks assigned by the global scheduler.
+        *   **Dynamic IT Resource Management:** Control server power states (e.g., turn servers on/off based on queue length, activate sleep modes) or apply CPU/GPU power capping to further optimize energy use locally.
+    *   **Research Questions:** This opens up research into credit assignment, communication protocols between agents, and emergent system-level behavior from the interaction of global and local policies. It allows for studying the benefits of coordinated vs. decentralized control for sustainability.
+
+*   **Advanced Policy Networks (e.g., Attention Mechanisms):**
+    *   **Concept:** For the multi-action scheduling mode (where the agent decides for each pending task), more sophisticated network architectures like Transformers or Graph Neural Networks can be explored.
+    *   **Benefits of Attention:** An attention-based policy (like the experimental `AttentionActorNet` provided) can process the variable-length list of pending tasks simultaneously. It can learn to weigh the importance of different tasks and their features relative to each other and the global context before making an assignment or deferral decision for each task. This allows for more contextually aware and potentially smarter per-task decisions compared to processing each task's observation vector independently through a shared MLP.
+    *   **Research Questions:** Quantifying the performance improvement of attention-based policies over simpler MLPs in complex, dynamic scheduling environments. Exploring different attention mechanisms or GNN structures for representing task and datacenter relationships.
+
+*   **Offline Reinforcement Learning and Model-Based RL:**
+    *   **Concept:** Leverage the rich historical data (workload traces, environmental data) to train agents using offline RL techniques, reducing the need for extensive online interaction with the simulator during initial training phases. Model-based RL could learn a dynamics model of the SustainCluster environment to enable more sample-efficient planning and control.
+
+*   **Incorporating Advanced Forecasting:**
+    *   **Concept:** Enhance the observation space with forecasts for key dynamic variables (electricity price, carbon intensity, workload arrivals, renewable generation if added).
+    *   **Agent Adaptation:** RL agents could learn to explicitly use these forecasts to make more proactive and anticipatory scheduling decisions.
+
+We believe these extensions and research directions will further increase the value of SustainCluster as a comprehensive testbed for developing and validating next-generation sustainable computing solutions. We welcome contributions and suggestions from the community! Feel free to open an issue on GitHub to discuss potential features or enhancements.
 
 ## 13. Citation, License & Contributors
-If you use the SustainCluster benchmark or codebase in your research, please cite our work. 
 
-### 13.1 Citation / Credits
+### 13.1 How to Cite SustainCluster
 
-This project builds on work from:
-
-- Alibaba Cluster Trace Dataset
-- Electricity Maps Dataset
-- Open-Meteo API
-- GridStatus.io
-
-### 13.2 Acknowledgements & Data Licenses
-This project builds upon and incorporates several valuable open datasets and tools. We gratefully acknowledge their original creators and providers. Users of SustainCluster are responsible for complying with all applicable licenses and terms of use for these original data sources:
-
-*   **AI Workload Trace:** The core workload is derived from the [Alibaba Cluster Trace 2020](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020) \cite{Weng2022MLaaS}. This dataset is available under a license permitting non-commercial research use and requiring attribution (e.g., Creative Commons Attribution 4.0 International - CC BY 4.0).
-*   **Electricity Prices & Carbon Intensity (Electricity Maps):** Data is sourced from [Electricity Maps](https://www.electricitymaps.com) \cite{ElectricityMaps}. The data obtained via their API or public datasets is generally provided under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
-*   **Electricity Prices (GridStatus.io):** Additional electricity price data is sourced from [GridStatus.io](https://gridstatus.io/) \cite{GridStatus}. Their open-source client and potentially some data may be available under a [BSD-3-Clause license](https://github.com/gridstatus/gridstatus/blob/master/LICENSE) (as seen on their GitHub).
-*   **Weather Data (Open-Meteo):** Sourced from the [Open-Meteo API](https://open-meteo.com) \cite{OpenMeteo}, which provides data under the [Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) license.
-*   **Transmission Costs (Cloud Providers):** Based on publicly available pricing information from AWS, GCP, and Azure. Usage of this information should align with fair use for research and comparison.
-*   **Transmission Delay Parameters (Persico et al.):** Derived from empirical data published by [Persico et al. (IEEE GLOBECOM 2016)](https://www.sciencedirect.com/science/article/abs/pii/S138912861630353X).
-
----
-#### License
-The SustainCluster codebase, including our data processing scripts, the benchmark framework itself, and any datasets we have directly generated or significantly transformed (distinct from the raw data sources listed above), are licensed under the **MIT License**.
-
-A copy of the MIT License text can be found in the `LICENSE` file in the root of this repository.
-
----
-#### Citation
-
-If you use SustainCluster in your research, please cite our work:
+If you use the SustainCluster benchmark or its codebase in your research, please cite our NeurIPS Datasets and Benchmarks paper:
 
 ```bibtex
 @inproceedings{2025GuillenSustainCluster,
   title={{SustainCluster: Benchmarking Dynamic Multi-Objective Geo-Distributed Workload Management for Sustainable Data Center Cluster}},
   author={Antonio Guillen and Avisek Naug and Vineet Gundecha and Sahand Ghorbanpour and Ricardo Luna Gutierrez and Ashwin Ramesh Babu and Munther Salim and Shubhanker Banerjee and Eoin H. Oude Essink and Damien Fay and Soumyendu Sarkar},
-  booktitle={Under Review},
+  booktitle={Advances in Neural Information Processing Systems 38 (NeurIPS 2025) Datasets and Benchmarks Track},
   year={2025},
+  note={Under Review -- Details to be updated upon publication}
 }
 ```
 
-### 13.3 Contributors
 
-Feel free to open issues or PRs for improvements, bugs, or suggestions.
+### 13.2 Acknowledgements, Data Sources, and Licenses
+SustainCluster integrates and builds upon several valuable open datasets and tools. We gratefully acknowledge their original creators and providers. Users of SustainCluster are responsible for complying with all applicable licenses and terms of use for these original data sources:
+
+*   **AI Workload Trace:** The core workload is derived from the [Alibaba Cluster Trace 2020](https://github.com/alibaba/clusterdata/tree/master/cluster-trace-gpu-v2020). This dataset is available under a license permitting non-commercial research use and requiring attribution (e.g., Creative Commons Attribution 4.0 International - CC BY 4.0).
+*   **Electricity Prices & Carbon Intensity (Electricity Maps):** Data is sourced from [Electricity Maps](https://www.electricitymaps.com). The data obtained via their API or public datasets is generally provided under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
+*   **Electricity Prices (GridStatus.io):** Additional electricity price data is sourced from [GridStatus.io](https://gridstatus.io/). Their open-source client and potentially some data may be available under a [BSD-3-Clause license](https://github.com/gridstatus/gridstatus/blob/master/LICENSE) (as seen on their GitHub).
+*   **Weather Data (Open-Meteo):** Sourced from the [Open-Meteo API](https://open-meteo.com), which provides data under the [Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/) license.
+*   **Transmission Costs (Cloud Providers):** Based on publicly available pricing information from AWS, GCP, and Azure. Usage of this information should align with fair use for research and comparison.
+*   **Transmission Delay Parameters (Persico et al.):** Derived from empirical data published by [Persico et al. (IEEE GLOBECOM 2016)](https://www.sciencedirect.com/science/article/abs/pii/S138912861630353X).
+
+
+#### 13.2.1 SustainCluster License
+The SustainCluster codebase, including our data processing scripts, the benchmark framework itself, and any datasets we have directly generated or significantly transformed (distinct from the raw data sources listed above), are licensed under the **MIT License**.
+
+A copy of the MIT License text can be found in the `LICENSE` file in the root of this repository.
+
+
+### 13.3 Contributions
+
+We welcome contributions and suggestions from the community! If you'd like to contribute to SustainCluster (e.g., by adding new features, fixing bugs, improving documentation, providing new datasets, or implementing new baseline agents), please feel free to:
+*   Open an issue on GitHub to discuss your ideas or report bugs.
+*   Fork the repository, make your changes, and submit a pull request.
+*   Submit a Pull Request with your proposed changes.
+*   If you have a larger feature or dataset to contribute, please reach out to us via GitHub discussions or email to discuss how best to integrate it.
+
+We are particularly interested in:
+*   New reward functions or composite reward configurations.
+*   Additional datacenter models or configurations.
+*   New task assignment strategies or RL agent architectures.
+*   New locations or datasets for electricity prices, carbon intensity, or workload traces.
+*   Enhancements to the simulation engine or environment interfaces.
+
+Your contributions can help make SustainCluster an even more valuable resource for sustainable computing research.
+
+### 13.4 Contributors
+We would like to acknowledge the following contributors who have helped shape SustainCluster:
+*Antonio Guillen-Perez Avisek Naug, Vineet Gundecha, Sahand Ghorbanpour, Ricardo Luna Gutierrez, Ashwin Ramesh Babu, Munther Salim, Shubhanker Banerjee, Eoin H. Oude Essink, Damien Fay, and Soumyendu Sarkar*.
+
+
+For more information, updates, and to get involved, visit the [SustainCluster GitHub repository](https://github.com/HewlettPackard/sustain-cluster).
