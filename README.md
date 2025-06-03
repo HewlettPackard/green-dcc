@@ -11,6 +11,7 @@ Existing schedulers and benchmarks tend to focus on either local resource utiliz
 - **Grid carbon intensity** (region‑specific gCO₂eq / kWh)  
 - **Network transfer** (per‑GB cost, serialization + propagation delay)
 
+
 We introduce **SustainCluster** (“Sustainable Data‑Center Cluster”), an open‑source benchmark and Gym‑compatible simulation environment designed to fill this gap. SustainCluster provides:
 1. A **reproducible**, end‑to‑end pipeline from real‑world datasets (Alibaba GPU trace, Open‑Meteo, Electricity Maps, cloud bandwidth pricing) to RL‑ready scenarios.  
 2. A **centralized global scheduler** that observes system‑wide state and issues “defer or assign” global decisions every 15 minutes.  
@@ -28,9 +29,27 @@ By proposing SustainCluster, we aim to foster among the scientific community and
   </p>
 </div>
 
+### Affiliation with ExaDigiT Consortium
+
+<div style="background-color:white; display:inline-block; padding:10px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
+  <p align="center">
+    <a href="https://exadigit.github.io/">
+      <img src="assets/figures/exadigit.png" alt="ExaDigiT Consortium Logo" width="300"/>
+    </a>
+  </p>
+  <p align="center" style="font-size: 0.9em; color: black;">
+    <em>SustainCluster is a contributing project to the <a href="https://exadigit.github.io/">ExaDigiT Consortium</a>.</em>
+  </p>
+</div>
+
+SustainCluster is proud to be part of the **[ExaDigiT Consortium](https://exadigit.github.io/)**, an open framework initiative involving research faculties and supercomputing entities dedicated to developing comprehensive digital twins of supercomputers and large-scale computing facilities. ExaDigiT aims to optimize the design, operation, and energy efficiency of advanced computing systems by integrating diverse modeling techniques, telemetry, and AI.
+
+While ExaDigiT often focuses on highly detailed models of individual supercomputing sites (including specific cooling systems, power infrastructure, and internal networks), **SustainCluster complements this vision by providing a specialized benchmark focused on the challenges of *managing AI workloads across a cluster of geo-distributed data centers***. Our emphasis is on the dynamic, multi-objective scheduling decisions needed to balance sustainability (carbon, energy cost, water) with operational performance (SLAs, resource utilization) in a global context, leveraging the detailed physical modeling principles advocated by ExaDigiT for each simulated datacenter.
+
 # Table of Contents
 - [SustainCluster -- Multi-Data Center Sustainable Scheduling Benchmark](#sustaincluster----multi-data-center-sustainable-scheduling-benchmark)
   - [1. Introduction](#1-introduction)
+    - [Affiliation with ExaDigiT Consortium](#affiliation-with-exadigit-consortium)
 - [Table of Contents](#table-of-contents)
   - [2. Features \& Highlights](#2-features--highlights)
   - [3. Benchmark Design](#3-benchmark-design)
@@ -1230,6 +1249,9 @@ Your contributions can help make SustainCluster an even more valuable resource f
 ### 13.4 Contributors
 We would like to acknowledge the following contributors who have helped shape SustainCluster:
 *Antonio Guillen-Perez Avisek Naug, Vineet Gundecha, Sahand Ghorbanpour, Ricardo Luna Gutierrez, Ashwin Ramesh Babu, Munther Salim, Shubhanker Banerjee, Eoin H. Oude Essink, Damien Fay, and Soumyendu Sarkar*.
+
+ExaDigiT (Exascale Digital Twins for Supercomputing) is an ambitious initiative focused on creating comprehensive digital twins of advanced computing systems, like the Frontier supercomputer, to optimize their design, operation, and energy efficiency. The framework integrates 3D asset modeling, telemetry data assimilation, AI/ML, detailed simulations, and reinforcement learning. SustainCluster aligns with ExaDigiT's goals by providing a specialized benchmark environment to research and develop intelligent workload management strategies for sustainable operation of distributed computing infrastructure, a key component of future exascale systems and large data center clusters. While ExaDigiT often focuses on detailed single-site supercomputer models (including thermo-fluid cooling, power conversion, and network specifics), SustainCluster extends this by focusing on the *geo-distributed scheduling and sustainability challenges* across multiple such facilities.
+
 
 
 For more information, updates, and to get involved, visit the [SustainCluster GitHub repository](https://github.com/HewlettPackard/sustain-cluster).
