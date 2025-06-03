@@ -1250,8 +1250,5 @@ Your contributions can help make SustainCluster an even more valuable resource f
 We would like to acknowledge the following contributors who have helped shape SustainCluster:
 *Antonio Guillen-Perez Avisek Naug, Vineet Gundecha, Sahand Ghorbanpour, Ricardo Luna Gutierrez, Ashwin Ramesh Babu, Munther Salim, Shubhanker Banerjee, Eoin H. Oude Essink, Damien Fay, and Soumyendu Sarkar*.
 
-ExaDigiT (Exascale Digital Twins for Supercomputing) is an ambitious initiative focused on creating comprehensive digital twins of advanced computing systems, like the Frontier supercomputer, to optimize their design, operation, and energy efficiency. The framework integrates 3D asset modeling, telemetry data assimilation, AI/ML, detailed simulations, and reinforcement learning. SustainCluster aligns with ExaDigiT's goals by providing a specialized benchmark environment to research and develop intelligent workload management strategies for sustainable operation of distributed computing infrastructure, a key component of future exascale systems and large data center clusters. While ExaDigiT often focuses on detailed single-site supercomputer models (including thermo-fluid cooling, power conversion, and network specifics), SustainCluster extends this by focusing on the *geo-distributed scheduling and sustainability challenges* across multiple such facilities.
-
-
 
 For more information, updates, and to get involved, visit the [SustainCluster GitHub repository](https://github.com/HewlettPackard/sustain-cluster).
