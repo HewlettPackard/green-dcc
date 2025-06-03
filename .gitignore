@@ -58,3 +58,10 @@ sustaindc_all_python_code.txt
 project_contents_recursive.txt
 list_files.py
 consolidate_code.py
+consolidate_code_src.py
+
+# Ignore the following files
+!checkpoints/train_multiaction_defer_20250527_210534/best_eval_checkpoint.pth
+!checkpoints/train_multiaction_nodefer_20250527_212105/best_eval_checkpoint.pth
+!checkpoints/train_single_action_enable_defer_20250527_222926/best_eval_checkpoint.pth
+!checkpoints/train_single_action_disable_defer_20250527_223002/best_eval_checkpoint.pth
