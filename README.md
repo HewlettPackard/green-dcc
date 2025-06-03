@@ -71,6 +71,9 @@ By proposing SustainCluster, we aim to foster among the scientific community and
       - [10.2.2 Training with RLlib (Single-Action Agents)](#1022-training-with-rllib-single-action-agents)
     - [10.3 Monitoring (TensorBoard)](#103-monitoring-tensorboard)
     - [10.4 Checkpointing](#104-checkpointing)
+    - [10.5 (Optional) Training and Using an RL-Controlled HVAC Agent](#105-optional-training-and-using-an-rl-controlled-hvac-agent)
+      - [10.5.1 Training a Local HVAC Control Agent](#1051-training-a-local-hvac-control-agent)
+      - [10.5.2 Using a Trained HVAC Agent in SustainCluster Simulations](#1052-using-a-trained-hvac-agent-in-sustaincluster-simulations)
   - [11. Evaluation \& Demo](#11-evaluation--demo)
     - [11.1 Rule-based vs RL Evaluation](#111-rule-based-vs-rl-evaluation)
     - [11.2 Google Colab Notebook](#112-google-colab-notebook)
@@ -1013,6 +1016,59 @@ Model checkpoints (actor, critic networks, and optimizer states) are saved durin
 *   **Save Location:** Checkpoints are saved by default to the `checkpoints/` directory, within a subdirectory named `train_<timestamp>` or `train_<tag>_<timestamp>`.
 *   **Save Frequency:** Controlled by `save_interval` in `algorithm_config.yaml`.
 *   **Best Model:** The checkpoint corresponding to the best average reward (over a trailing window, e.g., 10 episodes) is typically saved as `best_checkpoint.pth`.
+
+
+### 10.5 (Optional) Training and Using an RL-Controlled HVAC Agent
+
+SustainCluster supports the integration of Reinforcement Learning agents to dynamically control local datacenter parameters, such as HVAC (Heating, Ventilation, and Air Conditioning) cooling setpoints. This enables research into hierarchical control, where a global task scheduler interacts with local DC controllers.
+
+#### 10.5.1 Training a Local HVAC Control Agent
+
+A dedicated training script, `train_hvac_ppo_agent.py`, is provided to train a local PPO agent for HVAC control. This agent learns to adjust the CRAC (Computer Room Air Conditioner) temperature setpoint for a single, isolated datacenter model (`SustainDC`) to optimize local energy consumption while considering IT load and ambient weather.
+
+*   **Environment:** The agent is trained directly on an instance of `envs.sustaindc.dc_gym.dc_gymenv`.
+*   **Observation Space:** The HVAC agent typically observes local DC state features such as current hour (sine/cosine), ambient temperature, CPU load, GPU load, and the previously applied cooling setpoint. (See  `train_hvac_ppo_agent.py` for exact features).
+*   **Action Space:** The agent usually outputs discrete actions like "decrease setpoint by 1°C", "maintain setpoint", or "increase setpoint by 1°C".
+*   **Reward:** The reward function penalizes high local DC energy consumption, potentially with additional penalties for violating temperature safety margins.
+*   **Configuration:**
+    *   Hyperparameters for the PPO HVAC agent are defined in `configs/env/hvac_train_config_ppo.yaml`. This includes learning rates, PPO-specific parameters, total training steps, and the target path to save the trained policy (e.g., `policy_save_path`).
+    *   The configuration also specifies the `location` and `simulation_year` to source weather data for training, and the `load_profile` (e.g., "variable", "constant") to drive the IT load during HVAC agent training.
+*   **Running Training:**
+    ```bash
+    python train_hvac_ppo_agent.py
+    ```
+    This will train the HVAC agent and save the policy (actor network weights, observation normalization stats, and observation dimension) to the path specified in `hvac_train_config_ppo.yaml` (e.g., `checkpoints/hvac_policy_ppo.pth`).
+
+#### 10.5.2 Using a Trained HVAC Agent in SustainCluster Simulations
+
+Once an HVAC control policy is trained (or if you have a pre-trained one), you can enable it for specific datacenters within your global SustainCluster simulation. This is done by modifying the `configs/env/datacenters.yaml` file for the desired datacenter(s):
+
+```yaml
+datacenters:
+  - dc_id: 1
+    location: "US-CAL-CISO"
+    # ... other parameters ...
+    dc_config_file: "configs/dcs/dc_config.json"
+    use_rl_hvac: true                # Set to true to enable RL-based HVAC
+    hvac_controller_type: "ppo"      # Specify the type (e.g., "ppo", "sac" if supported)
+    hvac_policy_path: "checkpoints/your_trained_hvac_policies/hvac_policy_dc1_ppo.pth" # Path to the trained policy
+    # hru_enabled: false             # Optional: Heat Recovery Unit
+
+  - dc_id: 2
+    location: "DE-LU"
+    # ... other parameters ...
+    dc_config_file: "configs/dcs/dc_config.json"
+    use_rl_hvac: false               # This DC will use default fixed HVAC setpoints
+    # hvac_controller_type: "none"
+    # hvac_policy_path: null
+```
+
+*   `use_rl_hvac`: `true`: Enables the use of an RL policy for HVAC control for that specific datacenter. If false or omitted, the DC uses its default HVAC logic (typically fixed setpoints or simple heuristics defined in its physical model).
+*   `hvac_controller_type`: Specifies the type of RL controller (e.g., `"ppo"` for a PPO-trained agent). This should match the training script used.
+*   `hvac_policy_path`: Path to the trained HVAC policy file (e.g., `hvac_policy_dc1_ppo.pth`). This file should contain the actor network weights, observation normalization stats, and observation dimension.
+*   `hru_enabled`: Optional parameter to enable or disable the Heat Recovery Unit (HRU) for this datacenter, which can be used to further optimize cooling energy consumption.
+
+When a SustainCluster simulation runs (e.g., via `train_SAC_agent.py` for the global scheduler, or an evaluation script), each `SustainDC` instance will check if `use_rl_hvac` is `true`. If so, it will load the specified RL policy and use it to dynamically adjust each timestep the CRAC setpoint based on the current local state (IT load, ambient conditions, etc.). 
 
 ## 11. Evaluation & Demo
 
