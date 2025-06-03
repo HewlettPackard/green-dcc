@@ -42,10 +42,11 @@ BASE_REWARD_CONFIG_PATH = os.path.join(CONFIG_DIR, "reward_config.yaml")
 # This is needed if the agent's behavior (like not outputting action 0) is tied to its training config
 BASE_ALGO_CONFIG_PATH = os.path.join(CONFIG_DIR, "algorithm_config.yaml") # Example path
 
-# DEFAULT_RL_CHECKPOINT_PATH = "checkpoints/train_256_20250519_210426/best_eval_checkpoint.pth" # <<<< ADJUST THIS
-# DEFAULT_RL_CHECKPOINT_PATH = "checkpoints/train_enable_defer_20250522_150201/best_eval_checkpoint.pth" # <<<< Single Action + Defer
-# DEFAULT_RL_CHECKPOINT_PATH = "checkpoints/train_multiaction_defer_20250527_210534/best_eval_checkpoint.pth" # <<<< Multi Action + Defer
-DEFAULT_RL_CHECKPOINT_PATH = "checkpoints/train_multiaction_nodefer_20250527_212105/best_eval_checkpoint.pth" # <<<< Multi Action + NO_Defer
+# DEFAULT_RL_CHECKPOINT_PATH =  # <<<< ADJUST THIS
+DEFAULT_RL_CHECKPOINT_PATH = "checkpoints/train_multiaction_defer_20250527_210534/best_eval_checkpoint.pth" # <<<< Multi Action + Defer
+# DEFAULT_RL_CHECKPOINT_PATH = "checkpoints/train_multiaction_nodefer_20250527_212105/best_eval_checkpoint.pth" # <<<< Multi Action + NO_Defer
+# DEFAULT_RL_CHECKPOINT_PATH = 'checkpoints/train_single_action_enable_defer_20250527_222926/best_eval_checkpoint.pth' # <<<< Single Action + Enable Defer
+# DEFAULT_RL_CHECKPOINT_PATH = 'checkpoints/train_single_action_disable_defer_20250527_223002/best_eval_checkpoint.pth' # <<<< Single Action + Disable Defer
 
 
 EVALUATION_DURATION_DAYS = 7 # Example: 7 days for Table 1
@@ -60,14 +61,13 @@ CONTROLLERS_TO_EVALUATE = [
     },
     
     # Local Only{"name": "RBC (Local Only)", "strategy": "local_only", "is_rl": False},
-#     {
-#         "name": "RBC (Local Only)", "strategy": "local_only", "is_rl": False,
-#         "eval_disable_defer": False, "eval_local_only": True # RBCs should not defer
-#     },
+    # {
+    #     "name": "RBC (Local Only)", "strategy": "local_only", "is_rl": False,
+    #     "eval_disable_defer": False, "eval_local_only": True # RBCs should not defer
+    # },
 ]
 
 #TODO extract the flag eval_disable_defer from the algo_config.yaml
-print("TODO: extract the flag eval_disable_defer from the algo_config.yaml")
 
 # --- Logger Setup ---
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -396,6 +396,7 @@ results = {
     "Total Tasks Deferred": total_deferred_tasks_in_run,
 }
 logger.info(f"--- Finished Eval: {controller_config['name']} | Seed: {seed} ---")
+
 #%%
 info["datacenter_infos"]
 
@@ -761,7 +762,7 @@ plt.tight_layout()
 
 plot_filename = f"assets/figures/carbon_intensity_small_over_time_{timestamp}.pdf"
 # Save the figure
-plt.savefig(plot_filename, bbox_inches='tight')
+# plt.savefig(plot_filename, bbox_inches='tight')
 
 plt.show()
 
@@ -781,7 +782,7 @@ plt.tight_layout()
 
 plot_filename = f"assets/figures/electricity_price_small_over_time_{timestamp}.pdf"
 # Save the figure
-plt.savefig(plot_filename, bbox_inches='tight')
+# plt.savefig(plot_filename, bbox_inches='tight')
 plt.show()
 
 #%% The same but for External Temperature
@@ -799,7 +800,7 @@ plt.legend(handles, new_labels, title="Datacenter", bbox_to_anchor=(1.05, 1), lo
 plt.tight_layout()
 plot_filename = f"assets/figures/external_temperature_small_over_time_{timestamp}.pdf"
 # Save the figure
-plt.savefig(plot_filename, bbox_inches='tight')
+# plt.savefig(plot_filename, bbox_inches='tight')
 plt.show()
 
 
@@ -842,7 +843,7 @@ plt.tight_layout(rect=[0, 0, 1, 0.95])  # Leave space at bottom for legend
 
 # Save the figure
 # plot_filename = f"assets/figures/carbon_intensity_electricity_price_external_temperature_{timestamp}.pdf"
-plt.savefig(plot_filename, bbox_inches='tight')
+# plt.savefig(plot_filename, bbox_inches='tight')
 plt.show()
 
 
