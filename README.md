@@ -1222,6 +1222,19 @@ SustainCluster integrates and builds upon several valuable open datasets and too
 *   **Transmission Costs (Cloud Providers):** Based on publicly available pricing information from AWS, GCP, and Azure. Usage of this information should align with fair use for research and comparison.
 *   **Transmission Delay Parameters (Persico et al.):** Derived from empirical data published by [Persico et al. (IEEE GLOBECOM 2016)](https://www.sciencedirect.com/science/article/abs/pii/S138912861630353X).
 
+The detailed physical modeling for individual datacenters within SustainCluster is an evolution of our prior work on the **SustainDC** benchmark. For more details on the original single-node multi-agent control benchmark, please see:
+*   **SustainDC Project:** [HewlettPackard/dc-rl on GitHub](https://github.com/HewlettPackard/dc-rl)
+*   **SustainDC Paper:** [Naug, Avisek and Guillen-Perez, Antonio et al., "SustainDC: Benchmarking for Sustainable Data Center Control," NeurIPS 2024.](https://proceedings.neurips.cc/paper_files/paper/2024/hash/b6676756f8a935e208f394a1ba47f0bc-Abstract-Datasets_and_Benchmarks_Track.html)
+    ```bibtex
+      @inproceedings{NEURIPS2024_b6676756,
+      author = {Naug, Avisek and Guillen, Antonio and Luna, Ricardo and Gundecha, Vineet and Bash, Cullen and Ghorbanpour, Sahand and Mousavi, Sajad and Babu, Ashwin Ramesh and Markovikj, Dejan and Kashyap, Lekhapriya D and Rengarajan, Desik and Sarkar, Soumyendu},
+      title = {SustainDC: Benchmarking for Sustainable Data Center Control},
+      booktitle = {Advances in Neural Information Processing Systems},
+      volume = {37},
+      year = {2024},
+      url = {https://proceedings.neurips.cc/paper_files/paper/2024/file/b6676756f8a935e208f394a1ba47f0bc-Paper-Datasets_and_Benchmarks_Track.pdf},
+      }
+    ```
 
 #### 13.2.1 SustainCluster License
 The SustainCluster codebase, including our data processing scripts, the benchmark framework itself, and any datasets we have directly generated or significantly transformed (distinct from the raw data sources listed above), are licensed under the **MIT License**.
