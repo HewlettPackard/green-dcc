@@ -1261,7 +1261,7 @@ Your contributions can help make SustainCluster an even more valuable resource f
 
 ### 13.4 Contributors
 We would like to acknowledge the following contributors who have helped shape SustainCluster:
-*Antonio Guillen-Perez Avisek Naug, Vineet Gundecha, Sahand Ghorbanpour, Ricardo Luna Gutierrez, Ashwin Ramesh Babu, Munther Salim, Shubhanker Banerjee, Eoin H. Oude Essink, Damien Fay, and Soumyendu Sarkar*.
+*Antonio Guillen-Perez, Avisek Naug, Vineet Gundecha, Sahand Ghorbanpour, Ricardo Luna Gutierrez, Ashwin Ramesh Babu, Munther Salim, Shubhanker Banerjee, Eoin H. Oude Essink, Damien Fay, and Soumyendu Sarkar*.
 
 
 For more information, updates, and to get involved, visit the [SustainCluster GitHub repository](https://github.com/HewlettPackard/sustain-cluster).
