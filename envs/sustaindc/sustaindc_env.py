@@ -53,7 +53,7 @@ class SustainDC(gym.Env):
                 
         self.max_bat_cap_Mw = env_config['max_bat_cap_Mw']
         
-        self.datacenter_capacity_mw = env_config['datacenter_capacity_mw']
+        self.datacenter_capacity_mw = env_config.get('datacenter_capacity_mw', 1.0)
         self.total_cores = env_config['total_cores']
         self.total_gpus = env_config['total_gpus']
         self.total_mem_GB = env_config['total_mem']

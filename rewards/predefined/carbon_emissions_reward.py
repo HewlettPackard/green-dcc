@@ -1,28 +1,23 @@
 from rewards.base_reward import BaseReward
 from rewards.registry_utils import register_reward
+import numpy as np
 
 @register_reward("carbon_emissions")
 class CarbonEmissionsReward(BaseReward):
     def __init__(self, normalize_factor: float = 100.0):
         super().__init__()
-        self.normalize_factor = normalize_factor
+        self.normalize_factor = np.float64(normalize_factor)
 
-    def __call__(self, cluster_info, current_tasks, current_time):
-        # total_emissions = 0.0
-        # for dc_info in cluster_info["datacenter_infos"].values():
-        #     total_emissions += dc_info["__common__"].get("carbon_emissions_kg", 0)
+    def __call__(self, cluster_info: dict, current_time): # <<< Correct signature
+        # Sum carbon emissions from all datacenters' operations
+        total_emissions_kg = np.float64(0.0)
+        if "datacenter_infos" in cluster_info:
+            for dc_info in cluster_info["datacenter_infos"].values():
+                total_emissions_kg += dc_info["__common__"].get("carbon_emissions_kg", 0.0)
         
-        total_task_emissions = 0.0
-        for task in current_tasks:
-            dest_dc = getattr(task, "dest_dc", None)
-            if dest_dc:
-                task_energy = task.cores_req * task.duration / 10000.0
-                task_emissions = task_energy * dest_dc.ci_manager.get_current_ci(norm=False)
-                total_task_emissions += task_emissions
+        # Add transmission emissions from the global results
+        total_emissions_kg += cluster_info.get("transmission_emissions_total_kg", 0.0)
 
-        reward = -total_task_emissions / self.normalize_factor
-        self.last_reward = reward
-        return reward
-
-    def get_last_value(self):
+        reward = -total_emissions_kg / self.normalize_factor
+        self.last_reward = float(reward)
         return self.last_reward
