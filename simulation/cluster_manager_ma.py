@@ -251,3 +251,72 @@ class DatacenterClusterManagerMA:
         
         # G. Collect and return results (reward calculation will be done by the env wrapper)
         return {"datacenter_infos": all_dc_infos} # Return the raw info for now
+    
+    def task_origination(self, current_time_utc: pd.Timestamp):
+        for node in self.nodes.values():
+            node.ci_manager.step()
+            node.price_manager.step()
+            node.weather_manager.step()
+
+        # B. Task Origination
+        newly_arrived_tasks = self._get_newly_arrived_tasks(current_time_utc)
+        for dc_id, tasks in newly_arrived_tasks.items():
+            if dc_id in self.nodes:
+                self.nodes[dc_id].add_originating_tasks(tasks)
+
+
+    def step_manager(self, current_time_utc: pd.Timestamp,
+                  manager_actions: Dict[int, int]) -> None:
+    
+        for dc_id, manager_action_idx in manager_actions.items():
+            node = self.nodes[dc_id]
+            # Need to map the action index back to a destination DC ID
+            # We assume the order of options was [local, remote1, remote2, ...]
+            all_dc_ids = sorted(self.nodes.keys())
+            if manager_action_idx == 0:
+                chosen_dest_id = dc_id # Local
+            else:
+                remote_ids = [other_id for other_id in all_dc_ids if other_id != dc_id]
+                chosen_dest_id = remote_ids[manager_action_idx - 1]
+
+            tasks_to_transfer = node.apply_manager_decision(chosen_dest_id)
+            for task in tasks_to_transfer:
+                # Calculate actual delay based on task bandwidth
+                delay_s = get_transmission_delay(node.location, self.nodes[task.dest_dc_id].location, self.cloud_provider, task.bandwidth_gb)
+                arrival_time = current_time_utc + pd.Timedelta(seconds=delay_s)
+                self.in_transit_tasks.append((arrival_time, task, task.dest_dc_id))
+        
+        remaining_in_transit = deque()
+        while self.in_transit_tasks:
+            arrival_time, task, dest_dc_id = self.in_transit_tasks.popleft()
+            if arrival_time <= current_time_utc:
+                self.nodes[dest_dc_id].add_transferred_tasks([task])
+            else:
+                remaining_in_transit.append((arrival_time, task, dest_dc_id))
+        self.in_transit_tasks = remaining_in_transit
+
+    
+    def step_worker(self, current_time_utc: pd.Timestamp,
+                  worker_actions: Dict[int, int]) -> Dict[str, Any]:
+        
+        for dc_id, worker_action_execute in worker_actions.items():
+            self.nodes[dc_id].apply_worker_decision(worker_action_execute, current_time_utc)
+    
+    def step_physics(self, current_time_utc: pd.Timestamp) -> dict:
+
+        all_dc_infos = {}
+        for dc_id, node in self.nodes.items():
+            all_dc_infos[dc_id] = node.step_physical_simulation(current_time_utc)
+        return {"datacenter_infos": all_dc_infos}
+    
+    def is_cluster_idle(self) -> bool:
+        if self.in_transit_tasks:
+            return False
+        for node in self.nodes.values():
+            if (node.originating_tasks_queue or 
+                node.worker_commitment_queue or
+                node.physical_dc_model.running_tasks):
+
+                return False
+        return True
+        

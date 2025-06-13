@@ -176,7 +176,7 @@ class WorkerActor(nn.Module):
 
         return logits_worker_action
     
-    def action_sampling(self, obs_worker_meta_task_i, obs_local_dc_i_for_worker, obs_global_context):
+    def sample_action(self, obs_worker_meta_task_i, obs_local_dc_i_for_worker, obs_global_context):
         logits = self.forward(obs_worker_meta_task_i, obs_local_dc_i_for_worker, obs_global_context)
         probs = F.softmax(logits, dim=-1)
         dist = torch.distributions.Categorical(probs=probs)
@@ -198,21 +198,13 @@ class WorkerCritic(nn.Module):
         self.Q1 = MLP(in_dim, hidden_dim, 2)
         self.Q2 = MLP(in_dim, hidden_dim, 2)
 
-    def forward_q_value(self, obs_worker_meta_task_i, obs_local_dc_i_for_worker, obs_global_context):
+    def forward_q_values(self, obs_worker_meta_task_i, obs_local_dc_i_for_worker, obs_global_context):
         combined_input = torch.cat([obs_worker_meta_task_i, obs_local_dc_i_for_worker,obs_global_context], -1)
         q1 = self.Q1(combined_input)
         q2 = self.Q2(combined_input)
         return q1, q2
     
     def q_for_action(self,obs_worker_meta_task_i, obs_local_dc_i_for_worker, obs_global_context, action_idx):
-        q1, q2 = self.forward_q_value(obs_worker_meta_task_i, obs_local_dc_i_for_worker,obs_global_context)
+        q1, q2 = self.forward_q_values(obs_worker_meta_task_i, obs_local_dc_i_for_worker,obs_global_context)
         q_selected = lambda q: q.gather(1, action_idx.unsqueeze(-1)).squeeze(-1)
         return q_selected(q1), q_selected(q2)
-       
-
-
-
-        
-
-
-

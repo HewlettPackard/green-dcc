@@ -213,6 +213,48 @@ class SustainClusterMAEnv(gym.Env):
         infos["__global__"] = {"raw_results": results}
 
         return next_observations, rewards, terminations, truncations, infos
+    
+    def manager_step(self, mgr_act: Dict[int, int]) -> Dict[str, Any]:
+        """Route / migrate tasks """
+        # generate new tasks for this tick
+        self.cluster_manager_ma.task_origination(self.current_time)
+        if self.cluster_manager_ma.is_cluster_idle():
+            return self._get_observations()
+        filtered = {dc: a for dc, a in mgr_act.items()
+                    if self.cluster_manager_ma.nodes[dc].originating_tasks_queue}
+        if filtered:
+            self.cluster_manager_ma.step_manager(self.current_time, filtered)
+        return self._get_observations()
+    
+    def worker_step(self, wrk_act: Dict[int, bool]) -> Dict[str, Any]:
+        """Execute / defer tasks - *no* time advance."""
+        any_queue = any(self.cluster_manager_ma.nodes[dc].worker_commitment_queue
+                        for dc in self._dc_ids)
+        if any_queue:
+            self.cluster_manager_ma.step_worker(self.current_time, wrk_act)
+        return self._get_observations()
+    
+    def env_step(self) -> Tuple[Dict, Dict, Dict, Dict, Dict]:
+        """15-min physical sim + reward."""
+        results = self.cluster_manager_ma.step_physics(self.current_time)  
+        self.current_time += self.time_step
+
+        next_observations = self._get_observations()
+        global_reward = self.reward_fn(cluster_info=results, current_time=self.current_time)
+        rewards = {agent_id: global_reward for agent_id in self.agents}
+
+        terminated = self.current_time >= self.end_time
+        terminations = {agent_id: terminated for agent_id in self.agents}
+        terminations["__all__"] = terminated
+        truncations = terminations.copy()
+
+        if terminated:
+            self.agents = []
+
+        infos = {agent_id: {} for agent_id in self.possible_agents}
+        infos["__global__"] = {"raw_results": results}
+
+        return next_observations, rewards, terminations, truncations, infos
 
     def render(self, mode='human'):
         """Renders the environment (placeholder)."""
